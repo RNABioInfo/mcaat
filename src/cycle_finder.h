@@ -89,7 +89,7 @@ class CycleFinder {
 
         /// @brief Relax the lock of a node
         /// @param int backtrack_length
-        void RelaxLock(int backtrack_length, uint64_t v){
+        void _RelaxLock(int backtrack_length, uint64_t v){
             vector<pair<int, int> > relax_stack;
             relax_stack.push_back(make_pair(backtrack_length, v));
             while (relax_stack.size() > 0) {
@@ -160,7 +160,7 @@ class CycleFinder {
                         min(this->backtrack_lengths[this->backtrack_lengths.size() - 1], backtrack_length);
                     }
                     if (backtrack_length < this->maximal_length) {
-                        RelaxLock(backtrack_length,v);
+                        _RelaxLock(backtrack_length,v);
                     }
                 }
             }
