@@ -1,3 +1,0 @@
-/vol/d/development/git/mCAAT/CMakeFiles/rebuild_cache.dir
-/vol/d/development/git/mCAAT/CMakeFiles/edit_cache.dir
-/vol/d/development/git/mCAAT/CMakeFiles/mcaat.dir

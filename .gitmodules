@@ -1,0 +1,3 @@
+[submodule "libs/megahit"]
+	path = libs/megahit
+	url = https://github.com/voutcn/megahit.git
