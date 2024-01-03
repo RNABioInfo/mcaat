@@ -1,5 +1,5 @@
-#ifndef helpers_h
-#define helpers_h
+#ifndef path_writer_h
+#define path_writer_h
 
 #include <iostream>
 #include <fstream>
@@ -8,11 +8,11 @@
 
 using namespace std;
 
-class Helpers{
+class PathWriter{
     private:
         SDBG& succinct_de_bruijn_graph;
     public:
-        Helpers(string mode, SDBG& succinct_de_bruijn_graph, vector<uint64_t> path,string filename): 
+        PathWriter(string mode, SDBG& succinct_de_bruijn_graph, vector<uint64_t> path,string filename): 
             succinct_de_bruijn_graph(succinct_de_bruijn_graph){
             
             if(mode=="p"){
@@ -32,7 +32,7 @@ class Helpers{
             }
            
         }
-         ~Helpers(){};
+         ~PathWriter(){};
         
         void WritePathString(vector<uint64_t> path, string filename,uint64_t startnode)
         {            

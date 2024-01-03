@@ -6,10 +6,11 @@
 #include <map>
 #include <set>
 #include <array>
-#include "helpers.h"
+#include "path_writer.h"
 
 using namespace std;
-
+// Documentation:
+// 
 class CycleFinder {
 
     private:
@@ -135,7 +136,7 @@ class CycleFinder {
                     current_node = neighbor;
                     if(current_node==start_node){
                         if (this->path.size() > this->minimal_length){
-                            Helpers("a", this->succinct_de_bruijn_graph, 
+                            PathWriter("a", this->succinct_de_bruijn_graph, 
                                     this->path, this->genome_name);
                             counter+=1;
                         }
@@ -159,6 +160,7 @@ class CycleFinder {
                         this->backtrack_lengths[this->backtrack_lengths.size() - 1] = 
                         min(this->backtrack_lengths[this->backtrack_lengths.size() - 1], backtrack_length);
                     }
+                    // if cycle is found, relax the locks
                     if (backtrack_length < this->maximal_length) {
                         _RelaxLock(backtrack_length,v);
                     }
@@ -198,6 +200,11 @@ class CycleFinder {
             return cumulative;
         };
 
-        ~CycleFinder(){};
+        ~CycleFinder(){
+            this->path.clear();
+            this->lock.clear();
+            this->stack.clear();
+            this->backtrack_lengths.clear();
+        };
 };  
 #endif
