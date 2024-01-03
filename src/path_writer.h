@@ -11,33 +11,35 @@ using namespace std;
 class PathWriter{
     private:
         SDBG& succinct_de_bruijn_graph;
+        const string folder_path = "proof_of_concept/data/";
+        string genome_id;
     public:
-        PathWriter(string mode, SDBG& succinct_de_bruijn_graph, vector<uint64_t> path,string filename): 
-            succinct_de_bruijn_graph(succinct_de_bruijn_graph){
+        PathWriter(string mode, SDBG& succinct_de_bruijn_graph, vector<uint64_t> path,string genome_id): 
+            succinct_de_bruijn_graph(succinct_de_bruijn_graph), genome_id(genome_id){
             
             if(mode=="p"){
-                WritePathString(path, filename, path[0]);
+                WritePathString(path, path[0]);
             }
             if (mode=="i"){
-                WritePathIDs(path, filename, path[0]);
+                WritePathIDs(path, path[0]);
             }
             if (mode=="pi"){
-                WritePathString(path, filename, path[0]);
-                WritePathIDs(path, filename, path[0]);
+                WritePathString(path, path[0]);
+                WritePathIDs(path, path[0]);
             }
             if (mode=="a"){
-                WritePathString(path, filename, path[0]);
-                WritePathIDs(path, filename, path[0]);
-                WriteEdgeMultiplicities(path, filename, path[0]);
+                WritePathString(path, path[0]);
+                WritePathIDs(path, path[0]);
+                WriteEdgeMultiplicities(path, path[0]);
             }
            
         }
          ~PathWriter(){};
         
-        void WritePathString(vector<uint64_t> path, string filename,uint64_t startnode)
+        void WritePathString(vector<uint64_t> path, uint64_t startnode)
         {            
             ofstream cycle_report_file;
-            string string_filename = "/vol/d/proof_of_concept/data/"+filename+"/cycles/str_paths.txt";
+            string string_filename = this->folder_path+this->genome_id+"/cycles/str_paths.txt";
             cycle_report_file.open(string_filename,std::ios_base::app);
             int k = this->succinct_de_bruijn_graph.k();
             path.push_back(startnode);
@@ -52,10 +54,10 @@ class PathWriter{
             cycle_report_file << "\n";
             cycle_report_file.close();
     };
-        void WritePathIDs(vector<uint64_t> path, string filename,uint64_t startnode)
+        void WritePathIDs(vector<uint64_t> path, uint64_t startnode)
     {            
         ofstream path_report_file;
-        string id_filename = "/vol/d/proof_of_concept/data/"+filename+"/cycles/id_paths.txt";
+        string id_filename = this->folder_path+this->genome_id+"/cycles/id_paths.txt";
         path_report_file.open(id_filename,std::ios_base::app);
         int k = this->succinct_de_bruijn_graph.k();
         path.push_back(startnode);
@@ -67,10 +69,10 @@ class PathWriter{
         path_report_file.close();
     };
     
-    void WriteEdgeMultiplicities(vector<uint64_t> path, string filename,uint64_t startnode)
+    void WriteEdgeMultiplicities(vector<uint64_t> path, uint64_t startnode)
     {            
         ofstream path_report_file;
-        string id_filename = "/vol/d/proof_of_concept/data/"+filename+"/cycles/multiplicity_distribution.txt";
+        string id_filename = this->folder_path+this->genome_id+"/cycles/multiplicity_distribution.txt";
         path_report_file.open(id_filename,std::ios_base::app);
         int k = this->succinct_de_bruijn_graph.k();
         path.push_back(startnode);

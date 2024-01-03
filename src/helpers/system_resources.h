@@ -39,17 +39,20 @@ class SystemResources {
         
 
         void AskUser() {
+            
             cout << "Enter the percentage of memory you want to use (1-100): ";
             cin >> memory_percentage;
+            
             cout << "Enter the number of threads you want to use (1-" << num_threads << "): ";
             cin >> thread_count;
-            cout << "You have chosen to use " << memory_percentage << "% of memory and " 
+            this->CalculateUsage();
+            cout << "You have chosen to use " << memory_to_use << " of memory and " 
                 << thread_count << " threads." << endl;
-
+            
         }
 
         void CalculateUsage() {
-            memory_to_use = total_ram * memory_percentage / 100;
+            memory_to_use = total_ram * memory_percentage;
             threads_to_use = min(thread_count, num_threads);
         }
 
