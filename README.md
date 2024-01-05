@@ -40,10 +40,15 @@ For now all you need to do is either run __make__ on this directory or simply tr
 
 
 ### TODO List
-- [x] Create a project
-- [x] Create a README.md
+
 - [x] Create a .gitignore
 - [x] Create a LICENSE
 - [x] Organize CycleFinder
 - [x] Find out why writing cycles to file doesn't work
-- [ ] Create reading and writing mechanism for the workflow
+- [X] Create reading and writing mechanism for current workflow
+
+- [ ] Look through all the false positives saved in benchmarks and get line id
+- [ ] Compare if multiplicity distribution is any different from the true positives!
+- [ ] Test bimodal distribution on multiplicities
+- [ ] Isolate cycles into clusters
+- [ ] Check if clusters start with same IDs 
