@@ -177,11 +177,14 @@ class CycleFinder {
         int FindCycles(){
             int cumulative = 0;
             // ----------------- 1. Find all nodes with indegree > 1 -----------------
+            printf("Number of nodes in a graph: %lu\n", this->succinct_de_bruijn_graph.size());
             vector<uint64_t> start_nodes = this->_IndegreeMoreThanOne();
-            
+            printf("\nNumber of start nodes: %lu\n", start_nodes.size(), "\nStart finding cycles\n");
             // ------------------2. Outer Loop: ------------------
+            int counter = 0;
             while (start_nodes.size() > 0)
 	        {
+                counter += 1;
                 // ---- 2.1. Pick a possible start_node and remove from stack ---
                 uint64_t start_node = start_nodes.back();
 		        start_nodes.pop_back();
@@ -194,6 +197,9 @@ class CycleFinder {
 
                 // ---- 2.4. Set node as invalid(remove/subgraph) ----
                 this->succinct_de_bruijn_graph.SetInvalidEdge(start_node);
+                
+                if (counter % 5000 == 0)
+                    printf("Found %d cycles\n", cumulative);
             }
 
             std::cout << "Number of Cycles: " << cumulative << std::endl;
