@@ -2,7 +2,27 @@
 
 Metagenomic CRISPR Array Analysis Tool
 
-## Description
+## DEVELOPER Description
+
+Current version is considered for verification purposes. Folder ```proof of concept``` is where the magic happens for now. Current workflow is following:
+- go to crispr_cas_db[https://crisprcas.i2bc.paris-saclay.fr/MainDb/StrainList#]
+- pick a genome that contains certain amount of crispr arrays
+- download fasta file from there to ```proof_of_concept/data/``` folder 
+- make sure to name your fasta file as it is named in database
+- from ```proof_of_concept/data ``` navigate to ```proof_of_concept/scripts``` 
+- call ```./01_organize.sh <genome_id>``` -> creates a folder with genome name and moves fasta file to ```proof_of_concept/data/<genome_id>/genome/<genome_id>.fasta```
+- call ```python3 ./07_generate_reads.py <genome_id>``` -> creates perfect reads from the genome and places them to ```proof_of_concept/data/<genome_id>/reads/R1.fastq```
+- call ```./03_build_graph.sh <genome_id>``` -> builds a graph and places under ```.../graph/```
+- go to main mcaat folder with compiled to software and call ```./mcaat u_mode <genome_id> 100``` - finds all cycles in a user mode with the length upto 100 -> output folder ```proof_of_concept/data/<genome_id>/cycles```:
+    - ```id_paths.txt``` -> saves all cycles in the nodes ids uint64_t format
+    - ```str_paths.txt``` -> saves all cycles in their k_mer format
+    - ```multiplicity_distribution.txt``` -> saves multiplicities of every node
+- navigate to ```proof_of_concept/scripts``` and execute ```./04_merge_cycles.sh <genome_id>```
+- download all the crispr_array files from the crispr_cas_db[https://crisprcas.i2bc.paris-saclay.fr/MainDb/StrainList#] for current genome_id and save them in ```proof_of_concept/data/<genome_id>/reference/``` folder
+- execute ```python3 ./05_compare_to_ref.py``` - creates a file called ```benchmarks.txt``` in cycles folder
+
+## USER Description 
+### ```this version is a predicted workflow for users in future!```  
 
 This is a repo for our group's tool - mCAAT. This version of the tool is only intended for proof of concept. However here is a sneak peek of what features are coming soon:  
 - libs/megahit - using this library we are reading our succinct de Bruijn graph

@@ -21,6 +21,7 @@ mkdir ../data/$1/genome
 mkdir ../data/$1/reads
 mkdir ../data/$1/graph
 mkdir ../data/$1/cycles
+mkdir ../data/$1/reference
 
 mv ../data/$1.fasta ../data/$1/genome
 echo "Folder structure for genome $1 is sorted!"
