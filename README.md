@@ -5,7 +5,7 @@ Metagenomic CRISPR Array Analysis Tool
 ## DEVELOPER Description
 
 Current version is considered for verification purposes. Folder ```proof of concept``` is where the magic happens for now. Current workflow is following:
-- go to crispr_cas_db[https://crisprcas.i2bc.paris-saclay.fr/MainDb/StrainList#]
+- go to [crispr_cas_db](https://crisprcas.i2bc.paris-saclay.fr/MainDb/StrainList#)
 - pick a genome that contains certain amount of crispr arrays
 - download fasta file from there to ```proof_of_concept/data/``` folder 
 - make sure to name your fasta file as it is named in database
@@ -18,7 +18,7 @@ Current version is considered for verification purposes. Folder ```proof of conc
     - ```str_paths.txt``` -> saves all cycles in their k_mer format
     - ```multiplicity_distribution.txt``` -> saves multiplicities of every node
 - navigate to ```proof_of_concept/scripts``` and execute ```./04_merge_cycles.sh <genome_id>```
-- download all the crispr_array files from the crispr_cas_db[https://crisprcas.i2bc.paris-saclay.fr/MainDb/StrainList#] for current genome_id and save them in ```proof_of_concept/data/<genome_id>/reference/``` folder
+- download all the crispr_array files from the [crispr_cas_db](https://crisprcas.i2bc.paris-saclay.fr/MainDb/StrainList#) for current genome_id and save them in ```proof_of_concept/data/<genome_id>/reference/``` folder
 - execute ```python3 ./05_compare_to_ref.py``` - creates a file called ```benchmarks.txt``` in cycles folder
 
 ## USER Description 
