@@ -31,7 +31,7 @@ class CycleFinder {
             {
                 int indegree = this->succinct_de_bruijn_graph.EdgeIndegree(i);
                 int multiplicity = this->succinct_de_bruijn_graph.EdgeMultiplicity(i);
-                if (indegree >1)
+                if (indegree >0)
                 {
                     nodes_more_than_one.push_back(i);
                 }
@@ -198,7 +198,7 @@ class CycleFinder {
                 // ---- 2.4. Set node as invalid(remove/subgraph) ----
                 this->succinct_de_bruijn_graph.SetInvalidEdge(start_node);
                 
-                if (counter % 5000 == 0)
+                if (counter % 2000000 == 0)
                     printf("Found %d cycles\n", cumulative);
             }
 
