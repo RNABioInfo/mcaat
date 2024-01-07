@@ -4,9 +4,11 @@
 #include "../libs/megahit/src/main_sdbg_build.cpp"
 #include "cycle_finder.h"
 #include "helpers/system_resources.h"
-#include "dot_generator.h"
+#include "graph_writer.h"
 
 using namespace std;
+
+
 
 int main(int argc, char** argv) {
     //use output_handler
@@ -18,10 +20,11 @@ int main(int argc, char** argv) {
 
         SDBG sdbg;
         sdbg.LoadFromFile(sdbg_file.c_str());
-
+        //GraphWriter gw(sdbg);
+        //gw.WriteNodes();
         cout << "Cycle Algorithm Start" << endl;
         
-        CycleFinder cycle_finder(sdbg, length_bound, 47, std::string(argv[1]).c_str());
+        CycleFinder cycle_finder(sdbg, length_bound, 47, std::string(argv[2]).c_str());
         cout << "Cycle Algorithm End" << endl;
     }
     else

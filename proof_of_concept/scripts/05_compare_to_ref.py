@@ -33,13 +33,12 @@ def main():
             if record.id.startswith("spacer"):
                
                 all_lines.append(str(record.seq))
-    print("Length of reference genome before duplicates:", len(all_lines))
     # create a new array and keep only the lines that do not equal to >spacer <int>
     new_ref_genome = []
     ref_gen = set(all_lines)
     new_ref_genome = list(ref_gen)
     # print length of ref_genome
-    print("Length of reference genome:", len(new_ref_genome))
+    print("- Spacers in genome: ", len(new_ref_genome))
     # print ref_genome line by line
 
     # read in the cycles from cycles_merged.txt into an array
@@ -50,7 +49,7 @@ def main():
     cycles=list(cycles)
     # look if all elements in ref_genome appear in cycles array and using a counter
     # count how many of them are found
-    print("Elements in cycles:", len(cycles))
+    print("- Elements in cycles:", len(cycles))
     counter = 0
     not_found = []
     marked = dict()
@@ -105,14 +104,15 @@ def main():
             f.write("\t"+o+"\n")
 
     counter = 0
-    print("False positives:",len(false_positives))
+    print("- False positives:",len(false_positives))
     
     for i in marked:
         if len(marked[i]) != 0:
             counter += 1
     # print the number of elements found in cycles array
     
-    print("Elements found in cycles array:", counter)
+    print("- Match:", counter)
+    print("- Match percentage:", counter/len(new_ref_genome)*100)
     # if th
 if __name__ == "__main__":
     main()

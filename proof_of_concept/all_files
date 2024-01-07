@@ -1,0 +1,132 @@
+AP019695.1
+- Spacers in genome: 36
+- Elements in cycles: 44
+- False positives: 8
+- Match: 36
+- Match percentage: 100.0 
+- - - - - - - - - - - - - - - - - - - - - - - -
+AP019711.1
+- Spacers in genome: 26
+- Elements in cycles: 30
+- False positives: 4
+- Match: 26
+- Match percentage: 100.0
+- - - - - - - - - - - - - - - - - - - - - - - -
+AP023410.1
+- Spacers in genome: 88
+- Elements in cycles: 84
+- False positives: 0
+- Match: 84
+- Match percentage: 95.45454545454545
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP011664.1
+- Spacers in genome: 124
+- Elements in cycles: 226
+- False positives: 116
+- Match: 110
+- Match percentage: 88.70967741935483
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP013479.1
+- Spacers in genome: 124
+- Elements in cycles: 142
+- False positives: 32
+- Match: 110
+- Match percentage: 88.70967741935483
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP015169.1
+- Spacers in genome: 30
+- Elements in cycles: 30
+- False positives: 0
+- Match: 30
+- Match percentage: 100
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP039459.1
+- Spacers in genome: 50
+- Elements in cycles: 60
+- False positives: 10
+- Match: 50
+- Match percentage: 83.33333333333334
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP065748.1
+- Spacers in genome: 42
+- Elements in cycles: 145
+- False positives: 112
+- Match: 33
+- Match percentage: 78.57142857142857
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP071793.1
+- Spacers in genome: 452
+- Elements in cycles: 978
+- False positives: 548
+- Match: 430
+- Match percentage: 95.13274336283186
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP003198.1 
+- Spacers in genome:  370
+- Elements in cycles: 351
+- False positives: 0
+- Match: 351
+- Match percentage: 94.86486486486486
+- - - - - - - - - - - - - - - - - - - - - - - -
+FN666575.1 
+- Spacers in genome:  142
+- Elements in cycles: 140
+- False positives: 24
+- Match: 116
+- Match percentage: 81.69014084507043
+- - - - - - - - - - - - - - - - - - - - - - - -
+FN434113.1
+- Spacers in genome:  148
+- Elements in cycles: 140
+- False positives: 18
+- Match: 122
+- Match percentage: 82.43243243243244
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP054212.1
+- Spacers in genome:  62
+- Elements in cycles: 64
+- False positives: 14
+- Match: 50
+- Match percentage: 80.64516129032258
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP088131.1
+- Spacers in genome:  88
+- Elements in cycles: 306
+- False positives: 220
+- Match: 86
+- Match percentage: 97.72727272727273
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP088828.1
+- Spacers in genome:  48
+- Elements in cycles: 86
+- False positives: 44
+- Match: 42
+- Match percentage: 87.5
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP028769.1
+- Spacers in genome:  84
+- Elements in cycles: 167
+- False positives: 85
+- Match: 82
+- Match percentage: 97.61904761904762
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP091022.1
+- Spacers in genome:  72
+- Elements in cycles: 237
+- False positives: 175
+- Match: 62
+- Match percentage: 86.11111111111111
+- - - - - - - - - - - - - - - - - - - - - - - -
+CP058556.1
+- Spacers in genome:  712
+- Elements in cycles: 1290
+- False positives: 307
+- Match: 675
+- Match percentage: 94.80337078651685
+-----------------------------------------------
+Results for 17 genomes :
+-- Spacers in genome: 1986
+-- Matched in cycles: 1820
+-- False positives: 1410
+-- Match percentage: 91.64149043303121
+-- CRISPR System match average: 90.50008449711594

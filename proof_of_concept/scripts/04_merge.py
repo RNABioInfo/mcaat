@@ -1,2 +1,0 @@
-#merge str_paths
-

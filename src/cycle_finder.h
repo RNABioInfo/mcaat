@@ -6,11 +6,9 @@
 #include <map>
 #include <set>
 #include <array>
-#include "path_writer.h"
 
+#include "path_writer.h"
 using namespace std;
-// Documentation:
-// 
 class CycleFinder {
 
     private:
@@ -43,28 +41,14 @@ class CycleFinder {
         /// @param uint64_t node
         /// @return Outgoing edges of a node
         set<uint64_t> _GetOutgoings(uint64_t node){
-            
-            if (this->succinct_de_bruijn_graph.EdgeOutdegree(node) == 0)
-                return {};
-            
-            uint64_t *outgoings = new uint64_t[this->succinct_de_bruijn_graph.EdgeOutdegree(node)];
-            this->succinct_de_bruijn_graph.OutgoingEdges(node,outgoings);
-            set<uint64_t> outgoings_set(outgoings, outgoings + this->succinct_de_bruijn_graph.EdgeOutdegree(node));
-            return outgoings_set;
+            return GetOutgoingNodes(this->succinct_de_bruijn_graph, node);
         };
         
         /// @brief Helper Function gets all incoming edges of a node
         /// @param uint64_t node
         /// @return Incoming edges of a node
         set<uint64_t> _GetIncomings(uint64_t node){
-            
-            if (this->succinct_de_bruijn_graph.EdgeIndegree(node) == 0)
-                return {};
-            
-            uint64_t *incomings = new uint64_t[this->succinct_de_bruijn_graph.EdgeIndegree(node)];
-            this->succinct_de_bruijn_graph.IncomingEdges(node,incomings);
-            set<uint64_t> incomings_set(incomings, incomings + succinct_de_bruijn_graph.EdgeIndegree(node));
-            return incomings_set;
+            return GetIncomingNodes(this->succinct_de_bruijn_graph, node);
         };
 
         /// @brief Set initial values for the cycle finding algorithm

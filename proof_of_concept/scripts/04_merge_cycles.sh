@@ -3,9 +3,7 @@
 # running statistics on the graph
 folder=../data/$1
 file= $folder/cycles/str_paths.txt
-echo "--------START STATISTICS--------"
-
-echo "Running statistics on $folder"
+echo "--------START MERGING--------"
 
 
 # read file line by line
@@ -33,5 +31,5 @@ done < $folder/cycles/str_paths.txt
 cat $folder/cycles/cycles_merged.txt | awk '{print length, $0}' | sort -n | uniq -c | sort -rn | head -n 10 > $folder/cycles/statistics.txt
 
 echo ""
-echo "--------END STATISTICS---------"
+echo "--------END MERGING---------"
 exit 0
