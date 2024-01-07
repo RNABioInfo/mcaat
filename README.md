@@ -14,9 +14,9 @@ Current version is considered for verification purposes. Folder ```proof of conc
 - call ```python3 ./07_generate_reads.py <genome_id>``` -> creates perfect reads from the genome and places them to ```proof_of_concept/data/<genome_id>/reads/R1.fastq```
 - call ```./03_build_graph.sh <genome_id>``` -> builds a graph and places under ```.../graph/```
 - go to main mcaat folder with compiled to software and call ```./mcaat u_mode <genome_id> 100``` - finds all cycles in a user mode with the length upto 100 -> output folder ```proof_of_concept/data/<genome_id>/cycles```:
-    - ```id_paths.txt``` -> saves all cycles in the nodes ids uint64_t format
-    - ```str_paths.txt``` -> saves all cycles in their k_mer format
-    - ```multiplicity_distribution.txt``` -> saves multiplicities of every node
+    - ```id_paths.txt``` -> saves all cycles as vector of integers
+    - ```str_paths.txt``` -> saves all cycles as vector of labels
+    - ```multiplicity_distribution.txt``` -> saves multiplicities of every node as vector of integers
 - navigate to ```proof_of_concept/scripts``` and execute ```./04_merge_cycles.sh <genome_id>```
 - download all the crispr_array files from the [crispr_cas_db](https://crisprcas.i2bc.paris-saclay.fr/MainDb/StrainList#) for current genome_id and save them in ```proof_of_concept/data/<genome_id>/reference/``` folder
 - execute ```python3 ./05_compare_to_ref.py``` - creates a file called ```benchmarks.txt``` in cycles folder
@@ -39,14 +39,14 @@ This is a repo for our group's tool - mCAAT. This version of the tool is only in
 For now all you need to do is either run __make__ on this directory or simply trust the process and run __./mcaat <genome_name> <maximum_length_of_cycle>__.
 
 
-### TODO List
-
+### TASKS
+#### DONE
 - [x] Create a .gitignore
 - [x] Create a LICENSE
 - [x] Organize CycleFinder
 - [x] Find out why writing cycles to file doesn't work
 - [X] Create reading and writing mechanism for current workflow
-
+#### TODO
 - [ ] Look through all the false positives saved in benchmarks and get line id
 - [ ] Compare if multiplicity distribution is any different from the true positives!
 - [ ] Test bimodal distribution on multiplicities
