@@ -1,6 +1,9 @@
 # mCAAT
 
-Metagenomic CRISPR Array Analysis Tool. If you want to see current state/results go to [results page](https://github.com/RNABioInfo/mcaat/blob/main/proof_of_concept/all_files)
+Metagenomic CRISPR Array Analysis Tool. 
+
+
+## If you want to see current state/results go to [results page](https://github.com/RNABioInfo/mcaat/blob/main/proof_of_concept/all_files)
 
 ## DEVELOPER Description
 
