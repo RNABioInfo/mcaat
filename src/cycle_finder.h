@@ -29,7 +29,7 @@ class CycleFinder {
             {
                 int indegree = this->succinct_de_bruijn_graph.EdgeIndegree(i);
                 int multiplicity = this->succinct_de_bruijn_graph.EdgeMultiplicity(i);
-                if (indegree >0)
+                if (indegree >1)
                 {
                     nodes_more_than_one.push_back(i);
                 }
