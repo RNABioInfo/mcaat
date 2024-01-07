@@ -35,16 +35,13 @@ def calculate():
         if line.startswith("- Spacers in genome:"):
             spacers += int(line.split(":")[1].strip())
             counter+=1
-            
         elif line.startswith("- Match:"):
             matched += int(line.split(":")[1].strip())
-            weig = float(line.split(":")[1].strip())
-            matches.append(weig)
         elif line.startswith("- False positives:"):
             false_positives += int(line.split(":")[1].strip())
         elif line.startswith("- Match percentage:"):
             matched_percentage += float(line.split(":")[1].strip())
-            percentage.append(float(line.split(":")[1].strip()))
+            
             
     
     #find average weighted match percentage
@@ -57,7 +54,7 @@ def calculate():
     print("-- Spacers in genome:", spacers)
     print("-- Matched in cycles:", matched)
     print("-- False positives:", false_positives)
-    print("-- Match percentage:", matched_percentage/spacers*100)
+    print("-- Match percentage:", matched/spacers*100)
     print("-- CRISPR System match average:", matched_percentage/counter)
     print("-- Weighted average:", weighted_average)
 
