@@ -7,7 +7,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-file="../data/$1.fasta"
+file="../data/Genomes/$1.fasta"
 #check if filde exists
 if [ ! -f "$file" ]; then
     echo "Error: file $file does not exist"
@@ -23,7 +23,7 @@ mkdir ../data/$1/graph
 mkdir ../data/$1/cycles
 mkdir ../data/$1/reference
 
-mv ../data/$1.fasta ../data/$1/genome
+mv ../data/Genomes/$1.fasta ../data/$1/genome
 echo "Folder structure for genome $1 is sorted!"
 echo ""
 echo "--------END ORGANIZE---------"

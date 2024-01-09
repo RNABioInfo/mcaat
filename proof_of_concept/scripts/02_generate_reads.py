@@ -30,8 +30,8 @@ def write_reads(k_mers):
 def create_reads():
     genome = read_genome(file+"/genome/"+sys.argv[1]+".fasta")
     k_mers = split_genome_125(genome[0])
-    print(genome[0][0:125])
-    print(k_mers[0])
+    #print(genome[0][0:125])
+    #print(k_mers[0])
     write_reads(k_mers)
 
 

@@ -27,7 +27,8 @@ int main(int argc, char** argv) {
         CycleFinder cycle_finder(sdbg, length_bound, 47, std::string(argv[2]).c_str());
         cout << "Cycle Algorithm End" << endl;
     }
-    else
-        cout<<"wrong mode"<<endl;
+    else{
+        std::cout << "Usage: ./cycle_finder <mode> <genome_name> <length_bound>" << std::endl;
+    }
     return 0;
 }
