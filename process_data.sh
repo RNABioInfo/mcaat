@@ -3,4 +3,4 @@
 while read line; do
     echo "For genome: $line"
     ./mcaat u_mode $line 100
-done < proof_of_concept/data/Genomes/genomes
+done < proof_of_concept/data/files.txt

@@ -95,7 +95,19 @@ class CycleFinder {
         sort(nodes.begin(), nodes.end());
         return nodes;
     }
+    vector<uint64_t> _SortNodesByIds(){
+        //nodes is array of nodes with multiple edges
+        vector<uint64_t> nodes;
+        for (uint64_t i = 0; i < succinct_de_bruijn_graph.size(); i++){
+            if(succinct_de_bruijn_graph.EdgeIndegree(i)>1){
+                nodes.push_back(i);
+            }
+        }
+        
 
+        sort(nodes.begin(), nodes.end());
+        return nodes;
+    }
     public:
         /// @brief Constructor for CycleFinder 
         /// @param SDBG& Succinct de Bruijn graph, int lengthBound
@@ -104,7 +116,7 @@ class CycleFinder {
                 minimal_length(minimal_length),
                 succinct_de_bruijn_graph(succinct_de_bruijn_graph),
                 genome_name(genome_name),
-                cluster_bounds(10000),
+                cluster_bounds(1000),
                 visited(new bool[succinct_de_bruijn_graph.size()])
             {
                 FindCycles();
@@ -163,17 +175,17 @@ class CycleFinder {
                 }
                 
             }
-            
+            /*
             for (auto cycle : cycles)
                 for (auto node : cycle){
                     if (node==start_node)
                         continue;
                     if(succinct_de_bruijn_graph.EdgeIndegree(node)>1)
                         visited[node] = true;
-                    }
+                    }*/
             for (auto cycle : cycles)
-                PathWriter("a", succinct_de_bruijn_graph, 
-                             cycle, genome_name);
+                PathWriter("pi", succinct_de_bruijn_graph, 
+                             cycle, genome_name, "fasta");
             return counter;
             
         };
@@ -191,27 +203,51 @@ class CycleFinder {
             vector<set<uint64_t>> stack;
             vector<int> backtrack_lengths;
             fill_n(visited, succinct_de_bruijn_graph.size(), false);
-            vector<node> start_nodes = _SortNodesByMultiplicities();
-            cout << "Number of nodes with multiple edges: " << start_nodes.size() << endl;
-            for (uint64_t i = start_nodes.size()-1; i >= start_nodes.size()-11; i--)  
-                cout << start_nodes[i].id << " " << start_nodes[i].multiplicity << endl;
+            //vector<node> start_nodes = _SortNodesByMultiplicities();
             
-            for (uint64_t start_node_index = start_nodes.size()-1; start_node_index > 0; start_node_index--)
-            {   
-                if(visited[start_nodes[start_node_index].id]) continue;
-                uint64_t start_node = start_nodes[start_node_index].id;
-                counter += 1;
-                path.push_back(start_node);
-                lock[start_node] = 0;
-                stack.push_back(_GetOutgoings(start_node));
-                backtrack_lengths.push_back(maximal_length);
-                cumulative += FindCycle(start_node, path, lock, stack, backtrack_lengths);
-                
-                path.clear();
-                lock.clear();
-                stack.clear();
-                backtrack_lengths.clear();
-                succinct_de_bruijn_graph.SetInvalidEdge(start_node);
+            
+            string mode = "fasta";
+            if (mode=="fasta"){
+                vector<uint64_t> start_nodes = _SortNodesByIds();
+                cout << "Number of nodes with multiple edges: " << start_nodes.size() << endl;
+                for (uint64_t start_node_index = start_nodes.size()-1; start_node_index > 0; start_node_index--)
+                {   
+                    //if(visited[start_nodes[start_node_index]]) continue;
+                    uint64_t start_node = start_nodes[start_node_index];
+                    counter += 1;
+                    path.push_back(start_node);
+                    lock[start_node] = 0;
+                    stack.push_back(_GetOutgoings(start_node));
+                    backtrack_lengths.push_back(maximal_length);
+                    cumulative += FindCycle(start_node, path, lock, stack, backtrack_lengths);
+                    
+                    path.clear();
+                    lock.clear();
+                    stack.clear();
+                    backtrack_lengths.clear();
+                    succinct_de_bruijn_graph.SetInvalidEdge(start_node);
+                }
+            }
+            else{
+                vector<node> start_nodes = _SortNodesByMultiplicities();
+                cout << "Number of nodes with multiple edges: " << start_nodes.size() << endl;
+                for (uint64_t start_node_index = start_nodes.size()-1; start_node_index > 0; start_node_index--)
+                {   
+                    if(visited[start_nodes[start_node_index].id]) continue;
+                    uint64_t start_node = start_nodes[start_node_index].id;
+                    counter += 1;
+                    path.push_back(start_node);
+                    lock[start_node] = 0;
+                    stack.push_back(_GetOutgoings(start_node));
+                    backtrack_lengths.push_back(maximal_length);
+                    cumulative += FindCycle(start_node, path, lock, stack, backtrack_lengths);
+                    
+                    path.clear();
+                    lock.clear();
+                    stack.clear();
+                    backtrack_lengths.clear();
+                    succinct_de_bruijn_graph.SetInvalidEdge(start_node);
+                }
             }
             //print out number of visited nodes
             int visited_nodes = 0;

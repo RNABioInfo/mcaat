@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
         
     if (argc == 4 ){
         //std::cout << "Usage: ./cycle_finder <mode> <genome_name> <length_bound>" << std::endl;
-        std::string sdbg_file = "proof_of_concept/data/" + std::string(argv[2])+"/graph/graph";
+        std::string sdbg_file = "proof_of_concept/data/" + std::string(argv[2])+"/genome/graph/graph";
         int length_bound = atoi(argv[3]);
 
         SDBG sdbg;
@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
         log_file << "IN MINUTES: " << duration_in_minutes << " MINUTES" << endl;
         log_file << "IN SECONDS: " << duration.count() << " SECONDS" << endl;
         log_file.close();
-        cout << "Cycle Algorithm Finished in " << duration_in_hours << " hours" << endl;
+        cout << "Cycle Algorithm Finished in " << duration_in_minutes << " minutes" << endl;
         cout << "Cycle Algorithm End" << endl;
         
     }

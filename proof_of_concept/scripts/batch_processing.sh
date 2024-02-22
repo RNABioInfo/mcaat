@@ -18,8 +18,10 @@
 #    python3 ./02_generate_reads.py $line
 #done < ../data/Genomes/genomes 
 
-# pick every line from data/Genomes/genomes file
+# pick every line from ../data/files.txt file
 # and run "03_build_graph.sh $line"
 while read line; do
-    python3 ./05_compare_to_ref.py $line 
-done < ../data/Genomes/genome_
+    echo "For genome: $line"
+    mkdir ../data/$line/cycles_genome/
+done < ../data/files.txt
+
