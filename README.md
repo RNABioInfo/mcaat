@@ -1,7 +1,7 @@
 # mCAAT
 
 Metagenomic CRISPR Array Analysis Tool. 
-#### If you want to see current state/results go to [results page](https://github.com/RNABioInfo/mcaat/blob/main/proof_of_concept/all_files).
+#### If you want to see current proof of concept go to [results page](https://github.com/RNABioInfo/mcaat/blob/main/proof_of_concept/all_files).
 
 ## DEVELOPER Description
 

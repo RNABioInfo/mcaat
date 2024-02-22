@@ -14,8 +14,10 @@ def calculate():
 
     folder_for_reference = "../data/Genomes/CRISPR_Seq/" + sys.argv[1][:-2] +"/"
     if not os.path.isdir(folder_for_reference):
-        print("Error: folder", folder_for_reference, "does not exist")
-        sys.exit(1)
+        folder_for_reference = "../data/" + sys.argv[1] +"/"+"reference/"
+        if not os.path.isdir(folder_for_reference):
+            print("Error: folder", folder_for_reference, "does not exist")
+            sys.exit(1)
         
     file_name = sys.argv[1][:-2]
     print("File name:", file_name)
@@ -33,7 +35,7 @@ def calculate():
     folder_for_cycles="../data/"+sys.argv[1]
     
     cycles = set()
-    with open(folder_for_cycles + "/cycles/cycles_merged.txt", "r") as f:
+    with open(folder_for_cycles + "/cycles/true_positives_after_filter.txt", "r") as f:
         for line in f:
             cycles.add(line.strip())
     cycles=list(cycles)
@@ -50,7 +52,7 @@ def calculate():
                 temp.append(cycles[j])
         marked[spacers[i]] = temp
     
-    with open(folder_for_cycles + "/cycles/benchmarks.txt", "w") as f:
+    with open(folder_for_cycles + "/cycles/benchmarks_true_positives_after_filter.txt", "w") as f:
         for k, v in marked.items():
             f.write(k + ":" + str(len(v)) + "")
             f.write("\n")
@@ -75,7 +77,7 @@ def calculate():
     false_positives = sorted(false_positives, key=len)
 
     #write false_positives to benchmarks.txt
-    with open("../data/"+sys.argv[1] + "/cycles/benchmarks.txt", "a") as f:
+    with open("../data/"+sys.argv[1] + "/cycles/false_positives_after_filter.txt", "w") as f:
         f.write("\n")
         f.write("False positives:\n")
         for o in false_positives:

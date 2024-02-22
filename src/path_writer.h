@@ -28,6 +28,10 @@ class PathWriter{
                 WritePathString(path, path[0]);
                 WritePathIDs(path, path[0]);
             }
+            if (mode=="im"){
+                WriteEdgeMultiplicities(path, path[0]);
+                WritePathIDs(path, path[0]);
+            }
             if (mode=="a"){
                 WritePathString(path, path[0]);
                 WritePathIDs(path, path[0]);

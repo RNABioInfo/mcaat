@@ -18,11 +18,13 @@ AP019711.1
 # pick lines that start with spacers in genome and read only integer after the colon
 # pick lines that start with match and read only integer after the colon
 # divide match by spacers in genome and multiply by 100
+import sys
 
 def calculate():
-    with open("../all_files", "r") as f:
+    before_after_filter = sys.argv[1]
+    with open("../new_method_"+before_after_filter, "r") as f:
         lines = f.readlines()
-    
+        
     spacers = 0
     matched = 0
     false_positives = 0

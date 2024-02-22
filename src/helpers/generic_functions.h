@@ -12,5 +12,7 @@ using namespace std;
 string FetchNodeLabel(SDBG& succinct_de_bruijn_graph,auto node);
 set<uint64_t> GetOutgoingNodes(SDBG& succinct_de_bruijn_graph, uint64_t node);
 set<uint64_t> GetIncomingNodes(SDBG& succinct_de_bruijn_graph,uint64_t node);
+void merge(int arr[], int l, int m, int r);
+void mergeSort(int arr[], int n);
 
 #endif
