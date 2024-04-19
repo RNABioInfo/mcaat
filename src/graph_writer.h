@@ -44,6 +44,26 @@ class GraphWriter {
             string command = "dot -Tsvg " + this->output_file_name + " -o " + this->output_file_name + ".svg";
             system(command.c_str());
         };
+        
+        void GenerateGFAFile(){
+            ofstream gfa_file;
+            gfa_file.open(this->output_file_name+".gfa");
+            for (uint64_t i = 0; i < this->succinct_de_bruijn_graph.size(); i++)
+            {
+                gfa_file << "S\t" << i << "\t" << FetchNodeLabel(this->succinct_de_bruijn_graph,i) << "\t" << "*" << endl;
+                int outdegree = this->succinct_de_bruijn_graph.EdgeOutdegree(i);
+                if (outdegree > 0)
+                {
+                    uint64_t *outgoings = new uint64_t[outdegree];
+                    this->succinct_de_bruijn_graph.OutgoingEdges(i,outgoings);
+                    for (int j = 0; j < outdegree; j++)
+                    {
+                        gfa_file << "L\t" << i << "\t+\t" << outgoings[j] << "\t+\t0M" << endl;
+                    }
+                }
+            }
+            gfa_file.close();
+        };
 
         /// @brief Write nodes with SDBG labels to file
         /// @return void

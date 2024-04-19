@@ -4,10 +4,10 @@
 #include "../libs/megahit/src/main_sdbg_build.cpp"
 #include "cycle_finder.h"
 #include "helpers/system_resources.h"
-#include "path_writer.h"
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include "graph_writer.h"
 
 using namespace std;
 
@@ -18,10 +18,10 @@ int main(int argc, char** argv) {
         //use output_handler
         //
         
-    if (argc == 4 ){
+    if (std::string(argv[1])=="u_mode" && argc == 3 ){
         //std::cout << "Usage: ./cycle_finder <mode> <genome_name> <length_bound>" << std::endl;
         std::string sdbg_file = "proof_of_concept/data/" + std::string(argv[2])+"/genome/graph/graph";
-        int length_bound = atoi(argv[3]);
+        int length_bound = 100;
 
         SDBG sdbg;
         cout << "Loading the graph..." << endl;
@@ -64,10 +64,10 @@ int main(int argc, char** argv) {
         //read in from proof_of_concept/data/<genome_name>/cycles/id_paths_no_duplicates.txt
         //get label from sdbg for each node and write to proof_of_concept/data/<genome_name>/cycles/str_true_positives.txt
         std::string genome_name = std::string(argv[1]);
-        std::string id_path_file = "proof_of_concept/data/" + genome_name + "/cycles/id_paths_no_duplicates.txt";
-        std::string str_true_positives_file = "proof_of_concept/data/" + genome_name + "/cycles/str_true_positives.txt";
+        std::string id_path_file = "proof_of_concept/data/" + genome_name + "/cycles_genome/group_cycles.txt";
+        std::string str_true_positives_file = "proof_of_concept/data/" + genome_name + "/cycles_genome/string_after_filter.txt";
         
-        std::string sdbg_file = "proof_of_concept/data/" + std::string(argv[1]) + "/graph/graph";
+        std::string sdbg_file = "proof_of_concept/data/" + std::string(argv[1]) + "/genome/graph/graph";
         
 
         SDBG sdbg;
@@ -94,8 +94,19 @@ int main(int argc, char** argv) {
         str_true_positives_stream.close();
 
     }
-    else{
-        std::cout << "Usage: ./cycle_finder <mode> <genome_name> <length_bound>" << std::endl;
+    if (std::string(argv[1]) == "g_o")
+    {
+        std::string sdbg_file = "proof_of_concept/data/" + std::string(argv[2])+"/genome/graph/graph";
+        SDBG sdbg;
+        sdbg.LoadFromFile(sdbg_file.c_str());
+        GraphWriter gw(sdbg);
+        gw.GenerateGFAFile();
     }
+    /*
+    std::string sdbg_file = "proof_of_concept/data/" + std::string(argv[2])+"/genome/graph/graph";
+    SDBG sdbg;
+    sdbg.LoadFromFile(sdbg_file.c_str());
+    GraphAnalysis ga(sdbg);
+    ga.Analysis();*/
     return 0;
 }

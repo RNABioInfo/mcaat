@@ -1,32 +1,66 @@
-#!/bin/bash
-
-#echo "--------START GRAPH BUILD--------"
-#echo ""
-
-#echo "Running Megahit on $1"
-
-folder="../data/$1"
-
-fastaFileName=$(ls $folder/genome/*.fasta | xargs -n 1 basename | sed 's/.fasta//g')
-
-fastaFilePath="$folder/genome/$fastaFileName.fasta"
-
-# create data.lib file in  reads folder
-#echo "Step 1: Creating data.lib file"
-
-#echo "# simulation of $fastaFileName" > $folder/graph_fasta/$fastaFileName.fasta.lib
-#echo "se $fastaFilePath" >> $folder/graph_fasta/$fastaFileName.fasta.lib
-
-echo "$fastaFilePath"
-sleep 0.5
-#echo "Building graph"
-#./megahit_core seq2sdbg --host_mem 150000000000 -k 23 --contig $fastaFilePath $folder/genome/graph/
-#./megahit_core buildlib $folder/graph_fasta/$fastaFileName.fasta.lib $fastaFilePath 
-#./megahit_core read2sdbg --host_mem 128000000000 --read_lib_file $folder/graphq_fasta/outfile_prefix -m 1 -k 23 --num_cpu_threads 24 --o $folder/graph/graph
-mkdir $folder/genome/graph/
-./megahit_core seq2sdbg --host_mem 150000000000  --contig $fastaFilePath  -k 23 --num_cpu_threads 26 --o $folder/genome/graph/graph
-
-echo ""
-echo "--------END GRAPH BUILD---------"
-
-exit 0
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP003549.1/genome/CP003549.1 --o ../data/CP003549.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP003198.1/genome/CP003198.1 --o ../data/CP003198.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP029241.1/genome/CP029241.1 --o ../data/CP029241.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/AP019695.1/genome/AP019695.1 --o ../data/AP019695.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP001738.1/genome/CP001738.1 --o ../data/CP001738.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP039459.1/genome/CP039459.1 --o ../data/CP039459.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP071793.1/genome/CP071793.1 --o ../data/CP071793.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP019724.1/genome/CP019724.1 --o ../data/CP019724.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP011664.1/genome/CP011664.1 --o ../data/CP011664.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/AP023027.1/genome/AP023027.1 --o ../data/AP023027.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP001792.1/genome/CP001792.1 --o ../data/CP001792.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP000679.1/genome/CP000679.1 --o ../data/CP000679.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP015169.1/genome/CP015169.1 --o ../data/CP015169.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP088131.1/genome/CP088131.1 --o ../data/CP088131.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP075175.1/genome/CP075175.1 --o ../data/CP075175.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP022752.1/genome/CP022752.1 --o ../data/CP022752.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP063232.1/genome/CP063232.1 --o ../data/CP063232.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP016076.1/genome/CP016076.1 --o ../data/CP016076.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP060244.1/genome/CP060244.1 --o ../data/CP060244.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP012590.1/genome/CP012590.1 --o ../data/CP012590.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP022961.1/genome/CP022961.1 --o ../data/CP022961.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP065748.1/genome/CP065748.1 --o ../data/CP065748.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP007445.1/genome/CP007445.1 --o ../data/CP007445.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP025943.1/genome/CP025943.1 --o ../data/CP025943.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP059265.1/genome/CP059265.1 --o ../data/CP059265.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP058556.1/genome/CP058556.1 --o ../data/CP058556.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP018058.1/genome/CP018058.1 --o ../data/CP018058.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP071065.1/genome/CP071065.1 --o ../data/CP071065.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP013479.1/genome/CP013479.1 --o ../data/CP013479.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP014672.1/genome/CP014672.1 --o ../data/CP014672.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/AP023410.1/genome/AP023410.1 --o ../data/AP023410.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP028769.1/genome/CP028769.1 --o ../data/CP028769.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP014859.1/genome/CP014859.1 --o ../data/CP014859.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP027781.1/genome/CP027781.1 --o ../data/CP027781.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP025228.1/genome/CP025228.1 --o ../data/CP025228.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP050504.1/genome/CP050504.1 --o ../data/CP050504.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/AP025018.1/genome/AP025018.1 --o ../data/AP025018.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP054212.1/genome/CP054212.1 --o ../data/CP054212.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP001185.1/genome/CP001185.1 --o ../data/CP001185.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP051167.1/genome/CP051167.1 --o ../data/CP051167.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP003001.1/genome/CP003001.1 --o ../data/CP003001.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP067336.1/genome/CP067336.1 --o ../data/CP067336.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP025990.1/genome/CP025990.1 --o ../data/CP025990.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP031128.1/genome/CP031128.1 --o ../data/CP031128.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP036345.1/genome/CP036345.1 --o ../data/CP036345.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP003548.1/genome/CP003548.1 --o ../data/CP003548.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP072467.1/genome/CP072467.1 --o ../data/CP072467.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/files.txt/genome/files.txt --o ../data/files.txt/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP020563.1/genome/CP020563.1 --o ../data/CP020563.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP024955.1/genome/CP024955.1 --o ../data/CP024955.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/AP022323.1/genome/AP022323.1 --o ../data/AP022323.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP088828.1/genome/CP088828.1 --o ../data/CP088828.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP032402.1/genome/CP032402.1 --o ../data/CP032402.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/AP018254.1/genome/AP018254.1 --o ../data/AP018254.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP003788.1/genome/CP003788.1 --o ../data/CP003788.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP091022.1/genome/CP091022.1 --o ../data/CP091022.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP048265.1/genome/CP048265.1 --o ../data/CP048265.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP001229.1/genome/CP001229.1 --o ../data/CP001229.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/LN614756.1/genome/LN614756.1 --o ../data/LN614756.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP003046.1/genome/CP003046.1 --o ../data/CP003046.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/FN666575.1/genome/FN666575.1 --o ../data/FN666575.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP074570.1/genome/CP074570.1 --o ../data/CP074570.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP015435.1/genome/CP015435.1 --o ../data/CP015435.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/FN434113.1/genome/FN434113.1 --o ../data/FN434113.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/AP019711.1/genome/AP019711.1 --o ../data/AP019711.1/genome/graph/graph
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP024704.1/genome/CP024704.1 --o ../data/CP024704.1/genome/graph/graph

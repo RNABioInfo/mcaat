@@ -2,6 +2,8 @@ import sys
 from multiprocessing import Pool
 import math
 from collections import Counter
+import statistics
+
 #import matplotlib.pyplot as plt
 #import numpy as np
 def read_file(folder, file_name):
@@ -38,12 +40,17 @@ def rearrange_cyles(id_paths,multiplicities,indices):
         
     return new_id_paths, new_multiplicities
 
-def remove_false_positives():
-    folder = "/mnt/ceph/ftalibli/d/development/git/mCAAT/proof_of_concept/data/"+sys.argv[1]+"/cycles/"
+def remove_false_positives(files=""):
+    folder = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+sys.argv[1]+"/cycles_genome/"
     histogram_folder = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+sys.argv[1]+"/histograms/"
+    if files!="":
+        folder = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+files+"/cycles_genome/"
+        #histogram_folder = files[1]
     multiplicities = read_file(folder, "multiplicity_distribution.txt")
     id_paths= read_file(folder, "id_paths.txt")
-    print("Amount of cycles before filtering:", len(id_paths))
+    report = ""
+    report += "File name: " + files +"\n"
+    report += "Amount of cycles before filtering: " + str(len(id_paths)) + "\n"
     indicies = []
     for i in range(len(multiplicities)):
         indicies.append(multiplicities[i].index(max(multiplicities[i])))
@@ -54,25 +61,19 @@ def remove_false_positives():
     t=0
     id_paths_no_duplicates = []
     multiplicities_no_duplicates = []
-    #print(len(new_id_paths), len(new_multiplicities))
     for i in range(len(new_id_paths)):
         if new_id_paths[i] not in id_paths_no_duplicates:
             id_paths_no_duplicates.append(new_id_paths[i])
             multiplicities_no_duplicates.append(new_multiplicities[i])
     
 
-    #print("Amount of cycles after filtering duplicates out:", len(id_paths_no_duplicates))
     count = 0
     association = {}
     absolute_min = {}
     node_cluster = {}
-    # ----re-arrange cycles_id and multiplicities file----
-    #fill association dictionary with empty lists
     old_min=min(multiplicities_no_duplicates[0])
     for i in range(len(id_paths_no_duplicates)):
-        association[id_paths_no_duplicates[i][0]] = []
-        
-        
+        association[id_paths_no_duplicates[i][0]] = []        
         node_cluster[id_paths_no_duplicates[i][0]] = []
 
     for i in range(len(id_paths_no_duplicates)):
@@ -83,8 +84,6 @@ def remove_false_positives():
     id_paths = []
     counting_list = {}
     min_max_proportion = []
-    #print('len(node_cluster):',len(node_cluster))
-    # join all the values of key in node_cluster
     g_cs = {}
     
     for k,v in node_cluster.items():
@@ -94,18 +93,7 @@ def remove_false_positives():
             extended_node_cluster.extend(i)    
         g_cs[k]=extended_node_cluster
     
-    #print(len(g_cs))
     
-    #print('len(g_cs):',len(g_cs))
-    #make a histogram x axis: multiplicity, y axis: frequency
-    '''
-    for k in g_cs.keys():
-        plt.hist(g_cs[k], bins=12)
-        plt.savefig(histogram_folder+str(k)+".png")
-        
-        plt.close()
-    '''
-    #print first 20 elements of association
     count=0
     for i in range(len(multiplicities_no_duplicates)):
         min_multiplicity = min(multiplicities_no_duplicates[i])
@@ -116,25 +104,16 @@ def remove_false_positives():
     minimum = min(min_max_proportion)
     #print("Minimum:",minimum)
     multiplicities=[]
+    c = 0
     for k,v in association.items():
         
         if len(v) < 300 :
             for i in v:
-                if min(multiplicities_no_duplicates[i])>absolute_min[k]:
-                    print(absolute_min[k],min(multiplicities_no_duplicates[i]),k,i)
-                    multiplicities.append(multiplicities_no_duplicates[i])
-                    id_paths.append(id_paths_no_duplicates[i])
-                    continue
-                if min_max_proportion[i] >= len(v):
-                    id_paths.append(id_paths_no_duplicates[i])
-                    multiplicities.append(multiplicities_no_duplicates[i])
-                    continue
+                multiplicities.append(multiplicities_no_duplicates[i])
+                id_paths.append(id_paths_no_duplicates[i])
                 
             counting_list[k] = len(v)
     
-    #print("Amount of cycles after filtering:", len(id_paths))
-    
-    # write min_max_proportion to file
     with open(folder + "min_max_proportion.txt", "w") as f:
         for i in min_max_proportion:
             f.write(str(i)+"\n")
@@ -155,16 +134,58 @@ def remove_false_positives():
         if count % 200 == 0:
             print("|",end=" ... ",flush=True)
     
-    print("\nPost-filtering:",len(id_paths_after_filter))
+    print("\nPost-filtering:",len(id_paths))
+    original_len_ids = len(id_paths_no_duplicates)
+    t_count = 0
+    lengths = {}
+    for k,v in association.items():
+        lengths[k] = []
+        for i in v:
+            lengths[k].append(len(multiplicities_no_duplicates[i]))
+    
+    lengths_average = {}
+    for k,v in lengths.items():
+        lengths_average[k] = statistics.median(v)
+    new_id_paths = []
+    '''
+    for k,v in lengths_average.items():
+        for i in association[k]:
+            if len(id_paths_no_duplicates[i]) <= v-8 or len(id_paths_no_duplicates[i]) >= v+8 or len(id_paths_no_duplicates[i]) > 120 or len(id_paths_no_duplicates[i]) < 46:
+                continue    
+            new_id_paths.append(id_paths_no_duplicates[i])
+    '''
+    
+    print("Post-post-filtering:",len(id_paths_no_duplicates))
+    
+    with open(folder + "lengths.txt", "w") as f:
+        for k,v in lengths.items():
+            f.write(str(k) + ": " + str(v) + "\n")
     
     with open(folder + "counting_list.txt", "w") as f:
         for k,v in counting_list.items():
             f.write(str(k) + ": " + str(v) + "\n")
             
     with open(folder + "id_paths_no_duplicates.txt", "w") as f:
-        for cycle in id_paths_after_filter:
+        for cycle in id_paths:
             for element in cycle:
                 f.write(str(element) + " ")
             f.write("\n")
     
-remove_false_positives()
+    #report += line + "\n"
+    report += "Post-filtering: " + str(len(id_paths_no_duplicates)) + "\n"
+    report += "Post-post-filtering: " + str(len(new_id_paths)) + "\n"
+    report += "\n----------------------------------------------------\n"
+    with open("report.txt", "a") as f:
+        f.write(report)
+    print()
+#read from ../data/data.txt]
+lines = []
+
+with open("/vol/d/development/git/mCAAT/proof_of_concept/data/data.txt", "r") as f:
+    lines = f.readlines()
+    lines = [line.strip() for line in lines]
+print(lines[5])
+
+
+report = ""
+remove_false_positives(sys.argv[1])

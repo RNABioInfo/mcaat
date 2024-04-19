@@ -39,58 +39,53 @@ set<uint64_t> GetIncomingNodes(SDBG& succinct_de_bruijn_graph,uint64_t node){
     return incomings_set;
 };
 
-void Merge(int arr[], int ids[],int l, int m, int r)
+/*
+void GenericWrite(vector<uint64_t> path, uint64_t startnode, string type, string genome_id, 
+    SDBG& succinct_de_bruijn_graph, char file_mode,string folder_path="proof_of_concept/data/")
 {
-    int i, j, k;
-    int n1 = m - l + 1;
-    int n2 = r - m;
-
-    int L[n1], R[n2];
-
-    for (i = 0; i < n1; i++)
-        L[i] = arr[l + i];
-    for (j = 0; j < n2; j++)
-        R[j] = arr[m + 1 + j];
-
-    i = 0;
-    j = 0;
-    k = l;
-    while (i < n1 && j < n2) {
-        if (L[i] <= R[j]) {
-            arr[k] = L[i];
-            i++;
+    path.push_back(startnode);
+    ofstream generic_file;
+    switch(file_mode){
+        case('p'):
+            generic_file.open(folder_path+genome_id+"/cycles"+type+"/str_paths.txt",std::ios_base::app);
+            for(int j=0; j<path.size(); j++)
+                generic_file << FetchNodeLabel(succinct_de_bruijn_graph,path[j]) << " ";
+            
+        case ('i'):
+            generic_file.open(folder_path+genome_id+"/cycles"+type+"/id_paths.txt",std::ios_base::app);
+            for(int j=0; j<path.size(); j++)
+                generic_file << path[j] << " ";
+                break;
+            
+        case ('m'):
+            generic_file.open(folder_path+genome_id+"/cycles"+type+"/edge_multiplicities.txt",std::ios_base::app);
+            for(int j=0; j<path.size(); j++)
+                generic_file << succinct_de_bruijn_graph.EdgeMultiplicity(path[j]) << " ";
+            break;
         }
-        else {
-            arr[k] = R[j];
-            j++;
-        }
-        k++;
-    }
-
-    while (i < n1) {
-        arr[k] = L[i];
-        i++;
-        k++;
-    }
-
-    while (j < n2) {
-        arr[k] = R[j];
-        j++;
-        k++;
-    }
+    
+    generic_file << "\n";
+    generic_file.close();
+    return;
 }
+void WritePath(vector<uint64_t> path, uint64_t startnode, string modes, string type, string genome_id, SDBG& succinct_de_bruijn_graph,string folder_path="proof_of_concept/data/")
+{            
+    uint8_t N = modes.length();
+    for (int i = 0; i < N; i++)
+        GenericWrite(path, startnode, type, genome_id, succinct_de_bruijn_graph, modes[i], folder_path);
+    return;
+};
 
-void MergeSort(int arr[], int ids[], int n)
-{
-    int curr_size;
-    int left_start;
+void WriteBlankLine(string type,string genome_id,string folder_path="proof_of_concept/data/"){
+    
+    ofstream id_file;
+    id_file.open(folder_path+genome_id+"/cycles"+type+"/id_paths.txt",std::ios_base::app);
+    id_file << "\n";
+    id_file.close();
 
-    for (curr_size = 1; curr_size <= n - 1; curr_size = 2 * curr_size) {
-        for (left_start = 0; left_start < n - 1; left_start += 2 * curr_size) {
-            int mid = min(left_start + curr_size - 1, n - 1);
-            int right_end = min(left_start + 2 * curr_size - 1, n - 1);
-
-            Merge(arr, ids,left_start, mid, right_end);
-        }
-    }
-}
+    ofstream str_file;
+    str_file.open(folder_path+genome_id+"/cycles"+type+"/str_paths.txt",std::ios_base::app);
+    str_file << "\n";
+    str_file.close();
+    return;
+}*/

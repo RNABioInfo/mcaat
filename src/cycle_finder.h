@@ -116,7 +116,7 @@ class CycleFinder {
                 minimal_length(minimal_length),
                 succinct_de_bruijn_graph(succinct_de_bruijn_graph),
                 genome_name(genome_name),
-                cluster_bounds(1000),
+                cluster_bounds(300),
                 visited(new bool[succinct_de_bruijn_graph.size()])
             {
                 FindCycles();
@@ -145,7 +145,7 @@ class CycleFinder {
                             counter+=1;
                             cycles.push_back(path);
                             
-                            if (counter<=2 && counter >= cluster_bounds) 
+                            if (counter >= cluster_bounds) 
                                 return 0;          
                         }
                         backtrack_lengths[backtrack_lengths.size() - 1] = 1;
@@ -175,16 +175,16 @@ class CycleFinder {
                 }
                 
             }
-            /*
+            
             for (auto cycle : cycles)
                 for (auto node : cycle){
                     if (node==start_node)
                         continue;
                     if(succinct_de_bruijn_graph.EdgeIndegree(node)>1)
                         visited[node] = true;
-                    }*/
+                    }
             for (auto cycle : cycles)
-                PathWriter("pi", succinct_de_bruijn_graph, 
+                PathWriter("a", succinct_de_bruijn_graph, 
                              cycle, genome_name, "fasta");
             return counter;
             
@@ -206,7 +206,7 @@ class CycleFinder {
             //vector<node> start_nodes = _SortNodesByMultiplicities();
             
             
-            string mode = "fasta";
+            string mode = "fastq";
             if (mode=="fasta"){
                 vector<uint64_t> start_nodes = _SortNodesByIds();
                 cout << "Number of nodes with multiple edges: " << start_nodes.size() << endl;

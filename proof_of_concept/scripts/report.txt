@@ -1,0 +1,1998 @@
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 493
+
+----------------------------------------------------
+File name: AP019695.1
+Amount of cycles before filtering: 44
+Post-filtering: 44
+Post-post-filtering: 36
+
+----------------------------------------------------
+File name: AP019711.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 26
+
+----------------------------------------------------
+File name: AP022323.1
+Amount of cycles before filtering: 131
+Post-filtering: 130
+Post-post-filtering: 110
+
+----------------------------------------------------
+File name: AP023027.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 176
+
+----------------------------------------------------
+File name: AP023410.1
+Amount of cycles before filtering: 84
+Post-filtering: 84
+Post-post-filtering: 84
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 2495
+Post-filtering: 2206
+Post-post-filtering: 767
+
+----------------------------------------------------
+File name: CP000679.1
+Amount of cycles before filtering: 593
+Post-filtering: 593
+Post-post-filtering: 560
+
+----------------------------------------------------
+File name: CP001185.1
+Amount of cycles before filtering: 632
+Post-filtering: 632
+Post-post-filtering: 388
+
+----------------------------------------------------
+File name: CP001229.1
+Amount of cycles before filtering: 315
+Post-filtering: 302
+Post-post-filtering: 276
+
+----------------------------------------------------
+File name: CP001738.1
+Amount of cycles before filtering: 652
+Post-filtering: 651
+Post-post-filtering: 613
+
+----------------------------------------------------
+File name: CP001792.1
+Amount of cycles before filtering: 202
+Post-filtering: 199
+Post-post-filtering: 150
+
+----------------------------------------------------
+File name: CP003001.1
+Amount of cycles before filtering: 549
+Post-filtering: 549
+Post-post-filtering: 486
+
+----------------------------------------------------
+File name: CP003198.1
+Amount of cycles before filtering: 370
+Post-filtering: 370
+Post-post-filtering: 346
+
+----------------------------------------------------
+File name: CP003548.1
+Amount of cycles before filtering: 647
+Post-filtering: 627
+Post-post-filtering: 283
+
+----------------------------------------------------
+File name: CP003788.1
+Amount of cycles before filtering: 381
+Post-filtering: 380
+Post-post-filtering: 303
+
+----------------------------------------------------
+File name: CP007445.1
+Amount of cycles before filtering: 168
+Post-filtering: 168
+Post-post-filtering: 152
+
+----------------------------------------------------
+File name: CP011664.1
+Amount of cycles before filtering: 213
+Post-filtering: 207
+Post-post-filtering: 116
+
+----------------------------------------------------
+File name: CP012590.1
+Amount of cycles before filtering: 1638
+Post-filtering: 1606
+Post-post-filtering: 710
+
+----------------------------------------------------
+File name: CP013479.1
+Amount of cycles before filtering: 156
+Post-filtering: 154
+Post-post-filtering: 125
+
+----------------------------------------------------
+File name: CP014672.1
+Amount of cycles before filtering: 434
+Post-filtering: 434
+Post-post-filtering: 424
+
+----------------------------------------------------
+File name: CP014859.1
+Amount of cycles before filtering: 140
+Post-filtering: 134
+Post-post-filtering: 123
+
+----------------------------------------------------
+File name: CP015169.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 30
+
+----------------------------------------------------
+File name: CP015435.1
+Amount of cycles before filtering: 337
+Post-filtering: 328
+Post-post-filtering: 292
+
+----------------------------------------------------
+File name: CP016076.1
+Amount of cycles before filtering: 342
+Post-filtering: 336
+Post-post-filtering: 286
+
+----------------------------------------------------
+File name: CP018058.1
+Amount of cycles before filtering: 555
+Post-filtering: 553
+Post-post-filtering: 454
+
+----------------------------------------------------
+File name: CP019724.1
+Amount of cycles before filtering: 530
+Post-filtering: 512
+Post-post-filtering: 178
+
+----------------------------------------------------
+File name: CP020563.1
+Amount of cycles before filtering: 379
+Post-filtering: 372
+Post-post-filtering: 276
+
+----------------------------------------------------
+File name: CP022752.1
+Amount of cycles before filtering: 221
+Post-filtering: 220
+Post-post-filtering: 188
+
+----------------------------------------------------
+File name: CP022961.1
+Amount of cycles before filtering: 482
+Post-filtering: 469
+Post-post-filtering: 186
+
+----------------------------------------------------
+File name: CP024704.1
+Amount of cycles before filtering: 339
+Post-filtering: 332
+Post-post-filtering: 238
+
+----------------------------------------------------
+File name: CP024955.1
+Amount of cycles before filtering: 1016
+Post-filtering: 1016
+Post-post-filtering: 756
+
+----------------------------------------------------
+File name: CP025228.1
+Amount of cycles before filtering: 1290
+Post-filtering: 1252
+Post-post-filtering: 478
+
+----------------------------------------------------
+File name: CP025943.1
+Amount of cycles before filtering: 273
+Post-filtering: 267
+Post-post-filtering: 238
+
+----------------------------------------------------
+File name: CP025990.1
+Amount of cycles before filtering: 596
+Post-filtering: 570
+Post-post-filtering: 472
+
+----------------------------------------------------
+File name: CP027781.1
+Amount of cycles before filtering: 269
+Post-filtering: 263
+Post-post-filtering: 224
+
+----------------------------------------------------
+File name: CP028769.1
+Amount of cycles before filtering: 223
+Post-filtering: 220
+Post-post-filtering: 148
+
+----------------------------------------------------
+File name: CP029241.1
+Amount of cycles before filtering: 264
+Post-filtering: 261
+Post-post-filtering: 152
+
+----------------------------------------------------
+File name: CP031128.1
+Amount of cycles before filtering: 443
+Post-filtering: 425
+Post-post-filtering: 234
+
+----------------------------------------------------
+File name: CP032402.1
+Amount of cycles before filtering: 422
+Post-filtering: 414
+Post-post-filtering: 361
+
+----------------------------------------------------
+File name: CP036345.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 176
+
+----------------------------------------------------
+File name: CP039459.1
+Amount of cycles before filtering: 67
+Post-filtering: 57
+Post-post-filtering: 52
+
+----------------------------------------------------
+File name: CP048265.1
+Amount of cycles before filtering: 388
+Post-filtering: 385
+Post-post-filtering: 337
+
+----------------------------------------------------
+File name: CP050504.1
+Amount of cycles before filtering: 415
+Post-filtering: 369
+Post-post-filtering: 239
+
+----------------------------------------------------
+File name: CP051167.1
+Amount of cycles before filtering: 1125
+Post-filtering: 1095
+Post-post-filtering: 561
+
+----------------------------------------------------
+File name: CP054212.1
+Amount of cycles before filtering: 65
+Post-filtering: 64
+Post-post-filtering: 54
+
+----------------------------------------------------
+File name: CP058556.1
+Amount of cycles before filtering: 847
+Post-filtering: 830
+Post-post-filtering: 675
+
+----------------------------------------------------
+File name: CP060244.1
+Amount of cycles before filtering: 155
+Post-filtering: 154
+Post-post-filtering: 150
+
+----------------------------------------------------
+File name: CP063232.1
+Amount of cycles before filtering: 606
+Post-filtering: 578
+Post-post-filtering: 556
+
+----------------------------------------------------
+File name: CP065748.1
+Amount of cycles before filtering: 143
+Post-filtering: 139
+Post-post-filtering: 75
+
+----------------------------------------------------
+File name: CP067336.1
+Amount of cycles before filtering: 4028
+Post-filtering: 4023
+Post-post-filtering: 531
+
+----------------------------------------------------
+File name: CP071065.1
+Amount of cycles before filtering: 16745
+Post-filtering: 13520
+Post-post-filtering: 3414
+
+----------------------------------------------------
+File name: CP072467.1
+Amount of cycles before filtering: 230
+Post-filtering: 209
+Post-post-filtering: 174
+
+----------------------------------------------------
+File name: CP074570.1
+Amount of cycles before filtering: 375
+Post-filtering: 360
+Post-post-filtering: 327
+
+----------------------------------------------------
+File name: CP075175.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1362
+Post-post-filtering: 536
+
+----------------------------------------------------
+File name: CP088131.1
+Amount of cycles before filtering: 731
+Post-filtering: 720
+Post-post-filtering: 399
+
+----------------------------------------------------
+File name: CP088828.1
+Amount of cycles before filtering: 121
+Post-filtering: 102
+Post-post-filtering: 86
+
+----------------------------------------------------
+File name: CP091022.1
+Amount of cycles before filtering: 747
+Post-filtering: 705
+Post-post-filtering: 369
+
+----------------------------------------------------
+File name: FN434113.1
+Amount of cycles before filtering: 138
+Post-filtering: 138
+Post-post-filtering: 130
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 557
+
+----------------------------------------------------
+File name: AP019695.1
+Amount of cycles before filtering: 44
+Post-filtering: 44
+Post-post-filtering: 36
+
+----------------------------------------------------
+File name: AP019711.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 26
+
+----------------------------------------------------
+File name: AP022323.1
+Amount of cycles before filtering: 131
+Post-filtering: 130
+Post-post-filtering: 112
+
+----------------------------------------------------
+File name: AP023027.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 174
+
+----------------------------------------------------
+File name: AP023410.1
+Amount of cycles before filtering: 84
+Post-filtering: 84
+Post-post-filtering: 80
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 2495
+Post-filtering: 2206
+Post-post-filtering: 837
+
+----------------------------------------------------
+File name: CP000679.1
+Amount of cycles before filtering: 593
+Post-filtering: 593
+Post-post-filtering: 574
+
+----------------------------------------------------
+File name: CP001185.1
+Amount of cycles before filtering: 632
+Post-filtering: 632
+Post-post-filtering: 478
+
+----------------------------------------------------
+File name: CP001229.1
+Amount of cycles before filtering: 315
+Post-filtering: 302
+Post-post-filtering: 290
+
+----------------------------------------------------
+File name: CP001738.1
+Amount of cycles before filtering: 652
+Post-filtering: 651
+Post-post-filtering: 613
+
+----------------------------------------------------
+File name: CP001792.1
+Amount of cycles before filtering: 202
+Post-filtering: 199
+Post-post-filtering: 136
+
+----------------------------------------------------
+File name: CP003001.1
+Amount of cycles before filtering: 549
+Post-filtering: 549
+Post-post-filtering: 536
+
+----------------------------------------------------
+File name: CP003198.1
+Amount of cycles before filtering: 370
+Post-filtering: 370
+Post-post-filtering: 368
+
+----------------------------------------------------
+File name: CP003548.1
+Amount of cycles before filtering: 647
+Post-filtering: 627
+Post-post-filtering: 395
+
+----------------------------------------------------
+File name: CP003788.1
+Amount of cycles before filtering: 381
+Post-filtering: 380
+Post-post-filtering: 289
+
+----------------------------------------------------
+File name: CP007445.1
+Amount of cycles before filtering: 168
+Post-filtering: 168
+Post-post-filtering: 148
+
+----------------------------------------------------
+File name: CP011664.1
+Amount of cycles before filtering: 213
+Post-filtering: 207
+Post-post-filtering: 110
+
+----------------------------------------------------
+File name: CP012590.1
+Amount of cycles before filtering: 1638
+Post-filtering: 1606
+Post-post-filtering: 720
+
+----------------------------------------------------
+File name: CP013479.1
+Amount of cycles before filtering: 156
+Post-filtering: 154
+Post-post-filtering: 121
+
+----------------------------------------------------
+File name: CP014672.1
+Amount of cycles before filtering: 434
+Post-filtering: 434
+Post-post-filtering: 430
+
+----------------------------------------------------
+File name: CP014859.1
+Amount of cycles before filtering: 140
+Post-filtering: 134
+Post-post-filtering: 117
+
+----------------------------------------------------
+File name: CP015169.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 30
+
+----------------------------------------------------
+File name: CP015435.1
+Amount of cycles before filtering: 337
+Post-filtering: 328
+Post-post-filtering: 300
+
+----------------------------------------------------
+File name: CP016076.1
+Amount of cycles before filtering: 342
+Post-filtering: 336
+Post-post-filtering: 264
+
+----------------------------------------------------
+File name: CP018058.1
+Amount of cycles before filtering: 555
+Post-filtering: 553
+Post-post-filtering: 504
+
+----------------------------------------------------
+File name: CP019724.1
+Amount of cycles before filtering: 530
+Post-filtering: 512
+Post-post-filtering: 126
+
+----------------------------------------------------
+File name: CP020563.1
+Amount of cycles before filtering: 379
+Post-filtering: 372
+Post-post-filtering: 266
+
+----------------------------------------------------
+File name: CP022752.1
+Amount of cycles before filtering: 221
+Post-filtering: 220
+Post-post-filtering: 180
+
+----------------------------------------------------
+File name: CP022961.1
+Amount of cycles before filtering: 482
+Post-filtering: 469
+Post-post-filtering: 180
+
+----------------------------------------------------
+File name: CP024704.1
+Amount of cycles before filtering: 339
+Post-filtering: 332
+Post-post-filtering: 276
+
+----------------------------------------------------
+File name: CP024955.1
+Amount of cycles before filtering: 1016
+Post-filtering: 1016
+Post-post-filtering: 978
+
+----------------------------------------------------
+File name: CP025228.1
+Amount of cycles before filtering: 1290
+Post-filtering: 1252
+Post-post-filtering: 924
+
+----------------------------------------------------
+File name: CP025943.1
+Amount of cycles before filtering: 273
+Post-filtering: 267
+Post-post-filtering: 248
+
+----------------------------------------------------
+File name: CP025990.1
+Amount of cycles before filtering: 596
+Post-filtering: 570
+Post-post-filtering: 490
+
+----------------------------------------------------
+File name: CP027781.1
+Amount of cycles before filtering: 269
+Post-filtering: 263
+Post-post-filtering: 238
+
+----------------------------------------------------
+File name: CP028769.1
+Amount of cycles before filtering: 223
+Post-filtering: 220
+Post-post-filtering: 166
+
+----------------------------------------------------
+File name: CP029241.1
+Amount of cycles before filtering: 264
+Post-filtering: 261
+Post-post-filtering: 116
+
+----------------------------------------------------
+File name: CP031128.1
+Amount of cycles before filtering: 443
+Post-filtering: 425
+Post-post-filtering: 237
+
+----------------------------------------------------
+File name: CP032402.1
+Amount of cycles before filtering: 422
+Post-filtering: 414
+Post-post-filtering: 353
+
+----------------------------------------------------
+File name: CP036345.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 174
+
+----------------------------------------------------
+File name: CP039459.1
+Amount of cycles before filtering: 67
+Post-filtering: 57
+Post-post-filtering: 50
+
+----------------------------------------------------
+File name: CP048265.1
+Amount of cycles before filtering: 388
+Post-filtering: 385
+Post-post-filtering: 331
+
+----------------------------------------------------
+File name: CP050504.1
+Amount of cycles before filtering: 415
+Post-filtering: 369
+Post-post-filtering: 199
+
+----------------------------------------------------
+File name: CP051167.1
+Amount of cycles before filtering: 1125
+Post-filtering: 1095
+Post-post-filtering: 627
+
+----------------------------------------------------
+File name: CP054212.1
+Amount of cycles before filtering: 65
+Post-filtering: 64
+Post-post-filtering: 50
+
+----------------------------------------------------
+File name: CP058556.1
+Amount of cycles before filtering: 847
+Post-filtering: 830
+Post-post-filtering: 639
+
+----------------------------------------------------
+File name: CP060244.1
+Amount of cycles before filtering: 155
+Post-filtering: 154
+Post-post-filtering: 150
+
+----------------------------------------------------
+File name: CP063232.1
+Amount of cycles before filtering: 606
+Post-filtering: 578
+Post-post-filtering: 552
+
+----------------------------------------------------
+File name: CP065748.1
+Amount of cycles before filtering: 143
+Post-filtering: 139
+Post-post-filtering: 100
+
+----------------------------------------------------
+File name: CP067336.1
+Amount of cycles before filtering: 4028
+Post-filtering: 4023
+Post-post-filtering: 3431
+
+----------------------------------------------------
+File name: CP071065.1
+Amount of cycles before filtering: 16745
+Post-filtering: 13520
+Post-post-filtering: 3508
+
+----------------------------------------------------
+File name: CP072467.1
+Amount of cycles before filtering: 230
+Post-filtering: 209
+Post-post-filtering: 168
+
+----------------------------------------------------
+File name: CP074570.1
+Amount of cycles before filtering: 375
+Post-filtering: 360
+Post-post-filtering: 333
+
+----------------------------------------------------
+File name: CP075175.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1362
+Post-post-filtering: 556
+
+----------------------------------------------------
+File name: CP088131.1
+Amount of cycles before filtering: 731
+Post-filtering: 720
+Post-post-filtering: 527
+
+----------------------------------------------------
+File name: CP088828.1
+Amount of cycles before filtering: 121
+Post-filtering: 102
+Post-post-filtering: 82
+
+----------------------------------------------------
+File name: CP091022.1
+Amount of cycles before filtering: 747
+Post-filtering: 705
+Post-post-filtering: 442
+
+----------------------------------------------------
+File name: FN434113.1
+Amount of cycles before filtering: 138
+Post-filtering: 138
+Post-post-filtering: 126
+
+----------------------------------------------------
+File name: AP019695.1
+Amount of cycles before filtering: 44
+Post-filtering: 44
+Post-post-filtering: 36
+
+----------------------------------------------------
+File name: AP019711.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 26
+
+----------------------------------------------------
+File name: AP022323.1
+Amount of cycles before filtering: 131
+Post-filtering: 130
+Post-post-filtering: 102
+
+----------------------------------------------------
+File name: AP023027.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 172
+
+----------------------------------------------------
+File name: AP023410.1
+Amount of cycles before filtering: 84
+Post-filtering: 84
+Post-post-filtering: 80
+
+----------------------------------------------------
+File name: CP000679.1
+Amount of cycles before filtering: 593
+Post-filtering: 593
+Post-post-filtering: 550
+
+----------------------------------------------------
+File name: CP001185.1
+Amount of cycles before filtering: 632
+Post-filtering: 632
+Post-post-filtering: 384
+
+----------------------------------------------------
+File name: CP001229.1
+Amount of cycles before filtering: 315
+Post-filtering: 302
+Post-post-filtering: 276
+
+----------------------------------------------------
+File name: CP001738.1
+Amount of cycles before filtering: 652
+Post-filtering: 651
+Post-post-filtering: 603
+
+----------------------------------------------------
+File name: CP001792.1
+Amount of cycles before filtering: 202
+Post-filtering: 199
+Post-post-filtering: 130
+
+----------------------------------------------------
+File name: CP003001.1
+Amount of cycles before filtering: 549
+Post-filtering: 549
+Post-post-filtering: 486
+
+----------------------------------------------------
+File name: CP003198.1
+Amount of cycles before filtering: 370
+Post-filtering: 370
+Post-post-filtering: 346
+
+----------------------------------------------------
+File name: CP003548.1
+Amount of cycles before filtering: 647
+Post-filtering: 627
+Post-post-filtering: 279
+
+----------------------------------------------------
+File name: CP003788.1
+Amount of cycles before filtering: 381
+Post-filtering: 380
+Post-post-filtering: 289
+
+----------------------------------------------------
+File name: CP007445.1
+Amount of cycles before filtering: 168
+Post-filtering: 168
+Post-post-filtering: 148
+
+----------------------------------------------------
+File name: CP011664.1
+Amount of cycles before filtering: 213
+Post-filtering: 207
+Post-post-filtering: 110
+
+----------------------------------------------------
+File name: CP012590.1
+Amount of cycles before filtering: 1638
+Post-filtering: 1606
+Post-post-filtering: 700
+
+----------------------------------------------------
+File name: CP013479.1
+Amount of cycles before filtering: 156
+Post-filtering: 154
+Post-post-filtering: 115
+
+----------------------------------------------------
+File name: CP014672.1
+Amount of cycles before filtering: 434
+Post-filtering: 434
+Post-post-filtering: 424
+
+----------------------------------------------------
+File name: CP014859.1
+Amount of cycles before filtering: 140
+Post-filtering: 134
+Post-post-filtering: 117
+
+----------------------------------------------------
+File name: CP015169.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 30
+
+----------------------------------------------------
+File name: CP015435.1
+Amount of cycles before filtering: 337
+Post-filtering: 328
+Post-post-filtering: 288
+
+----------------------------------------------------
+File name: CP016076.1
+Amount of cycles before filtering: 342
+Post-filtering: 336
+Post-post-filtering: 256
+
+----------------------------------------------------
+File name: CP018058.1
+Amount of cycles before filtering: 555
+Post-filtering: 553
+Post-post-filtering: 446
+
+----------------------------------------------------
+File name: CP019724.1
+Amount of cycles before filtering: 530
+Post-filtering: 512
+Post-post-filtering: 118
+
+----------------------------------------------------
+File name: CP020563.1
+Amount of cycles before filtering: 379
+Post-filtering: 372
+Post-post-filtering: 266
+
+----------------------------------------------------
+File name: CP022752.1
+Amount of cycles before filtering: 221
+Post-filtering: 220
+Post-post-filtering: 180
+
+----------------------------------------------------
+File name: CP022961.1
+Amount of cycles before filtering: 482
+Post-filtering: 469
+Post-post-filtering: 166
+
+----------------------------------------------------
+File name: CP024704.1
+Amount of cycles before filtering: 339
+Post-filtering: 332
+Post-post-filtering: 234
+
+----------------------------------------------------
+File name: CP024955.1
+Amount of cycles before filtering: 1016
+Post-filtering: 1016
+Post-post-filtering: 752
+
+----------------------------------------------------
+File name: CP025228.1
+Amount of cycles before filtering: 1290
+Post-filtering: 1252
+Post-post-filtering: 454
+
+----------------------------------------------------
+File name: CP025943.1
+Amount of cycles before filtering: 273
+Post-filtering: 267
+Post-post-filtering: 234
+
+----------------------------------------------------
+File name: CP025990.1
+Amount of cycles before filtering: 596
+Post-filtering: 570
+Post-post-filtering: 462
+
+----------------------------------------------------
+File name: CP027781.1
+Amount of cycles before filtering: 269
+Post-filtering: 263
+Post-post-filtering: 220
+
+----------------------------------------------------
+File name: CP028769.1
+Amount of cycles before filtering: 223
+Post-filtering: 220
+Post-post-filtering: 136
+
+----------------------------------------------------
+File name: CP029241.1
+Amount of cycles before filtering: 264
+Post-filtering: 261
+Post-post-filtering: 114
+
+----------------------------------------------------
+File name: CP031128.1
+Amount of cycles before filtering: 443
+Post-filtering: 425
+Post-post-filtering: 224
+
+----------------------------------------------------
+File name: CP032402.1
+Amount of cycles before filtering: 422
+Post-filtering: 414
+Post-post-filtering: 343
+
+----------------------------------------------------
+File name: CP036345.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 172
+
+----------------------------------------------------
+File name: CP039459.1
+Amount of cycles before filtering: 67
+Post-filtering: 57
+Post-post-filtering: 50
+
+----------------------------------------------------
+File name: CP048265.1
+Amount of cycles before filtering: 388
+Post-filtering: 385
+Post-post-filtering: 331
+
+----------------------------------------------------
+File name: CP050504.1
+Amount of cycles before filtering: 415
+Post-filtering: 369
+Post-post-filtering: 199
+
+----------------------------------------------------
+File name: CP051167.1
+Amount of cycles before filtering: 1125
+Post-filtering: 1095
+Post-post-filtering: 509
+
+----------------------------------------------------
+File name: CP054212.1
+Amount of cycles before filtering: 65
+Post-filtering: 64
+Post-post-filtering: 50
+
+----------------------------------------------------
+File name: CP058556.1
+Amount of cycles before filtering: 847
+Post-filtering: 830
+Post-post-filtering: 633
+
+----------------------------------------------------
+File name: CP060244.1
+Amount of cycles before filtering: 155
+Post-filtering: 154
+Post-post-filtering: 150
+
+----------------------------------------------------
+File name: CP063232.1
+Amount of cycles before filtering: 606
+Post-filtering: 578
+Post-post-filtering: 544
+
+----------------------------------------------------
+File name: CP065748.1
+Amount of cycles before filtering: 143
+Post-filtering: 139
+Post-post-filtering: 67
+
+----------------------------------------------------
+File name: CP067336.1
+Amount of cycles before filtering: 4028
+Post-filtering: 4023
+Post-post-filtering: 519
+
+----------------------------------------------------
+File name: CP071065.1
+Amount of cycles before filtering: 16745
+Post-filtering: 13520
+Post-post-filtering: 3414
+
+----------------------------------------------------
+File name: CP072467.1
+Amount of cycles before filtering: 230
+Post-filtering: 209
+Post-post-filtering: 168
+
+----------------------------------------------------
+File name: CP074570.1
+Amount of cycles before filtering: 375
+Post-filtering: 360
+Post-post-filtering: 317
+
+----------------------------------------------------
+File name: CP075175.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1362
+Post-post-filtering: 500
+
+----------------------------------------------------
+File name: CP088131.1
+Amount of cycles before filtering: 731
+Post-filtering: 720
+Post-post-filtering: 383
+
+----------------------------------------------------
+File name: CP088828.1
+Amount of cycles before filtering: 121
+Post-filtering: 102
+Post-post-filtering: 82
+
+----------------------------------------------------
+File name: CP091022.1
+Amount of cycles before filtering: 747
+Post-filtering: 705
+Post-post-filtering: 349
+
+----------------------------------------------------
+File name: FN434113.1
+Amount of cycles before filtering: 138
+Post-filtering: 138
+Post-post-filtering: 126
+
+----------------------------------------------------
+File name: AP019695.1
+Amount of cycles before filtering: 44
+Post-filtering: 44
+Post-post-filtering: 40
+
+----------------------------------------------------
+File name: AP019711.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 26
+
+----------------------------------------------------
+File name: AP022323.1
+Amount of cycles before filtering: 131
+Post-filtering: 130
+Post-post-filtering: 110
+
+----------------------------------------------------
+File name: AP023027.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 176
+
+----------------------------------------------------
+File name: AP023410.1
+Amount of cycles before filtering: 84
+Post-filtering: 84
+Post-post-filtering: 84
+
+----------------------------------------------------
+File name: CP000679.1
+Amount of cycles before filtering: 593
+Post-filtering: 593
+Post-post-filtering: 560
+
+----------------------------------------------------
+File name: CP001185.1
+Amount of cycles before filtering: 632
+Post-filtering: 632
+Post-post-filtering: 388
+
+----------------------------------------------------
+File name: CP001229.1
+Amount of cycles before filtering: 315
+Post-filtering: 302
+Post-post-filtering: 276
+
+----------------------------------------------------
+File name: CP001738.1
+Amount of cycles before filtering: 652
+Post-filtering: 651
+Post-post-filtering: 613
+
+----------------------------------------------------
+File name: CP001792.1
+Amount of cycles before filtering: 202
+Post-filtering: 199
+Post-post-filtering: 150
+
+----------------------------------------------------
+File name: CP003001.1
+Amount of cycles before filtering: 549
+Post-filtering: 549
+Post-post-filtering: 486
+
+----------------------------------------------------
+File name: CP003198.1
+Amount of cycles before filtering: 370
+Post-filtering: 370
+Post-post-filtering: 346
+
+----------------------------------------------------
+File name: CP003548.1
+Amount of cycles before filtering: 647
+Post-filtering: 627
+Post-post-filtering: 291
+
+----------------------------------------------------
+File name: CP003788.1
+Amount of cycles before filtering: 381
+Post-filtering: 380
+Post-post-filtering: 303
+
+----------------------------------------------------
+File name: CP007445.1
+Amount of cycles before filtering: 168
+Post-filtering: 168
+Post-post-filtering: 152
+
+----------------------------------------------------
+File name: CP011664.1
+Amount of cycles before filtering: 213
+Post-filtering: 207
+Post-post-filtering: 116
+
+----------------------------------------------------
+File name: CP012590.1
+Amount of cycles before filtering: 1638
+Post-filtering: 1606
+Post-post-filtering: 710
+
+----------------------------------------------------
+File name: CP013479.1
+Amount of cycles before filtering: 156
+Post-filtering: 154
+Post-post-filtering: 125
+
+----------------------------------------------------
+File name: CP014672.1
+Amount of cycles before filtering: 434
+Post-filtering: 434
+Post-post-filtering: 424
+
+----------------------------------------------------
+File name: CP014859.1
+Amount of cycles before filtering: 140
+Post-filtering: 134
+Post-post-filtering: 123
+
+----------------------------------------------------
+File name: CP015169.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 30
+
+----------------------------------------------------
+File name: CP015435.1
+Amount of cycles before filtering: 337
+Post-filtering: 328
+Post-post-filtering: 292
+
+----------------------------------------------------
+File name: CP016076.1
+Amount of cycles before filtering: 342
+Post-filtering: 336
+Post-post-filtering: 286
+
+----------------------------------------------------
+File name: CP018058.1
+Amount of cycles before filtering: 555
+Post-filtering: 553
+Post-post-filtering: 454
+
+----------------------------------------------------
+File name: CP019724.1
+Amount of cycles before filtering: 530
+Post-filtering: 512
+Post-post-filtering: 184
+
+----------------------------------------------------
+File name: CP020563.1
+Amount of cycles before filtering: 379
+Post-filtering: 372
+Post-post-filtering: 276
+
+----------------------------------------------------
+File name: CP022752.1
+Amount of cycles before filtering: 221
+Post-filtering: 220
+Post-post-filtering: 188
+
+----------------------------------------------------
+File name: CP022961.1
+Amount of cycles before filtering: 482
+Post-filtering: 469
+Post-post-filtering: 186
+
+----------------------------------------------------
+File name: CP024704.1
+Amount of cycles before filtering: 339
+Post-filtering: 332
+Post-post-filtering: 238
+
+----------------------------------------------------
+File name: CP024955.1
+Amount of cycles before filtering: 1016
+Post-filtering: 1016
+Post-post-filtering: 756
+
+----------------------------------------------------
+File name: CP025228.1
+Amount of cycles before filtering: 1290
+Post-filtering: 1252
+Post-post-filtering: 482
+
+----------------------------------------------------
+File name: CP025943.1
+Amount of cycles before filtering: 273
+Post-filtering: 267
+Post-post-filtering: 238
+
+----------------------------------------------------
+File name: CP025990.1
+Amount of cycles before filtering: 596
+Post-filtering: 570
+Post-post-filtering: 472
+
+----------------------------------------------------
+File name: CP027781.1
+Amount of cycles before filtering: 269
+Post-filtering: 263
+Post-post-filtering: 224
+
+----------------------------------------------------
+File name: CP028769.1
+Amount of cycles before filtering: 223
+Post-filtering: 220
+Post-post-filtering: 148
+
+----------------------------------------------------
+File name: CP029241.1
+Amount of cycles before filtering: 264
+Post-filtering: 261
+Post-post-filtering: 152
+
+----------------------------------------------------
+File name: CP031128.1
+Amount of cycles before filtering: 443
+Post-filtering: 425
+Post-post-filtering: 234
+
+----------------------------------------------------
+File name: CP032402.1
+Amount of cycles before filtering: 422
+Post-filtering: 414
+Post-post-filtering: 361
+
+----------------------------------------------------
+File name: CP036345.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 176
+
+----------------------------------------------------
+File name: CP039459.1
+Amount of cycles before filtering: 67
+Post-filtering: 57
+Post-post-filtering: 52
+
+----------------------------------------------------
+File name: CP048265.1
+Amount of cycles before filtering: 388
+Post-filtering: 385
+Post-post-filtering: 337
+
+----------------------------------------------------
+File name: CP050504.1
+Amount of cycles before filtering: 415
+Post-filtering: 369
+Post-post-filtering: 239
+
+----------------------------------------------------
+File name: CP051167.1
+Amount of cycles before filtering: 1125
+Post-filtering: 1095
+Post-post-filtering: 565
+
+----------------------------------------------------
+File name: CP054212.1
+Amount of cycles before filtering: 65
+Post-filtering: 64
+Post-post-filtering: 54
+
+----------------------------------------------------
+File name: CP058556.1
+Amount of cycles before filtering: 847
+Post-filtering: 830
+Post-post-filtering: 675
+
+----------------------------------------------------
+File name: CP060244.1
+Amount of cycles before filtering: 155
+Post-filtering: 154
+Post-post-filtering: 150
+
+----------------------------------------------------
+File name: CP063232.1
+Amount of cycles before filtering: 606
+Post-filtering: 578
+Post-post-filtering: 556
+
+----------------------------------------------------
+File name: CP065748.1
+Amount of cycles before filtering: 143
+Post-filtering: 139
+Post-post-filtering: 75
+
+----------------------------------------------------
+File name: CP067336.1
+Amount of cycles before filtering: 4028
+Post-filtering: 4023
+Post-post-filtering: 535
+
+----------------------------------------------------
+File name: CP071065.1
+Amount of cycles before filtering: 16745
+Post-filtering: 13520
+Post-post-filtering: 3414
+
+----------------------------------------------------
+File name: CP072467.1
+Amount of cycles before filtering: 230
+Post-filtering: 209
+Post-post-filtering: 174
+
+----------------------------------------------------
+File name: CP074570.1
+Amount of cycles before filtering: 375
+Post-filtering: 360
+Post-post-filtering: 331
+
+----------------------------------------------------
+File name: CP075175.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1362
+Post-post-filtering: 536
+
+----------------------------------------------------
+File name: CP088131.1
+Amount of cycles before filtering: 731
+Post-filtering: 720
+Post-post-filtering: 399
+
+----------------------------------------------------
+File name: CP088828.1
+Amount of cycles before filtering: 121
+Post-filtering: 102
+Post-post-filtering: 86
+
+----------------------------------------------------
+File name: CP091022.1
+Amount of cycles before filtering: 747
+Post-filtering: 705
+Post-post-filtering: 369
+
+----------------------------------------------------
+File name: FN434113.1
+Amount of cycles before filtering: 138
+Post-filtering: 138
+Post-post-filtering: 130
+
+----------------------------------------------------
+File name: AP019695.1
+Amount of cycles before filtering: 44
+Post-filtering: 44
+Post-post-filtering: 40
+
+----------------------------------------------------
+File name: AP019711.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 26
+
+----------------------------------------------------
+File name: AP022323.1
+Amount of cycles before filtering: 131
+Post-filtering: 130
+Post-post-filtering: 120
+
+----------------------------------------------------
+File name: AP023027.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 182
+
+----------------------------------------------------
+File name: AP023410.1
+Amount of cycles before filtering: 84
+Post-filtering: 84
+Post-post-filtering: 84
+
+----------------------------------------------------
+File name: CP000679.1
+Amount of cycles before filtering: 593
+Post-filtering: 593
+Post-post-filtering: 584
+
+----------------------------------------------------
+File name: CP001185.1
+Amount of cycles before filtering: 632
+Post-filtering: 632
+Post-post-filtering: 482
+
+----------------------------------------------------
+File name: CP001229.1
+Amount of cycles before filtering: 315
+Post-filtering: 302
+Post-post-filtering: 290
+
+----------------------------------------------------
+File name: CP001738.1
+Amount of cycles before filtering: 652
+Post-filtering: 651
+Post-post-filtering: 623
+
+----------------------------------------------------
+File name: CP001792.1
+Amount of cycles before filtering: 202
+Post-filtering: 199
+Post-post-filtering: 156
+
+----------------------------------------------------
+File name: CP003001.1
+Amount of cycles before filtering: 549
+Post-filtering: 549
+Post-post-filtering: 536
+
+----------------------------------------------------
+File name: CP003198.1
+Amount of cycles before filtering: 370
+Post-filtering: 370
+Post-post-filtering: 368
+
+----------------------------------------------------
+File name: CP003548.1
+Amount of cycles before filtering: 647
+Post-filtering: 627
+Post-post-filtering: 407
+
+----------------------------------------------------
+File name: CP003788.1
+Amount of cycles before filtering: 381
+Post-filtering: 380
+Post-post-filtering: 303
+
+----------------------------------------------------
+File name: CP007445.1
+Amount of cycles before filtering: 168
+Post-filtering: 168
+Post-post-filtering: 152
+
+----------------------------------------------------
+File name: CP011664.1
+Amount of cycles before filtering: 213
+Post-filtering: 207
+Post-post-filtering: 116
+
+----------------------------------------------------
+File name: CP012590.1
+Amount of cycles before filtering: 1638
+Post-filtering: 1606
+Post-post-filtering: 730
+
+----------------------------------------------------
+File name: CP013479.1
+Amount of cycles before filtering: 156
+Post-filtering: 154
+Post-post-filtering: 131
+
+----------------------------------------------------
+File name: CP014672.1
+Amount of cycles before filtering: 434
+Post-filtering: 434
+Post-post-filtering: 430
+
+----------------------------------------------------
+File name: CP014859.1
+Amount of cycles before filtering: 140
+Post-filtering: 134
+Post-post-filtering: 123
+
+----------------------------------------------------
+File name: CP015169.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 30
+
+----------------------------------------------------
+File name: CP015435.1
+Amount of cycles before filtering: 337
+Post-filtering: 328
+Post-post-filtering: 304
+
+----------------------------------------------------
+File name: CP016076.1
+Amount of cycles before filtering: 342
+Post-filtering: 336
+Post-post-filtering: 294
+
+----------------------------------------------------
+File name: CP018058.1
+Amount of cycles before filtering: 555
+Post-filtering: 553
+Post-post-filtering: 512
+
+----------------------------------------------------
+File name: CP019724.1
+Amount of cycles before filtering: 530
+Post-filtering: 512
+Post-post-filtering: 192
+
+----------------------------------------------------
+File name: CP020563.1
+Amount of cycles before filtering: 379
+Post-filtering: 372
+Post-post-filtering: 276
+
+----------------------------------------------------
+File name: CP022752.1
+Amount of cycles before filtering: 221
+Post-filtering: 220
+Post-post-filtering: 188
+
+----------------------------------------------------
+File name: CP022961.1
+Amount of cycles before filtering: 482
+Post-filtering: 469
+Post-post-filtering: 200
+
+----------------------------------------------------
+File name: CP024704.1
+Amount of cycles before filtering: 339
+Post-filtering: 332
+Post-post-filtering: 280
+
+----------------------------------------------------
+File name: CP024955.1
+Amount of cycles before filtering: 1016
+Post-filtering: 1016
+Post-post-filtering: 982
+
+----------------------------------------------------
+File name: CP025228.1
+Amount of cycles before filtering: 1290
+Post-filtering: 1252
+Post-post-filtering: 958
+
+----------------------------------------------------
+File name: CP025943.1
+Amount of cycles before filtering: 273
+Post-filtering: 267
+Post-post-filtering: 252
+
+----------------------------------------------------
+File name: CP025990.1
+Amount of cycles before filtering: 596
+Post-filtering: 570
+Post-post-filtering: 500
+
+----------------------------------------------------
+File name: CP027781.1
+Amount of cycles before filtering: 269
+Post-filtering: 263
+Post-post-filtering: 242
+
+----------------------------------------------------
+File name: CP028769.1
+Amount of cycles before filtering: 223
+Post-filtering: 220
+Post-post-filtering: 178
+
+----------------------------------------------------
+File name: CP029241.1
+Amount of cycles before filtering: 264
+Post-filtering: 261
+Post-post-filtering: 154
+
+----------------------------------------------------
+File name: CP031128.1
+Amount of cycles before filtering: 443
+Post-filtering: 425
+Post-post-filtering: 247
+
+----------------------------------------------------
+File name: CP032402.1
+Amount of cycles before filtering: 422
+Post-filtering: 414
+Post-post-filtering: 371
+
+----------------------------------------------------
+File name: CP036345.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 182
+
+----------------------------------------------------
+File name: CP039459.1
+Amount of cycles before filtering: 67
+Post-filtering: 57
+Post-post-filtering: 52
+
+----------------------------------------------------
+File name: CP048265.1
+Amount of cycles before filtering: 388
+Post-filtering: 385
+Post-post-filtering: 337
+
+----------------------------------------------------
+File name: CP050504.1
+Amount of cycles before filtering: 415
+Post-filtering: 369
+Post-post-filtering: 239
+
+----------------------------------------------------
+File name: CP051167.1
+Amount of cycles before filtering: 1125
+Post-filtering: 1095
+Post-post-filtering: 683
+
+----------------------------------------------------
+File name: CP054212.1
+Amount of cycles before filtering: 65
+Post-filtering: 64
+Post-post-filtering: 54
+
+----------------------------------------------------
+File name: CP058556.1
+Amount of cycles before filtering: 847
+Post-filtering: 830
+Post-post-filtering: 681
+
+----------------------------------------------------
+File name: CP060244.1
+Amount of cycles before filtering: 155
+Post-filtering: 154
+Post-post-filtering: 150
+
+----------------------------------------------------
+File name: CP063232.1
+Amount of cycles before filtering: 606
+Post-filtering: 578
+Post-post-filtering: 564
+
+----------------------------------------------------
+File name: CP065748.1
+Amount of cycles before filtering: 143
+Post-filtering: 139
+Post-post-filtering: 108
+
+----------------------------------------------------
+File name: CP067336.1
+Amount of cycles before filtering: 4028
+Post-filtering: 4023
+Post-post-filtering: 3447
+
+----------------------------------------------------
+File name: CP071065.1
+Amount of cycles before filtering: 16745
+Post-filtering: 13520
+Post-post-filtering: 3508
+
+----------------------------------------------------
+File name: CP072467.1
+Amount of cycles before filtering: 230
+Post-filtering: 209
+Post-post-filtering: 174
+
+----------------------------------------------------
+File name: CP074570.1
+Amount of cycles before filtering: 375
+Post-filtering: 360
+Post-post-filtering: 347
+
+----------------------------------------------------
+File name: CP075175.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1362
+Post-post-filtering: 592
+
+----------------------------------------------------
+File name: CP088131.1
+Amount of cycles before filtering: 731
+Post-filtering: 720
+Post-post-filtering: 543
+
+----------------------------------------------------
+File name: CP088828.1
+Amount of cycles before filtering: 121
+Post-filtering: 102
+Post-post-filtering: 86
+
+----------------------------------------------------
+File name: CP091022.1
+Amount of cycles before filtering: 747
+Post-filtering: 705
+Post-post-filtering: 462
+
+----------------------------------------------------
+File name: FN434113.1
+Amount of cycles before filtering: 138
+Post-filtering: 138
+Post-post-filtering: 130
+
+----------------------------------------------------
+File name: AP019695.1
+Amount of cycles before filtering: 44
+Post-filtering: 44
+Post-post-filtering: 44
+
+----------------------------------------------------
+File name: AP019711.1
+Amount of cycles before filtering: 30
+Post-filtering: 30
+Post-post-filtering: 30
+
+----------------------------------------------------
+File name: AP022323.1
+Amount of cycles before filtering: 131
+Post-filtering: 130
+Post-post-filtering: 130
+
+----------------------------------------------------
+File name: AP023027.1
+Amount of cycles before filtering: 198
+Post-filtering: 198
+Post-post-filtering: 196
+
+----------------------------------------------------
+File name: AP023410.1
+Amount of cycles before filtering: 84
+Post-filtering: 84
+Post-post-filtering: 84
+
+----------------------------------------------------
+File name: CP000679.1
+Amount of cycles before filtering: 593
+Post-filtering: 593
+Post-post-filtering: 593
+
+----------------------------------------------------
+File name: CP001185.1
+Amount of cycles before filtering: 632
+Post-filtering: 632
+Post-post-filtering: 626
+
+----------------------------------------------------
+File name: CP001229.1
+Amount of cycles before filtering: 315
+Post-filtering: 302
+Post-post-filtering: 300
+
+----------------------------------------------------
+File name: CP001738.1
+Amount of cycles before filtering: 652
+Post-filtering: 651
+Post-post-filtering: 651
+
+----------------------------------------------------
+File name: CP001792.1
+Amount of cycles before filtering: 202
+Post-filtering: 199
+Post-post-filtering: 189
+
+----------------------------------------------------
+File name: CP003001.1
+Amount of cycles before filtering: 549
+Post-filtering: 549
+Post-post-filtering: 547
+
+----------------------------------------------------
+File name: CP003198.1
+Amount of cycles before filtering: 370
+Post-filtering: 370
+Post-post-filtering: 370
+
+----------------------------------------------------
+File name: CP003548.1
+Amount of cycles before filtering: 647
+Post-filtering: 627
+Post-post-filtering: 591
+
+----------------------------------------------------
+File name: CP003788.1
+Amount of cycles before filtering: 381
+Post-filtering: 380
+Post-post-filtering: 374
+
+----------------------------------------------------
+File name: CP007445.1
+Amount of cycles before filtering: 168
+Post-filtering: 168
+Post-post-filtering: 159
+
+----------------------------------------------------
+File name: CP011664.1
+Amount of cycles before filtering: 213
+Post-filtering: 207
+Post-post-filtering: 200
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 1052
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 756
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 1135
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 756
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 1052
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 1052
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 1050
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 903
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 1052
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 897
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 1289
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1702
+Post-filtering: 1484
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1702
+Post-filtering: 1484
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1702
+Post-filtering: 1484
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1702
+Post-filtering: 1484
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1702
+Post-filtering: 1484
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1702
+Post-filtering: 1484
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1702
+Post-filtering: 1484
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1933
+Post-filtering: 1675
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1933
+Post-filtering: 1675
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 1933
+Post-filtering: 1675
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP025018.1
+Amount of cycles before filtering: 2172
+Post-filtering: 1913
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1312
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1312
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1312
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1409
+Post-filtering: 1312
+Post-post-filtering: 0
+
+----------------------------------------------------
+File name: AP018254.1
+Amount of cycles before filtering: 1883
+Post-filtering: 1764
+Post-post-filtering: 0
+
+----------------------------------------------------

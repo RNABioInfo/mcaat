@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 project(megahit)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_STANDARD 17)
+find_package(TBB REQUIRED)
 
 
 option(COVERAGE "Generate coverage report" OFF)
@@ -47,7 +48,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -ggdb -O1 -D_LIBCPP_DEBUG -D_GLIBCXX_DEBUG")
 
 add_executable(mcaat src/main.cpp ${ASMBL_SOURCE} ${IDBA_SOURCE} ${SDBG_SOURCE} ${LCASM_SOURCE}
-        ${SEQ_SOURCE} ${CX1_SOURCE} ${TOOLKIT_SOURCE} ${SOME_OTHERS})
+        ${SEQ_SOURCE} ${CX1_SOURCE} ${TOOLKIT_SOURCE} ${SOME_OTHERS} ${TBB_LIBRARIES})
 
 if (STATIC_BUILD)
     # TODO dirty
@@ -55,7 +56,7 @@ if (STATIC_BUILD)
     set_target_properties(mcaat PROPERTIES LINK_SEARCH_START_STATIC ON CXX_STANDARD 17)
 endif (STATIC_BUILD)
 
-target_link_libraries(mcaat ${ZLIB_LIBRARIES})
+target_link_libraries(mcaat ${ZLIB_LIBRARIES} ${TBB_LIBRARIES})
 
 find_package(Threads REQUIRED)
 if(THREADS_HAVE_PTHREAD_ARG)

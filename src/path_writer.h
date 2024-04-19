@@ -76,18 +76,36 @@ class PathWriter{
     
     void WriteEdgeMultiplicities(vector<uint64_t> path, uint64_t startnode)
     {            
-        ofstream path_report_file;
-        string id_filename = this->folder_path+this->genome_id+"/cycles/multiplicity_distribution.txt";
-        
-        path_report_file.open(id_filename,std::ios_base::app);
+        ofstream multiplicity_report_file;
+        string multiplicity_file_name = this->folder_path+this->genome_id+"/cycles/multiplicity_distribution.txt";
+        if (type=="fasta")
+                multiplicity_file_name = this->folder_path+this->genome_id+"/cycles_genome/multiplicity_distribution.txt";
+        multiplicity_report_file.open(multiplicity_file_name,std::ios_base::app);
         path.push_back(startnode);
 
         for(int j=0; j<path.size(); j++)
-            path_report_file << this->succinct_de_bruijn_graph.EdgeMultiplicity(path[j]) << " ";
+            multiplicity_report_file << this->succinct_de_bruijn_graph.EdgeMultiplicity(path[j]) << " ";
         
-        path_report_file << "\n";
-        path_report_file.close();
+        multiplicity_report_file << "\n";
+        multiplicity_report_file.close();
     };
+    void WriteBlankLine(){
+        ofstream id_file;
+        string id_filename = this->folder_path+this->genome_id+"/cycles/id_paths.txt";
+        if (type=="fasta")
+                id_filename = this->folder_path+this->genome_id+"/cycles_genome/id_paths.txt";
+        id_file.open(id_filename,std::ios_base::app);
+        id_file << "\n";
+        id_file.close();
+
+        ofstream str_file;
+        string string_filename = this->folder_path+this->genome_id+"/cycles/str_paths.txt";
+        if (type=="fasta")
+                string_filename = this->folder_path+this->genome_id+"/cycles_genome/str_paths.txt";
+        str_file.open(string_filename,std::ios_base::app);
+        str_file << "\n";
+        str_file.close();
+    }
 };
 
 #endif

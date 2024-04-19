@@ -5,14 +5,10 @@ import os
 
 from Bio import SeqIO
 
-def calculate():
+
+
+def get_file_name(folder_for_reference):
     
-    if len(sys.argv) != 2:
-        print("Usage: python3 05_compare_to_ref.py reference genome id")
-        sys.exit(1)
-
-
-    folder_for_reference = "../data/Genomes/CRISPR_Seq/" + sys.argv[1][:-2] +"/"
     if not os.path.isdir(folder_for_reference):
         folder_for_reference = "../data/" + sys.argv[1] +"/"+"reference/"
         if not os.path.isdir(folder_for_reference):
@@ -20,7 +16,10 @@ def calculate():
             sys.exit(1)
         
     file_name = sys.argv[1][:-2]
-    print("File name:", file_name)
+    return file_name
+
+
+def read_spacers(folder_for_reference):
     spacers = []
     spacers_with_duplicates = []
     for filename in os.listdir(folder_for_reference):
@@ -29,13 +28,19 @@ def calculate():
                spacers_with_duplicates.append(str(record.seq))
     
     spacers = list(set(spacers_with_duplicates))
-    
+    return spacers
+
+def calculate():
+    folder_for_reference = "../data/Genomes/CRISPR_Seq/" + sys.argv[1][:-2] +"/"
+    print("File name:", folder_for_reference)
+    spacers = read_spacers(folder_for_reference)
     print("- Spacers in genome: ", len(spacers))
     
     folder_for_cycles="../data/"+sys.argv[1]
     
     cycles = set()
-    with open(folder_for_cycles + "/cycles/true_positives_after_filter.txt", "r") as f:
+    cycles_folder = folder_for_cycles + "/cycles_genome/"
+    with open(cycles_folder+"results_filtered.txt", "r") as f:
         for line in f:
             cycles.add(line.strip())
     cycles=list(cycles)
@@ -52,7 +57,7 @@ def calculate():
                 temp.append(cycles[j])
         marked[spacers[i]] = temp
     
-    with open(folder_for_cycles + "/cycles/benchmarks_true_positives_after_filter.txt", "w") as f:
+    with open(cycles_folder+"tp_before_filter.txt", "w") as f:
         for k, v in marked.items():
             f.write(k + ":" + str(len(v)) + "")
             f.write("\n")
@@ -75,9 +80,11 @@ def calculate():
 
     #sort false positives by length
     false_positives = sorted(false_positives, key=len)
+    false_positives = list(false_positives)
+    false_positives.sort()
 
     #write false_positives to benchmarks.txt
-    with open("../data/"+sys.argv[1] + "/cycles/false_positives_after_filter.txt", "w") as f:
+    with open(cycles_folder + "/fp_before_filter.txt", "w") as f:
         f.write("\n")
         f.write("False positives:\n")
         for o in false_positives:
