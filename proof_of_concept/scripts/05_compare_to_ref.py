@@ -32,6 +32,11 @@ def read_spacers(folder_for_reference):
 
 def calculate():
     folder_for_reference = "../data/Genomes/CRISPR_Seq/" + sys.argv[1][:-2] +"/"
+    if not os.path.isdir(folder_for_reference):
+        folder_for_reference = "../data/" + sys.argv[1] +"/"+"reference/"
+        if not os.path.isdir(folder_for_reference):
+            print("Error: folder", folder_for_reference, "does not exist")
+            sys.exit(1)
     print("File name:", folder_for_reference)
     spacers = read_spacers(folder_for_reference)
     print("- Spacers in genome: ", len(spacers))
@@ -40,7 +45,7 @@ def calculate():
     
     cycles = set()
     cycles_folder = folder_for_cycles + "/cycles_genome/"
-    with open(cycles_folder+"results_filtered.txt", "r") as f:
+    with open(cycles_folder+"results.txt", "r") as f:
         for line in f:
             cycles.add(line.strip())
     cycles=list(cycles)

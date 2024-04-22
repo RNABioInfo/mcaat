@@ -1,0 +1,95 @@
+File name: ../data/Genomes/CRISPR_Seq/CP015169/
+- Spacers in genome:  0
+- Elements in cycles: 30
+- False positives: 30
+- Match: 0
+File name: ../data/Genomes/CRISPR_Seq/CP088131/
+- Spacers in genome:  0
+- Elements in cycles: 107
+- False positives: 107
+- Match: 0
+File name: ../data/CP060244.1/reference/
+- Spacers in genome:  160
+- Elements in cycles: 154
+- False positives: 2
+- Match: 152
+- Match percentage: 95.0
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/CP065748.1/reference/
+- Spacers in genome:  42
+- Elements in cycles: 39
+- False positives: 5
+- Match: 34
+- Match percentage: 80.95238095238095
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/CP013479.1/reference/
+- Spacers in genome:  124
+- Elements in cycles: 130
+- False positives: 20
+- Match: 110
+- Match percentage: 88.70967741935483
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/AP023410.1/reference/
+- Spacers in genome:  88
+- Elements in cycles: 82
+- False positives: 0
+- Match: 82
+- Match percentage: 93.18181818181817
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/CP028769.1/reference/
+- Spacers in genome:  84
+- Elements in cycles: 100
+- False positives: 18
+- Match: 82
+- Match percentage: 97.61904761904762
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/CP014859.1/reference/
+- Spacers in genome:  0
+- Elements in cycles: 112
+- False positives: 112
+- Match: 0
+File name: ../data/CP050504.1/reference/
+- Spacers in genome:  0
+- Elements in cycles: 251
+- False positives: 251
+- Match: 0
+File name: ../data/CP054212.1/reference/
+- Spacers in genome:  62
+- Elements in cycles: 58
+- False positives: 8
+- Match: 50
+- Match percentage: 80.64516129032258
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/CP025990.1/reference/
+- Spacers in genome:  560
+- Elements in cycles: 547
+- False positives: 59
+- Match: 486
+- Match percentage: 86.78571428571429
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/CP020563.1/reference/
+- Spacers in genome:  0
+- Elements in cycles: 334
+- False positives: 334
+- Match: 0
+File name: ../data/CP091022.1/reference/
+- Spacers in genome:  72
+- Elements in cycles: 76
+- False positives: 18
+- Match: 58
+- Match percentage: 80.55555555555556
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/FN434113.1/reference/
+- Spacers in genome:  148
+- Elements in cycles: 128
+- False positives: 6
+- Match: 122
+- Match percentage: 82.43243243243244
+- - - - - - - - - - - - - - - - - - - - - - - -
+File name: ../data/AP019711.1/reference/
+- Spacers in genome:  26
+- Elements in cycles: 30
+- False positives: 4
+- Match: 26
+- Match percentage: 100.0
+- - - - - - - - - - - - - - - - - - - - - - - -

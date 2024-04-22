@@ -21,8 +21,8 @@ AP019711.1
 import sys
 
 def calculate():
-    before_after_filter = sys.argv[1]
-    with open("../"+before_after_filter, "r") as f:
+    before_after_filter = "_reports.txt"
+    with open("./"+before_after_filter, "r") as f:
         lines = f.readlines()
         
     spacers = 0
