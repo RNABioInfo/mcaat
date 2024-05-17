@@ -1,0 +1,474 @@
+Starting with CP003198.1!
+Elements before filter: 370
+Elements after first round of filtering:370
+Elements after second round of filtering:370
+Elements removed:0
+
+Starting with CP029241.1!
+Elements before filter: 261
+Elements after first round of filtering:217
+Elements after second round of filtering:204
+Elements removed:57
+
+Starting with AP019695.1!
+Elements before filter: 44
+Elements after first round of filtering:40
+Elements after second round of filtering:40
+Elements removed:4
+
+Starting with CP001738.1!
+Elements before filter: 651
+Elements after first round of filtering:643
+Elements after second round of filtering:639
+Elements removed:12
+
+Starting with CP039459.1!
+Elements before filter: 57
+Elements after first round of filtering:51
+Elements after second round of filtering:51
+Elements removed:6
+
+Starting with CP019724.1!
+Elements before filter: 512
+Elements after first round of filtering:312
+Elements after second round of filtering:248
+Elements removed:264
+
+Starting with CP011664.1!
+Elements before filter: 207
+Elements after first round of filtering:176
+Elements after second round of filtering:170
+Elements removed:37
+
+Starting with AP023027.1!
+Elements before filter: 198
+Elements after first round of filtering:168
+Elements after second round of filtering:150
+Elements removed:48
+
+Starting with CP001792.1!
+Elements before filter: 199
+Elements after first round of filtering:155
+Elements after second round of filtering:124
+Elements removed:75
+
+Starting with CP000679.1!
+Elements before filter: 593
+Elements after first round of filtering:593
+Elements after second round of filtering:587
+Elements removed:6
+
+Starting with CP015169.1!
+Elements before filter: 30
+Elements after first round of filtering:30
+Elements after second round of filtering:30
+Elements removed:0
+
+Starting with CP088131.1!
+Elements before filter: 720
+Elements after first round of filtering:110
+Elements after second round of filtering:107
+Elements removed:613
+
+Starting with CP075175.1!
+Elements before filter: 1362
+Elements after first round of filtering:563
+Elements after second round of filtering:315
+Elements removed:1047
+
+Starting with CP022752.1!
+Elements before filter: 220
+Elements after first round of filtering:220
+Elements after second round of filtering:216
+Elements removed:4
+
+Starting with CP063232.1!
+Elements before filter: 578
+Elements after first round of filtering:570
+Elements after second round of filtering:570
+Elements removed:8
+
+Starting with CP016076.1!
+Elements before filter: 336
+Elements after first round of filtering:324
+Elements after second round of filtering:305
+Elements removed:31
+
+Starting with CP060244.1!
+Elements before filter: 154
+Elements after first round of filtering:154
+Elements after second round of filtering:154
+Elements removed:0
+
+Starting with CP012590.1!
+Elements before filter: 1606
+Elements after first round of filtering:952
+Elements after second round of filtering:847
+Elements removed:759
+
+Starting with CP022961.1!
+Elements before filter: 469
+Elements after first round of filtering:407
+Elements after second round of filtering:359
+Elements removed:110
+
+Starting with CP065748.1!
+Elements before filter: 139
+Elements after first round of filtering:80
+Elements after second round of filtering:39
+Elements removed:100
+
+Starting with CP007445.1!
+Elements before filter: 168
+Elements after first round of filtering:151
+Elements after second round of filtering:144
+Elements removed:24
+
+Starting with CP025943.1!
+Elements before filter: 267
+Elements after first round of filtering:267
+Elements after second round of filtering:267
+Elements removed:0
+
+Starting with CP058556.1!
+Elements before filter: 830
+Elements after first round of filtering:765
+Elements after second round of filtering:741
+Elements removed:89
+
+Starting with CP018058.1!
+Elements before filter: 553
+Elements after first round of filtering:541
+Elements after second round of filtering:530
+Elements removed:23
+
+Starting with CP071065.1!
+Elements before filter: 13520
+Elements after first round of filtering:1554
+Elements after second round of filtering:0
+Elements removed:13520
+
+Starting with CP013479.1!
+Elements before filter: 154
+Elements after first round of filtering:134
+Elements after second round of filtering:130
+Elements removed:24
+
+Starting with CP014672.1!
+Elements before filter: 434
+Elements after first round of filtering:434
+Elements after second round of filtering:434
+Elements removed:0
+
+Starting with AP023410.1!
+Elements before filter: 84
+Elements after first round of filtering:84
+Elements after second round of filtering:82
+Elements removed:2
+
+Starting with CP028769.1!
+Elements before filter: 220
+Elements after first round of filtering:100
+Elements after second round of filtering:100
+Elements removed:120
+
+Starting with CP014859.1!
+Elements before filter: 134
+Elements after first round of filtering:130
+Elements after second round of filtering:112
+Elements removed:22
+
+Starting with CP027781.1!
+Elements before filter: 263
+Elements after first round of filtering:255
+Elements after second round of filtering:247
+Elements removed:16
+
+Starting with CP025228.1!
+Elements before filter: 1252
+Elements after first round of filtering:689
+Elements after second round of filtering:537
+Elements removed:715
+
+Starting with CP050504.1!
+Elements before filter: 369
+Elements after first round of filtering:286
+Elements after second round of filtering:251
+Elements removed:118
+
+Starting with AP025018.1!
+Elements before filter: 2206
+Elements after first round of filtering:1060
+Elements after second round of filtering:673
+Elements removed:1533
+
+Starting with CP054212.1!
+Elements before filter: 64
+Elements after first round of filtering:64
+Elements after second round of filtering:58
+Elements removed:6
+
+Starting with CP001185.1!
+Elements before filter: 632
+Elements after first round of filtering:632
+Elements after second round of filtering:632
+Elements removed:0
+
+Starting with CP051167.1!
+Elements before filter: 1095
+Elements after first round of filtering:880
+Elements after second round of filtering:716
+Elements removed:379
+
+Starting with CP003001.1!
+Elements before filter: 549
+Elements after first round of filtering:549
+Elements after second round of filtering:549
+Elements removed:0
+
+Starting with CP067336.1!
+Elements before filter: 4023
+Elements after first round of filtering:3990
+Elements after second round of filtering:747
+Elements removed:3276
+
+Starting with CP025990.1!
+Elements before filter: 570
+Elements after first round of filtering:553
+Elements after second round of filtering:547
+Elements removed:23
+
+Starting with CP031128.1!
+Elements before filter: 425
+Elements after first round of filtering:261
+Elements after second round of filtering:209
+Elements removed:216
+
+Starting with CP036345.1!
+Elements before filter: 198
+Elements after first round of filtering:168
+Elements after second round of filtering:150
+Elements removed:48
+
+Starting with CP003548.1!
+Elements before filter: 627
+Elements after first round of filtering:554
+Elements after second round of filtering:533
+Elements removed:94
+
+Starting with CP072467.1!
+Elements before filter: 209
+Elements after first round of filtering:209
+Elements after second round of filtering:193
+Elements removed:16
+
+Starting with CP020563.1!
+Elements before filter: 372
+Elements after first round of filtering:346
+Elements after second round of filtering:334
+Elements removed:38
+
+Starting with CP024955.1!
+Elements before filter: 1016
+Elements after first round of filtering:1012
+Elements after second round of filtering:1012
+Elements removed:4
+
+Starting with AP022323.1!
+Elements before filter: 130
+Elements after first round of filtering:130
+Elements after second round of filtering:110
+Elements removed:20
+
+Starting with CP088828.1!
+Elements before filter: 102
+Elements after first round of filtering:56
+Elements after second round of filtering:52
+Elements removed:50
+
+Starting with CP032402.1!
+Elements before filter: 414
+Elements after first round of filtering:392
+Elements after second round of filtering:367
+Elements removed:47
+
+Starting with AP018254.1!
+Elements before filter: 1764
+Elements after first round of filtering:824
+Elements after second round of filtering:713
+Elements removed:1051
+
+Starting with CP003788.1!
+Elements before filter: 380
+Elements after first round of filtering:364
+Elements after second round of filtering:364
+Elements removed:16
+
+Starting with CP091022.1!
+Elements before filter: 705
+Elements after first round of filtering:86
+Elements after second round of filtering:76
+Elements removed:629
+
+Starting with CP048265.1!
+Elements before filter: 385
+Elements after first round of filtering:343
+Elements after second round of filtering:174
+Elements removed:211
+
+Starting with CP001229.1!
+Elements before filter: 302
+Elements after first round of filtering:302
+Elements after second round of filtering:302
+Elements removed:0
+
+Starting with CP074570.1!
+Elements before filter: 360
+Elements after first round of filtering:349
+Elements after second round of filtering:346
+Elements removed:14
+
+Starting with CP015435.1!
+Elements before filter: 328
+Elements after first round of filtering:310
+Elements after second round of filtering:297
+Elements removed:31
+
+Starting with FN434113.1!
+Elements before filter: 138
+Elements after first round of filtering:128
+Elements after second round of filtering:128
+Elements removed:10
+
+Starting with AP019711.1!
+Elements before filter: 30
+Elements after first round of filtering:30
+Elements after second round of filtering:30
+Elements removed:0
+
+Starting with CP024704.1!
+Elements before filter: 332
+Elements after first round of filtering:320
+Elements after second round of filtering:318
+Elements removed:14
+Starting with metagenome_01!
+Elements before filter: 5394
+Elements after first round of filtering:0
+Elements after second round of filtering:0
+Elements removed:5394
+Starting with metagenome_01!
+Elements before filter: 5394
+Elements after first round of filtering:3157
+Elements after second round of filtering:3157
+Elements removed:2237
+Starting with metagenome_01!
+Starting with metagenome_01!
+Elements before filter: 5394
+Elements after first round of filtering:3157
+Elements after second round of filtering:3157
+Elements removed:2237
+Starting with metagenome_01!
+Elements before filter: 5388
+Elements after first round of filtering:3942
+Elements after second round of filtering:3942
+Elements removed:1446
+
+Starting with metagenome_01!
+Elements before filter: 8766
+Elements after first round of filtering:4038
+Elements after second round of filtering:4038
+Elements removed:4728
+Starting with metagenome_01!
+Elements before filter: 8766
+Elements after first round of filtering:4038
+Elements after second round of filtering:4038
+Elements removed:4728
+Starting with metagenome_02!
+Elements before filter: 5571
+Elements after first round of filtering:4326
+Elements after second round of filtering:3765
+Elements removed:1806
+Starting with metagenome_02!
+Elements before filter: 5571
+Elements after first round of filtering:4326
+Elements after second round of filtering:3765
+Elements removed:1806
+Starting with metagenome_01!
+Elements before filter: 8766
+Elements after first round of filtering:4883
+Elements after second round of filtering:3989
+Elements removed:4777
+Starting with metagenome_01!
+Elements before filter: 8766
+Elements after first round of filtering:4883
+Elements after second round of filtering:3864
+Elements removed:4902
+Starting with metagenome_03!
+
+Elements before filter: 18769
+Elements after first round of filtering:12019
+Elements after second round of filtering:10080
+Elements removed:8689
+Starting with metagenome_03!
+Elements before filter: 18769
+Elements after first round of filtering:12019
+Elements after second round of filtering:10080
+Elements removed:8689
+Starting with metagenome_03!
+Elements before filter: 18769
+Elements after first round of filtering:12019
+Elements after second round of filtering:10011
+Elements removed:8758
+Starting with metagenome_03!
+Elements before filter: 15893
+Elements after first round of filtering:8597
+Elements after second round of filtering:8597
+Elements removed:7296
+Starting with 1!
+Starting with 0!
+Starting with metagenome_01!
+Starting with metagenome_01!
+Elements before filter: 60631
+Elements after first round of filtering:22010
+Elements after second round of filtering:22010
+Elements removed:38621
+Starting with metagenome_01!
+Elements before filter: 60631
+Elements after first round of filtering:22010
+Elements after second round of filtering:22010
+Elements removed:38621
+Starting with metagenome_01!
+Elements before filter: 44668
+Elements after first round of filtering:24552
+Elements after second round of filtering:16215
+Elements removed:28453
+
+Starting with metagenome_01!
+Elements before filter: 8372
+Elements after first round of filtering:4731
+Elements after second round of filtering:2951
+Elements removed:5421
+
+Starting with metagenome_01!
+Elements before filter: 42820
+Elements after first round of filtering:1088
+Elements after second round of filtering:1044
+Elements removed:41776
+
+Starting with metagenome_01!
+Elements before filter: 42820
+Elements after first round of filtering:23855
+Elements after second round of filtering:15834
+Elements removed:26986
+
+Starting with metagenome_01!
+Elements before filter: 15746
+Elements after first round of filtering:8639
+Elements after second round of filtering:6486
+
+Elements removed:9260
+Starting with metagenome_01!
+Elements before filter: 15746
+Elements after first round of filtering:8497
+Elements after second round of filtering:6414
+Elements removed:9332

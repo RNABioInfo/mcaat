@@ -22,15 +22,20 @@ def get_file_name(folder_for_reference):
 def read_spacers(folder_for_reference):
     spacers = []
     spacers_with_duplicates = []
+    spacer_map = dict()
     for filename in os.listdir(folder_for_reference):
+        
         for record in SeqIO.parse(folder_for_reference + filename, "fasta"):
             if record.id.startswith("spacer"):
                spacers_with_duplicates.append(str(record.seq))
-    
+               if str(record.seq) not in spacer_map:
+                    spacer_map[str(record.seq)] = filename
     spacers = list(set(spacers_with_duplicates))
-    return spacers
+    return spacer_map,spacers
 
 def calculate():
+
+    files_map = dict()
     folder_for_reference = "../data/Genomes/CRISPR_Seq/" + sys.argv[1][:-2] +"/"
     if not os.path.isdir(folder_for_reference):
         folder_for_reference = "../data/" + sys.argv[1] +"/"+"reference/"
@@ -38,15 +43,18 @@ def calculate():
             print("Error: folder", folder_for_reference, "does not exist")
             sys.exit(1)
     print("File name:", folder_for_reference)
-    spacers = read_spacers(folder_for_reference)
+    spacers = read_spacers(folder_for_reference)[1]
+    spacers_map = read_spacers(folder_for_reference)[0]
     print("- Spacers in genome: ", len(spacers))
     
     folder_for_cycles="../data/"+sys.argv[1]
     
     cycles = set()
-    cycles_folder = folder_for_cycles + "/cycles_genome/"
+    cycles_folder = folder_for_cycles + "/cycles/"
     with open(cycles_folder+"results.txt", "r") as f:
         for line in f:
+            if len(line.strip())<28:
+                continue
             cycles.add(line.strip())
     cycles=list(cycles)
     
@@ -78,10 +86,12 @@ def calculate():
         for m in l:
             values.append(m)
 
-    
+    total_systems = set()
+    systems_matched = set()
     for n in range(len(cycles)):
         if cycles[n] not in values:
             false_positives.add(cycles[n])
+    
 
     #sort false positives by length
     false_positives = sorted(false_positives, key=len)
@@ -96,15 +106,27 @@ def calculate():
             f.write("\t"+o+"\n")
 
     matched_spacer_count = 0
+   
     print("- False positives:",len(false_positives))
-    
+    systems_matched = set()
     for i in marked:
         if len(marked[i]) != 0:
             matched_spacer_count += 1
-            
+            systems_matched.add(spacers_map[k])
+        total_systems.add(spacers_map[i])
     
+    for k,v in marked.items():
+        if len(v) != 0:
+            systems_matched.add(spacers_map[k])
+    systems_left = total_systems.difference(systems_matched)
+    systems_left = list(systems_left)
+    systems_left.sort()
+    print("- Systems matched:", len(systems_matched))
+    print("- Total systems:", len(total_systems))
+    print("- Matched CRISPR Arrays:", len(systems_matched)/len(total_systems)*100)
     print("- Match:", matched_spacer_count)
     print("- Match percentage:", matched_spacer_count/len(spacers)*100)
+    print("- Unmatched systems: ", systems_left)
     print("- - - - - - - - - - - - - - - - - - - - - - - -")
 
 if __name__ == "__main__":

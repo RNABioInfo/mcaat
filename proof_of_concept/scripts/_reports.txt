@@ -404,6 +404,7 @@ File name: ../data/AP019711.1/reference/
 - Match: 26
 - Match percentage: 100.0
 - - - - - - - - - - - - - - - - - - - - - - - -
+
 Results for 58 genomes :
 -- Spacers in genome: 17704
 -- Matched in cycles: 15748

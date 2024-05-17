@@ -1,16 +1,17 @@
 #ifndef CYCLE_FINDER_H
 #define CYCLE_FINDER_H
-
 #include <../src/sdbg/sdbg.h>
 #include <vector>
 #include <map>
 #include <set>
 #include <array>
 #include <stack>
-#include "path_writer.h"
 #include <omp.h>
 #include "helpers/node.h"
+#include "helpers/generic_functions.h"
+#include "../libs/progressbar/include/progressbar.hpp"
 using namespace std;
+
 class CycleFinder {
 
     private:
@@ -19,8 +20,7 @@ class CycleFinder {
         SDBG& succinct_de_bruijn_graph;
         string genome_name;
         uint8_t cluster_bounds;
-        bool* visited;
-         
+        vector<bool> visited;
 
         /// @brief Helper Function gets all outgoing edges of a node
         /// @param uint64_t node
@@ -116,11 +116,12 @@ class CycleFinder {
                 minimal_length(minimal_length),
                 succinct_de_bruijn_graph(succinct_de_bruijn_graph),
                 genome_name(genome_name),
-                cluster_bounds(300),
-                visited(new bool[succinct_de_bruijn_graph.size()])
+                cluster_bounds(500),
+                visited(succinct_de_bruijn_graph.size(), false)
             {
                 FindCycles();
             };
+
 
         int FindCycle(uint64_t start_node, vector<uint64_t> path, map<uint64_t, int> lock, vector<set<uint64_t>> stack, vector<int> backtrack_lengths){  
             // --- 3. Inner Loop: ---
@@ -132,7 +133,6 @@ class CycleFinder {
             // --- 3.2. Iterate through stack ---
 
             while(stack.size()>0){
-                map<int, set<uint64_t>> keep_nodes;
                 set<uint64_t> neighbors = stack.back(); // get neighbors of current node
                 bool flag = true; 
                 // create a dictionary with key as a edgeindegree and value as list of nodes
@@ -183,13 +183,34 @@ class CycleFinder {
                     if(succinct_de_bruijn_graph.EdgeIndegree(node)>1)
                         visited[node] = true;
                     }
-            for (auto cycle : cycles)
+            for (auto cycle : cycles){
+                #pragma omp critical
                 PathWriter("a", succinct_de_bruijn_graph, 
-                             cycle, genome_name, "fasta");
+                             cycle, genome_name, "fastq");
+            }
+            cycles.clear();
             return counter;
             
         };
         
+        int FindCycleUtil(node startnode){
+            int cumulative;
+            if(visited[startnode.id]) 
+                return 0;
+            vector<uint64_t> path;
+            map<uint64_t, int> lock;
+            vector<set<uint64_t>> stack;
+            vector<int> backtrack_lengths;
+            uint64_t start_node = startnode.id;
+            path.push_back(start_node);
+            lock[start_node] = 0;
+            stack.push_back(_GetOutgoings(start_node));
+            backtrack_lengths.push_back(maximal_length);
+            cumulative = FindCycle(start_node, path, lock, stack, backtrack_lengths);
+            
+    
+            return cumulative;
+        }
 
         /// @brief Cycle Finding Algorithm
         /// based on a paper Finding All Bounded-Length Simple Cycles in a Directed Graph
@@ -197,21 +218,22 @@ class CycleFinder {
         int FindCycles(){
             int cumulative = 0;
             printf("Number of nodes in a graph: %lu\n", succinct_de_bruijn_graph.size());
-            int counter = 0;
-            vector<uint64_t> path;
-            map<uint64_t, int> lock;
-            vector<set<uint64_t>> stack;
-            vector<int> backtrack_lengths;
-            fill_n(visited, succinct_de_bruijn_graph.size(), false);
-            //vector<node> start_nodes = _SortNodesByMultiplicities();
+            int counter = 1;
             
+            //fill_n(visited, succinct_de_bruijn_graph.size(), false);
+            //vector<node> start_nodes = _SortNodesByMultiplicities();
+           
             
             string mode = "fastq";
             if (mode=="fasta"){
                 vector<uint64_t> start_nodes = _SortNodesByIds();
+                int start_nodes_count = start_nodes.size();
                 cout << "Number of nodes with multiple edges: " << start_nodes.size() << endl;
                 for (uint64_t start_node_index = start_nodes.size()-1; start_node_index > 0; start_node_index--)
-                {   
+                {   vector<uint64_t> path;
+                     map<uint64_t, int> lock;
+                    vector<set<uint64_t>> stack;
+                    vector<int> backtrack_lengths;
                     //if(visited[start_nodes[start_node_index]]) continue;
                     uint64_t start_node = start_nodes[start_node_index];
                     counter += 1;
@@ -231,30 +253,28 @@ class CycleFinder {
             else{
                 vector<node> start_nodes = _SortNodesByMultiplicities();
                 cout << "Number of nodes with multiple edges: " << start_nodes.size() << endl;
+                int start_nodes_count = start_nodes.size();
+                progressbar bar(start_nodes_count);
+                bar.set_done_char("▓");
+                cout << "Starting the cycle search:\n\n";
+                #pragma omp parallel for num_threads(22) shared(succinct_de_bruijn_graph) reduction(+:cumulative)
                 for (uint64_t start_node_index = start_nodes.size()-1; start_node_index > 0; start_node_index--)
                 {   
-                    if(visited[start_nodes[start_node_index].id]) continue;
-                    uint64_t start_node = start_nodes[start_node_index].id;
-                    counter += 1;
-                    path.push_back(start_node);
-                    lock[start_node] = 0;
-                    stack.push_back(_GetOutgoings(start_node));
-                    backtrack_lengths.push_back(maximal_length);
-                    cumulative += FindCycle(start_node, path, lock, stack, backtrack_lengths);
-                    
-                    path.clear();
-                    lock.clear();
-                    stack.clear();
-                    backtrack_lengths.clear();
-                    succinct_de_bruijn_graph.SetInvalidEdge(start_node);
+                    #pragma omp critical
+                    bar.update();
+                    if(visited[start_nodes[start_node_index].id]) 
+                        continue;
+                    cumulative += this->FindCycleUtil(start_nodes[start_node_index]);
                 }
+                cout<<endl;
             }
             //print out number of visited nodes
             int visited_nodes = 0;
             for (uint64_t i = 0; i < succinct_de_bruijn_graph.size(); i++)
                 if(visited[i]) visited_nodes++;
-            cout << "Number of visited nodes: " << visited_nodes << endl;
+            cout << "\nNumber of visited nodes: " << visited_nodes << endl;
             std::cout << "Number of Cycles: " << cumulative << std::endl;
+            
             return cumulative;
         };
 

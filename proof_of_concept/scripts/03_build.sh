@@ -1,0 +1,1 @@
+./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file ../data/CP024704.1/genome/CP024704.1 --o ../data/CP024704.1/genome/graph/graph

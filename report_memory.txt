@@ -1,0 +1,8 @@
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 17722
+Number of nodes with multiple edges: 100
+Number of visited nodes: 96
+Number of Cycles: 124
+Cycle Algorithm Finished in 0.116667 minutes
+Cycle Algorithm End

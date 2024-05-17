@@ -5,7 +5,7 @@
 #include <fstream>
 #include <string>
 #include <../src/sdbg/sdbg.h>
-#include "helpers/generic_functions.cpp"
+#include "generic_functions.cpp"
 
 using namespace std;
 
@@ -37,10 +37,14 @@ class PathWriter{
                 WritePathString(path, path[0]);
                 WritePathIDs(path, path[0]);
                 WriteEdgeMultiplicities(path, path[0]);
+                //WriteEdgeIndegrees(path, path[0]);
+                //WriteEdgeOutdegrees(path, path[0]);
             }
            
         }
-         ~PathWriter(){};
+         ~PathWriter(){
+            //write a proper destructor
+         };
         
         void WritePathString(vector<uint64_t> path, uint64_t startnode)
         {            
@@ -54,7 +58,7 @@ class PathWriter{
             for(int j=0; j<path.size(); j++)
                 cycle_report_file << FetchNodeLabel(this->succinct_de_bruijn_graph,path[j]) << " ";
             
-            cycle_report_file << "\n";
+            cycle_report_file << endl;
             cycle_report_file.close();
     };
     
@@ -70,10 +74,37 @@ class PathWriter{
         for(int j=0; j<path.size(); j++)
             path_report_file << path[j] << " ";
         
-        path_report_file << "\n";
+        path_report_file << endl;
         path_report_file.close();
     };
-    
+    void WriteEdgeIndegrees(vector<uint64_t> path, uint64_t startnode){
+        ofstream indegree_report_file;
+        string indegree_file_name = this->folder_path+this->genome_id+"/cycles/indegree_distribution.txt";
+        if (type=="fasta")
+            indegree_file_name = this->folder_path+this->genome_id+"/cycles_genome/indegree_distribution.txt";
+        indegree_report_file.open(indegree_file_name,std::ios_base::app);
+        path.push_back(startnode);
+
+        for(int j=0; j<path.size(); j++)
+            indegree_report_file << this->succinct_de_bruijn_graph.EdgeIndegree(path[j]) << " ";
+        
+        indegree_report_file << endl;
+        indegree_report_file.close();
+    };
+    void WriteEdgeOutdegrees(vector<uint64_t> path, uint64_t startnode){
+        ofstream outdegree_report_file;
+        string outdegree_file_name = this->folder_path+this->genome_id+"/cycles/outdegree_distribution.txt";
+        if (type=="fasta")
+            outdegree_file_name = this->folder_path+this->genome_id+"/cycles_genome/outdegree_distribution.txt";
+        outdegree_report_file.open(outdegree_file_name,std::ios_base::app);
+        path.push_back(startnode);
+
+        for(int j=0; j<path.size(); j++)
+            outdegree_report_file << this->succinct_de_bruijn_graph.EdgeOutdegree(path[j]) << " ";
+        
+        outdegree_report_file << endl;
+        outdegree_report_file.close();
+    };
     void WriteEdgeMultiplicities(vector<uint64_t> path, uint64_t startnode)
     {            
         ofstream multiplicity_report_file;
@@ -86,9 +117,10 @@ class PathWriter{
         for(int j=0; j<path.size(); j++)
             multiplicity_report_file << this->succinct_de_bruijn_graph.EdgeMultiplicity(path[j]) << " ";
         
-        multiplicity_report_file << "\n";
+        multiplicity_report_file << endl;
         multiplicity_report_file.close();
     };
+
     void WriteBlankLine(){
         ofstream id_file;
         string id_filename = this->folder_path+this->genome_id+"/cycles/id_paths.txt";

@@ -40,6 +40,32 @@ def group_by_first_element(input_nodes_list,input_multiplicity_list,tracker) -> 
         group_multiplicities[input_nodes_list[f_i][0]] = input_multiplicity_list[f_i:l_i]
     return group_cycles,group_multiplicities
 
+def rearrange_cyles(id_paths,multiplicities):
+    indicies = []
+    for i in range(len(multiplicities)):
+        indicies.append(multiplicities[i].index(max(multiplicities[i])))
+    new_id_paths = []
+    new_multiplicities=[]
+    for i in range(len(id_paths)):
+        start = indicies[i] 
+        if start == 0:
+            new_id_paths.append(id_paths[i])
+            new_multiplicities.append(multiplicities[i])
+            continue
+        end = -1
+        elements_before_index = id_paths[i][0:start]
+        path_to_add = id_paths[i][start:end]
+        path_to_add.extend(elements_before_index)
+        new_id_paths.append(path_to_add)
+        
+        multiplicities_before_index = multiplicities[i][0:start]
+        multiplicities_to_add = multiplicities[i][start:end]
+        multiplicities_to_add.extend(multiplicities_before_index)
+        new_multiplicities.append(multiplicities_to_add)
+        
+    return new_id_paths, new_multiplicities
+
+
 def rearrange(element,mult,id) -> tuple:
     # Input: list of nodes, list of multiplicities, id of first element
     # Output: list of nodes, list of multiplicities
@@ -106,11 +132,12 @@ def clean_up(group_common_elements,group_cycles,group_multiplicities):
                 group_multiplicities[key].remove(group_multiplicities[key][index_at])
     return group_cycles, group_multiplicities
 
-def separate_list_by_first_element(input_nodes_list,input_multiplicity_list) -> None:
+def separate_list_by_first_element(input_nodes_list,input_multiplicity_list,folder) -> None:
     # Input: list of lists of nodes, list of lists of multiplicities
     # Output: void, writes two dictionaries to file
     tracker = track_first_ids(input_nodes_list)
     to_keep = []
+    #input_nodes_list, input_multiplicity_list = rearrange_cyles(input_nodes_list,input_multiplicity_list)
     group_cycles, group_multiplicities =  group_by_first_element(input_nodes_list,input_multiplicity_list,tracker)
     group_cycles, group_multiplicities = adjust_cycles_to_frequency(group_cycles,group_multiplicities)
     counter=0
@@ -118,12 +145,12 @@ def separate_list_by_first_element(input_nodes_list,input_multiplicity_list) -> 
         counter+=len(group_cycles[key])
     
     print(counter)
-    write_dict_to_file(group_multiplicities,"../data/"+sys.argv[1]+"/cycles_genome/group_multiplicities.txt")
-    write_dict_to_file(group_cycles,"../data/"+sys.argv[1]+"/cycles_genome/group_cycles.txt")
+    write_dict_to_file(group_multiplicities,"../data/"+folder+"/cycles_genome/group_multiplicities.txt")
+    write_dict_to_file(group_cycles,"../data/"+folder+"/cycles_genome/group_cycles.txt")
 
 
 
-id_paths = read_file("../data/"+sys.argv[1]+"/cycles_genome/","id_paths.txt")
-id_multiplicities = read_file("../data/"+sys.argv[1]+"/cycles_genome/","multiplicity_distribution.txt")
-separate_list_by_first_element(id_paths,id_multiplicities)
+#id_paths = read_file("../data/"+sys.argv[1]+"/cycles_genome/","id_paths.txt")
+#id_multiplicities = read_file("../data/"+sys.argv[1]+"/cycles_genome/","multiplicity_distribution.txt")
+#separate_list_by_first_element(id_paths,id_multiplicities)
 #print(common)

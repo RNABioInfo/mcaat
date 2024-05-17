@@ -1,0 +1,18 @@
+Score: -13
+      0     .    :    .    :    .    :    .    :    .    : 
+        AAAGTGCTGAGTGCTGAGTAGGGTTAGGAGTTAGGAGTTAGGAGTGCTGA
+        ||||||||||||||||||||||||||||||||||||||||||||||||||
+        AAAGTGCTGAGTGCTGAGTAGGGTTAGGAGTTAGGAGTTAGGAGTGCTGA
+
+     50     .    :    .    :    .    :    .    :    .    : 
+        GTGCTGAGTGC----TG---------AGTAGAAAGTGCTGAGTGCTGAGT
+        |||||||||||    ||         ||||||||||||||||||||||||
+        GTGCTGAGTGCTGAGTGTTATTTAAAAGTAGAAAGTGCTGAGTGCTGAGT
+
+    100      
+        AGGG
+        ||||
+        AGGG
+
+
+

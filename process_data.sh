@@ -1,59 +1,59 @@
-./mcaat u_mode AP019695.1
-./mcaat u_mode AP019711.1
-./mcaat u_mode AP022323.1
-./mcaat u_mode AP023027.1
-./mcaat u_mode AP023410.1
-./mcaat u_mode CP000679.1
-./mcaat u_mode CP001185.1
-./mcaat u_mode CP001229.1
-./mcaat u_mode CP001738.1
-./mcaat u_mode CP001792.1
-./mcaat u_mode CP003001.1
-./mcaat u_mode CP003046.1
-./mcaat u_mode CP003198.1
-./mcaat u_mode CP003548.1
-./mcaat u_mode CP003788.1
-./mcaat u_mode CP007445.1
-./mcaat u_mode CP011664.1
-./mcaat u_mode CP012590.1
-./mcaat u_mode CP013479.1
-./mcaat u_mode CP014672.1
-./mcaat u_mode CP014859.1
-./mcaat u_mode CP015169.1
-./mcaat u_mode CP015435.1
-./mcaat u_mode CP016076.1
-./mcaat u_mode CP018058.1
-./mcaat u_mode CP019724.1
-./mcaat u_mode CP020563.1
-./mcaat u_mode CP022752.1
-./mcaat u_mode CP022961.1
-./mcaat u_mode CP024704.1
-./mcaat u_mode CP024955.1
-./mcaat u_mode CP025228.1
-./mcaat u_mode CP025943.1
-./mcaat u_mode CP025990.1
-./mcaat u_mode CP027781.1
-./mcaat u_mode CP028769.1
-./mcaat u_mode CP029241.1
-./mcaat u_mode CP031128.1
-./mcaat u_mode CP032402.1
-./mcaat u_mode CP036345.1
-./mcaat u_mode CP039459.1
-./mcaat u_mode CP048265.1
-./mcaat u_mode CP050504.1
-./mcaat u_mode CP051167.1
-./mcaat u_mode CP054212.1
-./mcaat u_mode CP058556.1
-./mcaat u_mode CP059265.1
-./mcaat u_mode CP060244.1
-./mcaat u_mode CP063232.1
-./mcaat u_mode CP065748.1
-./mcaat u_mode CP067336.1
-./mcaat u_mode CP071065.1
-./mcaat u_mode CP072467.1
-./mcaat u_mode CP074570.1
-./mcaat u_mode CP075175.1
-./mcaat u_mode CP088131.1
-./mcaat u_mode CP088828.1
-./mcaat u_mode CP091022.1
-./mcaat u_mode FN434113.1
+./mcaat CP003198.1
+./mcaat CP029241.1
+./mcaat AP019695.1
+./mcaat CP001738.1
+./mcaat CP039459.1
+./mcaat CP019724.1
+./mcaat CP011664.1
+./mcaat AP023027.1
+./mcaat CP001792.1
+./mcaat CP000679.1
+./mcaat CP015169.1
+./mcaat CP088131.1
+./mcaat CP075175.1
+./mcaat CP022752.1
+./mcaat CP063232.1
+./mcaat CP016076.1
+./mcaat CP060244.1
+./mcaat CP012590.1
+./mcaat CP022961.1
+./mcaat CP065748.1
+./mcaat CP007445.1
+./mcaat CP025943.1
+./mcaat CP058556.1
+./mcaat CP018058.1
+./mcaat CP071065.1
+./mcaat CP013479.1
+./mcaat CP014672.1
+./mcaat AP023410.1
+./mcaat CP028769.1
+./mcaat CP014859.1
+./mcaat CP027781.1
+./mcaat CP025228.1
+./mcaat CP050504.1
+./mcaat AP025018.1
+./mcaat CP054212.1
+./mcaat CP001185.1
+./mcaat CP051167.1
+./mcaat CP003001.1
+./mcaat CP067336.1
+./mcaat CP025990.1
+./mcaat CP031128.1
+./mcaat CP036345.1
+./mcaat CP003548.1
+./mcaat CP072467.1
+./mcaat CP020563.1
+./mcaat CP024955.1
+./mcaat AP022323.1
+./mcaat CP088828.1
+./mcaat CP032402.1
+./mcaat AP018254.1
+./mcaat CP003788.1
+./mcaat CP091022.1
+./mcaat CP048265.1
+./mcaat CP001229.1
+./mcaat CP074570.1
+./mcaat CP015435.1
+./mcaat FN434113.1
+./mcaat AP019711.1
+./mcaat CP024704.1

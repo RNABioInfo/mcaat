@@ -1,0 +1,59 @@
+File name: ../data/metagenome_03/reference/
+-  Spacers in genome:  8680
+-  Elements in cycles: 10011
+-  False positives: 2144
+-  Systems matched: 555
+-  Total systems: 603
+-  Matched CRISPR Arrays: 92.03980099502488
+-  Match: 7842
+-  Match percentage: 90.34562211981567
+-  Unmatched systems: 48
+  - Crispr_AP025018_21 (1).fna
+  - Crispr_AP025018_21.fna
+  - Crispr_AP025018_30 (1).fna
+  - Crispr_AP025018_30.fna
+  - Crispr_CP001229_10(1).fna
+  - Crispr_CP001229_10.fna
+  - Crispr_CP001738_11(1).fna
+  - Crispr_CP001738_11.fna
+  - Crispr_CP001738_5.fna
+  - Crispr_CP014859_2.fna
+  - Crispr_CP019724_1(1).fna
+  - Crispr_CP019724_1.fna
+  - Crispr_CP019724_12 (1).fna
+  - Crispr_CP019724_12.fna
+  - Crispr_CP019724_2(1).fna
+  - Crispr_CP019724_2.fna
+  - Crispr_CP019724_20(1).fna
+  - Crispr_CP019724_20.fna
+  - Crispr_CP019724_21(1).fna
+  - Crispr_CP019724_21.fna
+  - Crispr_CP019724_22.fna
+  - Crispr_CP019724_4(1).fna
+  - Crispr_CP019724_4.fna
+  - Crispr_CP020563_6 (1).fna
+  - Crispr_CP020563_6.fna
+  - Crispr_CP020563_9 (1).fna
+  - Crispr_CP020563_9.fna
+  - Crispr_CP022961_12(1).fna
+  - Crispr_CP022961_12.fna
+  - Crispr_CP022961_25(1).fna
+  - Crispr_CP022961_25.fna
+  - Crispr_CP022961_26(1).fna
+  - Crispr_CP022961_26.fna
+  - Crispr_CP025990_22 (1).fna
+  - Crispr_CP025990_22.fna
+  - Crispr_CP027781_2(1).fna
+  - Crispr_CP027781_2.fna
+  - Crispr_CP029241_11(1).fna
+  - Crispr_CP029241_11.fna
+  - Crispr_CP029241_23(1).fna
+  - Crispr_CP029241_23.fna
+  - Crispr_CP031128_5(1).fna
+  - Crispr_CP031128_9(1).fna
+  - Crispr_CP031128_9.fna
+  - Crispr_CP075175_10(1).fna
+  - Crispr_CP075175_10.fna
+  - Crispr_CP075175_19(1).fna
+  - Crispr_CP075175_19.fna
+-  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  - 

@@ -6,9 +6,11 @@ file = "../data/" + sys.argv[1]
 def split_genome_125(genome, k=125):
     """Split genome into k-mers."""
     k_mers = []
-    for i in range(0, len(genome) - k + 1):
-        k_mers.append(genome[i:i+k])
-    #random.shuffle(k_mers)
+    print(len(genome))
+    for j in range(len(genome)):
+        for i in range(0, len(genome[j]) - k + 1):
+            k_mers.append(genome[j][i:i+k])
+    random.shuffle(k_mers)
     return k_mers
 
 def read_genome(genome_file):
@@ -16,6 +18,7 @@ def read_genome(genome_file):
     genome = []
     for record in SeqIO.parse(genome_file, "fasta"):
         genome.append(str(record.seq))
+    print(len(genome))
     return genome
 
 def write_reads(k_mers):
@@ -29,7 +32,7 @@ def write_reads(k_mers):
 
 def create_reads():
     genome = read_genome(file+"/genome/"+sys.argv[1]+".fasta")
-    k_mers = split_genome_125(genome[0])
+    k_mers = split_genome_125(genome)
     #print(genome[0][0:125])
     #print(k_mers[0])
     write_reads(k_mers)

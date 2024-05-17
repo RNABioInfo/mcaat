@@ -1,5 +1,5 @@
 import os
-
+import sys
 folder = "../data/"
 names = []
 
@@ -23,11 +23,11 @@ def create_libs():
             f.write("# "+filename+"\nse "+"/vol/d/development/git/mCAAT/proof_of_concept/data/"+ filename+"/genome/"+filename+".fasta")
             f.close()
     print("Created all libraries")
-
+./megahit_core read2sdbg --host_mem 200000000000 --read_lib_file '/vol/d/development/git/mCAAT/proof_of_concept/data/metagenome_01/graph/graph' -m 1 -k 23 --num_cpu_threads 24 -o /vol/d/development/git/mCAAT/proof_of_concept/data/metagenome_01/graph/graph
 #select the command to execute based on the command parameter
 def select_megahit_command(command:bool,name:str) -> str:
     if command:
-        return "./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file "+folder + name+"/genome/"+name+" --o "+folder + name+"/genome/graph/graph")
+        return "./megahit_core read2sdbg --host_mem 150000000000 -m 1 --num_cpu_threads 24 -k 23 --read_lib_file "+folder + name+"/genome/"+name+" --o "+folder + name+"/genome/graph/graph"
     return "./megahit_core buildlib "+folder + name+"/genome/"+name+".lib "+folder + "/" + name+"/genome/"+name
 
 #execute the build_lib function for each folder/filename/genome
@@ -45,4 +45,4 @@ def build_graph(name:str="") -> None:
         os.system(select_megahit_command(True,filename))
     
 
-build_graph()
+build_graph(sys.argsv[1])

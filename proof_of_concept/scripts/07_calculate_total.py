@@ -21,7 +21,7 @@ AP019711.1
 import sys
 
 def calculate():
-    before_after_filter = "_reports.txt"
+    before_after_filter = "no_filter_report.txt"
     with open("./"+before_after_filter, "r") as f:
         lines = f.readlines()
         
