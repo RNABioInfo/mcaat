@@ -9,10 +9,6 @@ Score: -13
         |||||||||||    ||         ||||||||||||||||||||||||
         GTGCTGAGTGCTGAGTGTTATTTAAAAGTAGAAAGTGCTGAGTGCTGAGT
 
-    100      
-        AGGG
-        ||||
-        AGGG
 
 
 
