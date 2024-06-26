@@ -1,62 +1,35 @@
 //test myLib.h
 #include <iostream>
-#include <string>
 #include "../libs/megahit/src/main_sdbg_build.cpp"
 #include "core/cycle_finder.cpp"
 #include "helpers/system_resources.h"
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "graph_writer.h"
-#include "filtering_seqan.h"
-#include <seqan/align.h>
+//#include "filtering_seqan.h"
+//include <seqan/align.h>
 
-using namespace seqan;
+///using namespace seqan;
 using namespace std;
 using std::istringstream;
 
 int main(int argc, char** argv) {
-    
-    typedef String<char> TSequence;
-    typedef Align<TSequence, ArrayGaps> TAlign;
-    typedef Row<TAlign>::Type TRow;
-    typedef Iterator<TRow>::Type TRowIterator;
-    TAlign align;
-    resize(rows(align), 2);
-    assignSource(row(align, 0), "GTTTCCATTCAATTAGTTTCCCCAGCGAGTGGGGACACTGAACCAGGAAAACCAATGGGCTACTTTAAAGATTCTGAGTTTCCATTCAATTAGTTTCCCC");
-    assignSource(row(align, 1), "GTTTCCATTCAATTAGTTTCCCCAGCGAGTGGGGACTCCCTCCTTCAGGAGGAGATCCTTCGGGCGTTCGCCTGCCTCCCAGAGTTTCCATTCAATTAGTTTCCCC");
-    int score = globalAlignment(align, Score<int, Simple>(1, -1, -1));
-        std::cout << align << std::endl;
-    
-    cout<<score<<endl;
-    TRow & row1 = row(align, 0);
-    TRow & row2 = row(align, 1);
-    // Initialize the row iterators.
-    TRowIterator itRow1 = begin(row1);
-    TRowIterator itEndRow1 = end(row1);
-    TRowIterator itRow2 = begin(row2);
-
-    // Iterate over both rows simultaneously.
-    int gapCount = 0;
-    for (; itRow1 != itEndRow1; ++itRow1, ++itRow2)
-    {
-        if (isGap(itRow1))
-        {
-            gapCount += countGaps(itRow1);  // Count the number of consecutive gaps from the current position in row1.
-            itRow1 += countGaps(itRow1);    // Jump to next position to check for gaps.
-            itRow2 += countGaps(itRow1);    // Jump to next position to check for gaps.
-        }
-        if (isGap(itRow2))
-        {
-            gapCount += countGaps(itRow2);  // Count the number of consecutive gaps from the current position in row2.
-            itRow1 += countGaps(itRow2);    // Jump to next position to check for gaps.
-            itRow2 += countGaps(itRow2);    // Jump to next position to check for gaps.
-        }
-    }
-    // Print the result.
-    std::cout << "Number of gaps: " << gapCount << std::endl;
-    TestEdlib();
+    /*
+    std::string sdbg_file = "toy_example/graph/graph";
+    cout << "Loading the graph..." << endl;
+    SDBG sdbg;
+    sdbg.LoadFromFile(sdbg_file.c_str());
+    cout << "Loaded the graph" << endl;
+    cout << "Cycle Algorithm Start" << endl;
+    CycleFinder cycle_finder(sdbg, 100, 47, "toy_example");
+    cout << "Cycle Algorithm End" << endl;
+*/
     if (std::string(argv[1])=="u_mode" && argc == 3 ){
+          
         //print each line from "welcome.txt"
         std::ifstream welcome_file("/vol/d/development/git/mCAAT/src/welcome.txt");
         std::string line;
@@ -84,6 +57,9 @@ int main(int argc, char** argv) {
         log_file.close();
         //GraphWriter gw(sdbg);
         //gw.WriteNodes();
+        cout << "Loaded the graph\nPress something\n" << endl; 
+        std::cin.ignore();
+
         cout << "Cycle Algorithm Start" << endl;
         //time the cycle finding algorithm
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -148,7 +124,7 @@ int main(int argc, char** argv) {
     if (std::string(argv[1]) == "filter")
     {
         std::string results = "proof_of_concept/data/" + std::string(argv[2])+"/cycles_genome/results.txt";
-        FilterOut(results);
+        //FilterOut(results);
 
         
     }

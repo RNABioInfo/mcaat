@@ -52,6 +52,7 @@ class PathWriter{
             string string_filename = this->folder_path+this->genome_id+"/cycles/str_paths.txt";
             if (type=="fasta")
                 string_filename = this->folder_path+this->genome_id+"/cycles_genome/str_paths.txt";
+            // -------------- OPEN --------------
             cycle_report_file.open(string_filename,std::ios_base::app);
             path.push_back(startnode);
             
@@ -60,6 +61,7 @@ class PathWriter{
             
             cycle_report_file << endl;
             cycle_report_file.close();
+            // -------------- CLOSE --------------
     };
     
     void WritePathIDs(vector<uint64_t> path, uint64_t startnode)
@@ -82,6 +84,7 @@ class PathWriter{
         string indegree_file_name = this->folder_path+this->genome_id+"/cycles/indegree_distribution.txt";
         if (type=="fasta")
             indegree_file_name = this->folder_path+this->genome_id+"/cycles_genome/indegree_distribution.txt";
+        // -------------- OPEN --------------
         indegree_report_file.open(indegree_file_name,std::ios_base::app);
         path.push_back(startnode);
 
@@ -90,9 +93,11 @@ class PathWriter{
         
         indegree_report_file << endl;
         indegree_report_file.close();
+        // -------------- CLOSE --------------
     };
     void WriteEdgeOutdegrees(vector<uint64_t> path, uint64_t startnode){
         ofstream outdegree_report_file;
+        // -------------- OPEN --------------
         string outdegree_file_name = this->folder_path+this->genome_id+"/cycles/outdegree_distribution.txt";
         if (type=="fasta")
             outdegree_file_name = this->folder_path+this->genome_id+"/cycles_genome/outdegree_distribution.txt";
@@ -104,6 +109,7 @@ class PathWriter{
         
         outdegree_report_file << endl;
         outdegree_report_file.close();
+        // -------------- CLOSE --------------
     };
     void WriteEdgeMultiplicities(vector<uint64_t> path, uint64_t startnode)
     {            
@@ -111,6 +117,7 @@ class PathWriter{
         string multiplicity_file_name = this->folder_path+this->genome_id+"/cycles/multiplicity_distribution.txt";
         if (type=="fasta")
                 multiplicity_file_name = this->folder_path+this->genome_id+"/cycles_genome/multiplicity_distribution.txt";
+        // -------------- OPEN --------------
         multiplicity_report_file.open(multiplicity_file_name,std::ios_base::app);
         path.push_back(startnode);
 
@@ -119,6 +126,7 @@ class PathWriter{
         
         multiplicity_report_file << endl;
         multiplicity_report_file.close();
+        // -------------- CLOSE --------------
     };
 
     void WriteBlankLine(){

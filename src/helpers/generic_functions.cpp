@@ -17,13 +17,12 @@ string FetchNodeLabel(SDBG& succinct_de_bruijn_graph,auto node){
 /// @param uint64_t node
 /// @return Outgoing edges of a node
 set<uint64_t> GetOutgoingNodes(SDBG& succinct_de_bruijn_graph, uint64_t node){
-    if (succinct_de_bruijn_graph.EdgeOutdegree(node) == 0)
+    if (succinct_de_bruijn_graph.EdgeOutdegree(node) == 0 || node == -1)
         return {};
-            
-    uint64_t *outgoings = new uint64_t[succinct_de_bruijn_graph.EdgeOutdegree(node)];
+    int edge_outdegree = succinct_de_bruijn_graph.EdgeOutdegree(node);
+    uint64_t outgoings[edge_outdegree];
     succinct_de_bruijn_graph.OutgoingEdges(node,outgoings);
-    set<uint64_t> outgoings_set(outgoings, outgoings + succinct_de_bruijn_graph.EdgeOutdegree(node));
-    delete[] outgoings;
+    set<uint64_t> outgoings_set(outgoings, outgoings + edge_outdegree);
     return outgoings_set;
 };
         
@@ -31,12 +30,16 @@ set<uint64_t> GetOutgoingNodes(SDBG& succinct_de_bruijn_graph, uint64_t node){
 /// @param uint64_t node
 /// @return Incoming edges of a node
 set<uint64_t> GetIncomingNodes(SDBG& succinct_de_bruijn_graph,uint64_t node){
-    if (succinct_de_bruijn_graph.EdgeIndegree(node) == 0)
+    if (succinct_de_bruijn_graph.EdgeIndegree(node) == 0 || node == -1)
         return {};
             
-    uint64_t *incomings = new uint64_t[succinct_de_bruijn_graph.EdgeIndegree(node)];
+    int edge_indegree = succinct_de_bruijn_graph.EdgeIndegree(node);
+    uint64_t incomings[edge_indegree];
     succinct_de_bruijn_graph.IncomingEdges(node,incomings);
-    set<uint64_t> incomings_set(incomings, incomings + succinct_de_bruijn_graph.EdgeIndegree(node));
-    delete[] incomings;
+    set<uint64_t> incomings_set;
+    for (int i = 0; i < edge_indegree; i++){ 
+        incomings_set.insert(incomings[i]);
+    }
+    
     return incomings_set;
 };

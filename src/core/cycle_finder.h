@@ -6,12 +6,14 @@
 #include <set>
 #include <array>
 #include <stack>
-#include <omp.h>
+//#include <omp.h>
 #include "../helpers/node.h"
 #include "../helpers/generic_functions.h"
 #include "../helpers/path_writer.h"
 #include "../../libs/progressbar/include/progressbar.hpp"
-
+#include <list>
+#include <thread>
+#include <mutex>
 using namespace std;
 
 class CycleFinder {
@@ -23,8 +25,8 @@ class CycleFinder {
         uint8_t cluster_bounds;
         vector<bool> visited;
 
-        set<uint64_t> _GetOutgoings(uint64_t node);
-        set<uint64_t> _GetIncomings(uint64_t node);
+        void _GetOutgoings(uint64_t node, set<uint64_t>& outgoings_set);
+        void _GetIncomings(uint64_t node, set<uint64_t>& incomings_set);
         bool _MarkNode(uint64_t neighbor, vector<uint64_t>& path, map<uint64_t, int>& lock, vector<set<uint64_t>>& stack, vector<int>& backtrack_lengths);
         void _RelaxLock(int backtrack_length, uint64_t v, vector<uint64_t>& path, map<uint64_t, int>& lock, vector<set<uint64_t>>& stack, vector<int>& backtrack_lengths);
         vector<node> _SortNodesByMultiplicities();

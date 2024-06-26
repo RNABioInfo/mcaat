@@ -1,0 +1,27 @@
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 78177391
+Starting the cycle search:
+
+log2_mult: 16 Number of nodes: 10
+log2_mult: 15 Number of nodes: 21
+log2_mult: 14 Number of nodes: 58
+log2_mult: 13 Number of nodes: 160
+log2_mult: 12 Number of nodes: 487
+log2_mult: 11 Number of nodes: 1742
+log2_mult: 10 Number of nodes: 3825
+log2_mult: 9 Number of nodes: 9982
+log2_mult: 8 Number of nodes: 20281
+log2_mult: 7 Number of nodes: 13345
+Number of chunks: 10

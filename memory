@@ -1,0 +1,203 @@
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 3678
+Starting the cycle search:
+
+log2_mult: 11 Number of nodes: 2
+log2_mult: 10 Number of nodes: 1
+log2_mult: 9 Number of nodes: 10
+log2_mult: 8 Number of nodes: 11
+Number of chunks: 4
+2
+1 2 1
+10
+1 2 11
+1 
+Number of Cycles: 34
+Cycle Algorithm Finished in 0.133333 minutes
+Cycle Algorithm End
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 3678
+Starting the cycle search:
+
+log2_mult: 11 Number of nodes: 2
+log2_mult: 10 Number of nodes: 1
+log2_mult: 9 Number of nodes: 10
+log2_mult: 8 Number of nodes: 11
+Number of chunks: 4
+2
+1 2 1
+10
+1 2 11
+1 
+Number of Cycles: 34
+Cycle Algorithm Finished in 0.116667 minutes
+Cycle Algorithm End
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 3678
+Starting the cycle search:
+
+log2_mult: 11 Number of nodes: 2
+log2_mult: 10 Number of nodes: 1
+log2_mult: 9 Number of nodes: 10
+log2_mult: 8 Number of nodes: 11
+Number of chunks: 4
+2
+1 2 1
+10
+1 2 11
+1 
+Number of Cycles: 34
+Cycle Algorithm Finished in 0.133333 minutes
+Cycle Algorithm End
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 3678
+Starting the cycle search:
+
+log2_mult: 11 Number of nodes: 2
+log2_mult: 10 Number of nodes: 1
+log2_mult: 9 Number of nodes: 10
+log2_mult: 8 Number of nodes: 11
+Number of chunks: 4
+2
+1 2 1
+10
+1 2 11
+1 
+Number of Cycles: 34
+Cycle Algorithm Finished in 0.1 minutes
+Cycle Algorithm End
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 3678
+Starting the cycle search:
+
+log2_mult: 11 Number of nodes: 2
+log2_mult: 10 Number of nodes: 1
+log2_mult: 9 Number of nodes: 10
+log2_mult: 8 Number of nodes: 11
+Number of chunks: 4
+2
+1 2 1
+10
+1 2 11
+1 
+Number of Cycles: 34
+Cycle Algorithm Finished in 0.0333333 minutes
+Cycle Algorithm End
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 3678
+Starting the cycle search:
+
+log2_mult: 11 Number of nodes: 2
+log2_mult: 10 Number of nodes: 1
+log2_mult: 9 Number of nodes: 10
+log2_mult: 8 Number of nodes: 11
+Number of chunks: 4
+2
+1 2 1
+10
+1 2 11
+1 
+Number of Cycles: 34
+Cycle Algorithm Finished in 0.133333 minutes
+Cycle Algorithm End
+  
+             ▓▒    ▓ ▓▓   ▒ ▒▓       ░ ▓▓ ▓  ▓▓▓     ▓▓            
+             ▓  ▓▓░▓  ▓▓                    ▓▓ ▓▓▓▓  ▓▓            
+              ▓▓  ▓▓▓     ▓ ▓          ▓▓ ▓   ▓▓▓ ▓▓▒▓             
+             ▓▓▓▓▓ ▓                              ▓▓▓▓             
+             ▓▓ ░     ▓▓▓▓▓▓            ▓▓▓▓▓▓       ▓▓            
+            ▓▓▓▓     ▓▓▓▓▓▓ ▓          ▓▓▓▓▓▓ ▓▓   ▓▓▓▓▓           
+    ▓▓▓▓▓▓ ▓▓▒▓▓    ▓       ▓                  ░     ▓▒▓▓ ▓▓▓▓▓▓   
+           ▓   ▒▓▓▓             ▒▓▓▓              ▓▓▓   ▓          
+           ▓▓▓▓     ▓▓     ▓      ▓     ▓     ▓▓     ▓▓▓▓          
+           ▓▓              ▓▓  ▓▓  ▓▓  ▓▓               ▓        
+Loading the graph...
+Cycle Algorithm Start
+Number of nodes in a graph: 3678
+Starting the cycle search:
+
+log2_mult: 11 Number of nodes: 2
+log2_mult: 10 Number of nodes: 1
+log2_mult: 9 Number of nodes: 10
+log2_mult: 8 Number of nodes: 11
+Number of chunks: 4
+2
+1 2 1
+10
+1 2 11
+1 
+Number of Cycles: 34
+Cycle Algorithm Finished in 0.133333 minutes
+Cycle Algorithm End

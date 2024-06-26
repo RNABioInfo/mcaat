@@ -6,7 +6,7 @@
 #include <set>
 #include <array>
 #include <../src/sdbg/sdbg.h>
-
+#include <memory>
 using namespace std;
 
 string FetchNodeLabel(SDBG& succinct_de_bruijn_graph,auto node);

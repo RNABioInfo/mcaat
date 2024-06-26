@@ -50,8 +50,8 @@ def calculate():
     folder_for_cycles="../data/"+sys.argv[1]
     
     cycles = set()
-    cycles_folder = folder_for_cycles + "/cycles/"
-    with open(cycles_folder+"results.txt", "r") as f:
+    cycles_folder = folder_for_cycles + "/cycles_genome_/"
+    with open(cycles_folder+"results_filtered.txt", "r") as f:
         for line in f:
             if len(line.strip())<28:
                 continue
