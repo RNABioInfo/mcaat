@@ -4,9 +4,6 @@
 [submodule "libs/progressbar"]
 	path = libs/progressbar
 	url = https://github.com/gipert/progressbar/
-[submodule "libs/seqan3"]
-	path = seqan3
-	url = https://github.com/seqan/seqan3.git
 [submodule "libs/vendor/edlib"]
 	path = libs/vendor/edlib
 	url = https://github.com/martinsos/edlib
