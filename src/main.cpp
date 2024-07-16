@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
         //GraphWriter gw(sdbg);
         //gw.WriteNodes();
         cout << "Loaded the graph\nPress something\n" << endl; 
-        std::cin.ignore();
+        //std::cin.ignore();
 
         cout << "Cycle Algorithm Start" << endl;
         //time the cycle finding algorithm

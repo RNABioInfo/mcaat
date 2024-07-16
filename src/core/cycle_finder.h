@@ -14,6 +14,7 @@
 #include <list>
 #include <thread>
 #include <mutex>
+#include <malloc.h>
 using namespace std;
 
 class CycleFinder {
@@ -29,11 +30,9 @@ class CycleFinder {
         void _GetIncomings(uint64_t node, set<uint64_t>& incomings_set);
         bool _MarkNode(uint64_t neighbor, vector<uint64_t>& path, map<uint64_t, int>& lock, vector<set<uint64_t>>& stack, vector<int>& backtrack_lengths);
         void _RelaxLock(int backtrack_length, uint64_t v, vector<uint64_t>& path, map<uint64_t, int>& lock, vector<set<uint64_t>>& stack, vector<int>& backtrack_lengths);
-        vector<node> _SortNodesByMultiplicities();
-        vector<uint64_t> _SortNodesByIds();
-
     public:
         CycleFinder(SDBG& sdbg, int length_bound, int minimal_length, string genome_name);
+        size_t RemoveLinearPathsBacktrack(uint64_t node);
         vector<vector<uint64_t>> FindCycle(uint64_t start_node, vector<uint64_t> path, map<uint64_t, int> lock, vector<set<uint64_t>> stack, vector<int> backtrack_lengths);
         vector<vector<uint64_t>> FindCycleUtil(uint64_t startnode);
         void ChunkStartNodes(map<int, vector<uint64_t>, std::greater<int>>& start_nodes_chunked);

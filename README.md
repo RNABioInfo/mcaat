@@ -66,9 +66,8 @@ For now all you need to do is either run __make__ on this directory or simply tr
 - [x] Organize CycleFinder
 - [x] Find out why writing cycles to file doesn't work
 - [X] Create reading and writing mechanism for current workflow
-#### TODO
-- [ ] Look through all the false positives saved in benchmarks and get line id
-- [ ] Compare if multiplicity distribution is any different from the true positives!
-- [ ] Test bimodal distribution on multiplicities
-- [ ] Isolate cycles into clusters
-- [ ] Check if clusters start with same IDs 
+- [x] Solved the memory leak
+- [x] Real world data works
+- [x] Look through all the false positives saved in benchmarks and get line id
+- [x] Compare if multiplicity distribution is any different from the true positives!
+- [x] Test bimodal distribution on multiplicities

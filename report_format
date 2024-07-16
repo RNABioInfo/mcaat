@@ -1,0 +1,23 @@
+Christa Schleper Dataset
+Date: 16.07.2024
+
+Number of nodes in a graph: 17964763395
+~ 12-15 Minutes
+-> Sorting the nodes into log2 groups:
+ 
+ -> log2_mult: 16 Number of nodes: 5862
+ -> log2_mult: 15 Number of nodes: 5422
+ -> log2_mult: 14 Number of nodes: 1498
+ -> log2_mult: 13 Number of nodes: 23859
+ -> log2_mult: 12 Number of nodes: 348906
+ -> log2_mult: 11 Number of nodes: 1049982
+ -> log2_mult: 10 Number of nodes: 1660891
+ -> log2_mult: 9 Number of nodes: 6484177
+ -> log2_mult: 8 Number of nodes: 11762128
+ -> log2_mult: 7 Number of nodes: 19986435
+ -> log2_mult: 6 Number of nodes: 28373925
+ -> log2_mult: 5 Number of nodes: 25421967
+
+-> Number of chunks is 12
+
+-> Starting the cycle search
