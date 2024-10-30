@@ -1,5 +1,6 @@
 /.vscode/
 /.idea/
+/.libmegahit_core.a
 /proof_of_concept/data/
 /bin/
 /data/

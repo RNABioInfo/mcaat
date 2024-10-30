@@ -54,7 +54,7 @@ if (STATIC_BUILD)
 endif (STATIC_BUILD)
 
 # Add subdirectories
-add_subdirectory(libs/vendor/edlib EXCLUDE_FROM_ALL)
+# add_subdirectory(libs/vendor/edlib EXCLUDE_FROM_ALL)
 add_subdirectory(libs/hwinfo)
 
 # Compiler and linker flags
@@ -72,7 +72,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -ggdb -O1 -D_LIBCPP_DEBUG -D_GLIBCXX_DEBUG")
 
 # Add executable
 add_executable(mcaat ${MAIN_SOURCE} ${ASMBL_SOURCE} ${IDBA_SOURCE} ${SDBG_SOURCE} ${LCASM_SOURCE}
-    ${SEQ_SOURCE} ${CX1_SOURCE} ${TOOLKIT_SOURCE} ${SOME_OTHERS} ${PROGRESSBAR_SOURCE})
+    ${SEQ_SOURCE} ${CX1_SOURCE} ${TOOLKIT_SOURCE} ${SOME_OTHERS} )
 
 # Static build linker flags
 if (STATIC_BUILD)
@@ -81,7 +81,7 @@ if (STATIC_BUILD)
 endif (STATIC_BUILD)
 
 # Link libraries
-target_link_libraries(mcaat ${ZLIB_LIBRARIES} ${TBB_LIBRARIES} edlib hwinfo::HWinfo)
+target_link_libraries(mcaat ${ZLIB_LIBRARIES} ${TBB_LIBRARIES} hwinfo::HWinfo)
 
 # Threading configuration
 if(THREADS_HAVE_PTHREAD_ARG)
