@@ -1,0 +1,12 @@
+[submodule "libs/megahit"]
+	path = libs/megahit
+	url = https://github.com/voutcn/megahit.git
+[submodule "libs/progressbar"]
+	path = libs/progressbar
+	url = https://github.com/gipert/progressbar/
+[submodule "libs/vendor/edlib"]
+	path = libs/vendor/edlib
+	url = https://github.com/martinsos/edlib
+[submodule "libs/vendor/hwinfo"]
+	path = libs/hwinfo
+	url = https://github.com/lfreist/hwinfo
