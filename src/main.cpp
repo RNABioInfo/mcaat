@@ -12,6 +12,7 @@
 #include "settings.h"
 #include "hwinfo/hwinfo.h"
 #include "hwinfo/utils/unit.h"
+#include "filters.h"
 //#include "filtering_seqan.h"
 //include <seqan/align.h>
 
@@ -25,6 +26,54 @@ void print_usage(const char* program_name) {
     cout<<"\n";
     cout << "-------------------------------------------------------" << endl;
 }
+void readMapFromFile(std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>>& cycles, const std::string& filename) {
+    std::ifstream infile(filename);
+
+    if (!infile.is_open()) {
+        std::cerr << "Failed to open file for reading: " << filename << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(infile, line)) {
+        std::istringstream iss(line);
+
+        // Parse the key
+        std::string keyStr;
+        if (!std::getline(iss, keyStr, ':')) continue;
+        uint64_t key = std::stoull(keyStr);
+
+        // Parse the nested vectors
+        std::string nestedVectorsStr;
+        if (!std::getline(iss, nestedVectorsStr)) continue;
+
+        std::vector<std::vector<uint64_t>> nested_vectors;
+        std::istringstream nestedStream(nestedVectorsStr);
+        std::string vectorStr;
+
+        while (std::getline(nestedStream, vectorStr, ';')) {
+            // Remove the square brackets around the vector
+            if (vectorStr.front() == '[' && vectorStr.back() == ']') {
+                vectorStr = vectorStr.substr(1, vectorStr.size() - 2);
+            }
+
+            // Parse the individual elements of the vector
+            std::vector<uint64_t> vec;
+            std::istringstream valueStream(vectorStr);
+            std::string value;
+
+            while (std::getline(valueStream, value, ',')) {
+                vec.push_back(std::stoull(value));
+            }
+
+            nested_vectors.push_back(vec);
+        }
+
+        cycles[key] = nested_vectors;
+    }
+
+    infile.close();
+}
 
 string FetchNodeLabel(size_t node, SDBG& sdbg) {
     std::string label;            
@@ -36,6 +85,18 @@ string FetchNodeLabel(size_t node, SDBG& sdbg) {
 }
 int main(int argc, char** argv) {
     print_usage(argv[0]);
+     std::string name_of_genome = "mg_04";
+    std::string sdbg_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+name_of_genome+"/graph/graph";
+    
+    unordered_map<uint64_t, std::vector<std::vector<uint64_t>>> cycles;
+    std::string filename = "results.txt";
+    readMapFromFile(cycles, filename);
+    SDBG sdbg;
+        sdbg.LoadFromFile(sdbg_file.c_str());
+    cout << "Number of nodes in results: " << cycles.size() << endl;
+    Filters filters(sdbg,cycles);
+    filters.WriteToFile("CRISPR_arrays.txt");
+    /*
     std::string name_of_genome = "mg_04";
     std::string sdbg_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+name_of_genome+"/graph/graph";
     if (argc ==3)
@@ -73,7 +134,7 @@ int main(int argc, char** argv) {
         str_true_positives_stream.close();
 
     }else{
-        int length_bound = 100;
+        int length_bound = 77;
         settings settings("1","2",3,4);
         SDBG sdbg;
         cout << "Loading the graph..." << endl;
@@ -96,7 +157,7 @@ int main(int argc, char** argv) {
         cout << "Cycle Algorithm Start" << endl;
         //time the cycle finding algorithm
         auto start_time = std::chrono::high_resolution_clock::now();
-        CycleFinder cycle_finder(sdbg, length_bound, 47, name_of_genome);
+        CycleFinder cycle_finder(sdbg, length_bound, 23, name_of_genome);
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
         //convert to minutes
@@ -111,6 +172,6 @@ int main(int argc, char** argv) {
         cout << "Cycle Algorithm Finished in " << duration_in_minutes << " minutes" << endl;
         log_file.close();
         cout << "Cycle Algorithm End" << endl;
-    }
+    }*/
         
 }

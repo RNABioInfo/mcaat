@@ -19,14 +19,6 @@ string PathWriter::FetchNodeLabel(size_t node) {
     return label;
 }
 
-string PathWriter::FetchFirstNodeLabel(size_t node) {
-    std::string label;            
-    uint8_t seq[sdbg.k()];
-    uint32_t t = sdbg.GetLabel(node, seq);
-    for (int i = sdbg.k() - 1; i >= 0; --i) label.append(1, "ACGT"[seq[i] - 1]);
-    reverse(label.begin(), label.end());
-    return label;
-}
 
 //@brief Write the path nodes ids, their labels and the multiplicities to the respective files
 void PathWriter::CollectPathsIntoStringStreams(vector<uint64_t> path) {

@@ -1,4 +1,4 @@
-Conceptual summary of the [`CycleFinder`] class and its functions:
+## Conceptual summary of the `CycleFinder` class and its functions:
 
 1. **CycleFinder Constructor**: Initializes the `CycleFinder` object with the given parameters and starts the cycle finding process.
 
