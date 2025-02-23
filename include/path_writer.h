@@ -13,7 +13,7 @@ using namespace std;
 class PathWriter{
     private:
         SDBG& sdbg;
-        const string folder_path = "/vol/d/development/git/mCAAT/proof_of_concept/data/";
+        const string folder_path = "somefolder";
         string genome_id;
         string type;
         vector<bool>& visited;

@@ -14,8 +14,8 @@
 #include <list>
 #include <malloc.h>
 #include <bitset>
-#include <node.h>
 using namespace std;
+
 
 class CycleFinder {
     private:
@@ -27,8 +27,13 @@ class CycleFinder {
         uint16_t cluster_bounds;
         vector<bool> visited;
         vector<bool> look_up_table;
-        unordered_map<uint64_t, vector<vector<uint64_t>>> results;
 
+        //#### DEVELOPER FUNCTIONS ####
+        void _WriteStartNodesToFile(const map<int, vector<uint64_t>, greater<int>>& start_nodes_chunked, const std::string& filename);
+        void _ReadStartNodesFromFile(map<int, vector<uint64_t>, greater<int>>& start_nodes_chunked, const std::string& filename);
+        void _WriteMapToFile(const std::unordered_map<uint64_t,  std::vector<std::vector<uint64_t>>>& cycles, const std::string& filename);
+        //### DEVELOPER FUNCTIONS ####
+        
         //#### HELPER FUNCTIONS FOR CYCLE ENUMERATION ####
         bool _IncomingNotEqualToCurrentNode(uint64_t node, size_t edge_indegree);
         bool _BackgroundCheck(auto original_node, size_t repeat_multiplicity, auto current_node);
@@ -44,7 +49,8 @@ class CycleFinder {
 
     public:
         CycleFinder(SDBG& sdbg, int length_bound, int minimal_length, string genome_name);
-        
+        //write a getter for results
+        unordered_map<uint64_t, vector<vector<uint64_t>>> results;
 
         // #### RECURSIVE REDUCTION ####
         vector<uint64_t> CollectTips();
@@ -60,7 +66,7 @@ class CycleFinder {
         vector<vector<uint64_t>> FindCycle(uint64_t start_node, vector<uint64_t> path, map<uint64_t, int> lock, vector<unordered_set<uint64_t>> stack, vector<int> backtrack_lengths);
         vector<vector<uint64_t>> FindCycleUtil(uint64_t startnode);
         //#### CYCLE ENUMERATION ####
-
+  
         // 1. Call ChunkStartNodes to chunk the start nodes based on their multiplicity for parallel processing
         // 1.1 ChunkStartNodes will call DepthLevelSearch to determine if there is a cycle in a certain depth
         // 2. Call FindCycleUtil to find the cycles in the graph

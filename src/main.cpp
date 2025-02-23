@@ -13,9 +13,8 @@
 #include "hwinfo/hwinfo.h"
 #include "hwinfo/utils/unit.h"
 #include "filters.h"
-//#include "filtering_seqan.h"
-//include <seqan/align.h>
-
+#include <cstring>
+#include "sdbg_build.h"
 ///using namespace seqan;
 using namespace std;
 using std::istringstream;
@@ -26,152 +25,109 @@ void print_usage(const char* program_name) {
     cout<<"\n";
     cout << "-------------------------------------------------------" << endl;
 }
-void readMapFromFile(std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>>& cycles, const std::string& filename) {
-    std::ifstream infile(filename);
-
-    if (!infile.is_open()) {
-        std::cerr << "Failed to open file for reading: " << filename << std::endl;
-        return;
+bool check_for_error(Settings& settings){
+    cout<<"Step 1. Checking the inputs: "<<endl;
+    string erroneous_message = settings.PrintSettings();
+    if(erroneous_message.empty()){
+        cout << "All inputs are correct. [✔]" << endl;
+        return false;
     }
-
-    std::string line;
-    while (std::getline(infile, line)) {
-        std::istringstream iss(line);
-
-        // Parse the key
-        std::string keyStr;
-        if (!std::getline(iss, keyStr, ':')) continue;
-        uint64_t key = std::stoull(keyStr);
-
-        // Parse the nested vectors
-        std::string nestedVectorsStr;
-        if (!std::getline(iss, nestedVectorsStr)) continue;
-
-        std::vector<std::vector<uint64_t>> nested_vectors;
-        std::istringstream nestedStream(nestedVectorsStr);
-        std::string vectorStr;
-
-        while (std::getline(nestedStream, vectorStr, ';')) {
-            // Remove the square brackets around the vector
-            if (vectorStr.front() == '[' && vectorStr.back() == ']') {
-                vectorStr = vectorStr.substr(1, vectorStr.size() - 2);
-            }
-
-            // Parse the individual elements of the vector
-            std::vector<uint64_t> vec;
-            std::istringstream valueStream(vectorStr);
-            std::string value;
-
-            while (std::getline(valueStream, value, ',')) {
-                vec.push_back(std::stoull(value));
-            }
-
-            nested_vectors.push_back(vec);
-        }
-
-        cycles[key] = nested_vectors;
-    }
-
-    infile.close();
-}
-
-string FetchNodeLabel(size_t node, SDBG& sdbg) {
-    std::string label;            
-    uint8_t seq[sdbg.k()];
-    uint32_t t = sdbg.GetLabel(node, seq);
-    for (int i = sdbg.k() - 1; i >= 0; --i) label.append(1, "ACGT"[seq[i] - 1]);
-    reverse(label.begin(), label.end());
-    return label;
-}
-int main(int argc, char** argv) {
-    print_usage(argv[0]);
-     std::string name_of_genome = "mg_04";
-    std::string sdbg_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+name_of_genome+"/graph/graph";
+    cout << "Please check the following: " << erroneous_message << endl;
+    return true;
     
-    unordered_map<uint64_t, std::vector<std::vector<uint64_t>>> cycles;
-    std::string filename = "results.txt";
-    readMapFromFile(cycles, filename);
+}
+
+Settings parseArguments(int argc, char* argv[]) {
+    vector<string> input_files_default;
+    Settings settings;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--input_files") {
+            while (++i < argc && argv[i][0] != '-') {
+                input_files_default.push_back(argv[i]);
+            }
+            --i;
+        } else if (arg == "--ram") {
+            if (++i < argc) {
+                settings.ram = std::stod(argv[i]);
+            } else {
+                throw std::runtime_error("Error: Missing value for --ram");
+            }
+        } else if (arg == "--threads") {
+            if (++i < argc) {
+                settings.threads = std::stoul(argv[i]);
+            } else {
+                throw std::runtime_error("Error: Missing value for --threads");
+            }
+        } else if (arg == "--graph-folder") {
+            if (++i < argc) {
+                settings.graph_folder = argv[i];
+            } else {
+                throw std::runtime_error("Error: Missing value for --graph-folder");
+            }
+        } else if (arg == "--cycles-folder") {
+            if (++i < argc) {
+                settings.cycles_folder = argv[i];
+            } else {
+                throw std::runtime_error("Error: Missing value for --cycles-folder");
+            }
+        } else if (arg == "--output-folder") {
+            if (++i < argc) {
+                settings.output_folder = argv[i];
+            } else {
+                throw std::runtime_error("Error: Missing value for --output-folder");
+            }
+        }
+    }
+
+    // Validate input files
+    if (input_files_default.size() < 1 || input_files_default.size() > 2) {
+        throw std::runtime_error("Error: You must provide one or two input files.");
+    }
+    for (const auto& file : input_files_default) {
+        if (!std::filesystem::exists(file)) {
+            throw std::runtime_error("Error: Input file " + file + " does not exist.");
+        }
+        settings.input_files+=file+" ";
+    }
+    
+
+    // Set default values if necessary
+    if (settings.threads == 0) {
+        settings.threads = std::thread::hardware_concurrency()-2;
+    }
+    
+    hwinfo::Memory memory;
+    if (settings.ram == 0) 
+          settings.ram = hwinfo::unit::bytes_to_MiB(memory.total_Bytes())*0.9;
+    return settings;
+}
+
+int main(int argc, char** argv) {
+    Settings settings = parseArguments(argc, argv);
+    print_welcome(argv[0]);    
+    string name_of_genome = "test";
+    if(check_for_error(settings)) return 1;
+    SDBGBuild sdbg_build(settings);
+    int length_bound = 77;
     SDBG sdbg;
-        sdbg.LoadFromFile(sdbg_file.c_str());
+    // convert it to char * to be able to use it in the function
+    char * cstr = new char [settings.graph_folder.length()+1];
+    std::strcpy (cstr, settings.graph_folder.c_str());
+    sdbg.LoadFromFile(cstr);
+    cout << "Loaded the graph\nPress something\n" << endl;
+    
+    cout << "Cycle Algorithm Start" << endl;
+    auto start_time = std::chrono::high_resolution_clock::now();
+    CycleFinder cycle_finder(sdbg, length_bound, 27, std::string(argv[2]).c_str());
+    int number_of_spacers_total = 0;
+    auto cycles = cycle_finder.results;
     cout << "Number of nodes in results: " << cycles.size() << endl;
     Filters filters(sdbg,cycles);
-    filters.WriteToFile("CRISPR_arrays.txt");
-    /*
-    std::string name_of_genome = "mg_04";
-    std::string sdbg_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+name_of_genome+"/graph/graph";
-    if (argc ==3)
-    {
-        //read in from proof_of_concept/data/<genome_name>/cycles/id_paths_no_duplicates.txt
-        //get label from sdbg for each node and write to proof_of_concept/data/<genome_name>/cycles/str_true_positives.txt
-        std::string genome_name = std::string(argv[1]);
-        std::string id_path_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/" + genome_name + "/cycles/group_cycles.txt";
-        std::string str_true_positives_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/" + genome_name + "/cycles/string_after_filter.txt";
-        
-       
-        
-
-        SDBG sdbg;
-        sdbg.LoadFromFile(sdbg_file.c_str());
-        std::ifstream id_path_stream(id_path_file);
-        std::ofstream str_true_positives_stream(str_true_positives_file);
-        std::string line;
-        while (std::getline(id_path_stream, line))
-        {
-            std::vector<std::string> path;
-            std::stringstream ss(line);
-            std::string node_id;
-            while (ss >> node_id)
-            {
-                path.push_back(FetchNodeLabel(std::stoull(node_id), sdbg));
-            }
-            for (int i = 0; i < path.size(); i++)
-            {
-                str_true_positives_stream << path[i] << " ";
-            }
-            str_true_positives_stream << "\n";
-        }
-        id_path_stream.close();
-        str_true_positives_stream.close();
-
-    }else{
-        int length_bound = 77;
-        settings settings("1","2",3,4);
-        SDBG sdbg;
-        cout << "Loading the graph..." << endl;
-        //write to file log.txt
-        ofstream log_file;
-        string log_filename = "log.txt";
-        log_file.open(log_filename,std::ios_base::app);
-        log_file << "LOADING THE GRAPH..." << endl;
-        log_file.close();
-        sdbg.LoadFromFile(sdbg_file.c_str());
-        log_file.open(log_filename,std::ios_base::app);
-        log_file << "LOADED THE GRAPH " <<std::string(argv[2]) << endl;
-        log_file << "Cycle Algorithm Start" << endl;
-        log_file.close();
-        //GraphWriter gw(sdbg);
-        //gw.WriteNodes();
-        cout << "Loaded the graph\nPress something\n" << endl;
-        //std::cin.ignore();
-
-        cout << "Cycle Algorithm Start" << endl;
-        //time the cycle finding algorithm
-        auto start_time = std::chrono::high_resolution_clock::now();
-        CycleFinder cycle_finder(sdbg, length_bound, 23, name_of_genome);
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
-        //convert to minutes
-        double duration_in_minutes = duration.count() / 60.0;
-        //convert to hours
-        double duration_in_hours = duration_in_minutes / 60.0;
-        //write to file log.txt
-        log_file.open(log_filename,std::ios_base::app);
-        log_file << "IN HRS: " << duration_in_hours << " HOURS" << endl;
-        log_file << "IN MINUTES: " << duration_in_minutes << " MINUTES" << endl;
-        log_file << "IN SECONDS: " << duration.count() << " SECONDS" << endl;
-        cout << "Cycle Algorithm Finished in " << duration_in_minutes << " minutes" << endl;
-        log_file.close();
-        cout << "Cycle Algorithm End" << endl;
-    }*/
-        
+    string results_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+name_of_genome+"/cycles/CRISPR_arrays.txt";
+    int number_of_spacers = filters.WriteToFile(results_file);
+    cout<<"Saved in: "<<results_file<<endl;
+    number_of_spacers_total += number_of_spacers;
+    cout << "Number of spacers: " << number_of_spacers_total << endl;
+            
 }

@@ -18,6 +18,90 @@
  * - Finding all cycles in the graph by iterating over chunked start nodes and utilizing parallel processing.
  */
 
+// @brief Writes the start nodes to a file - developer function
+void CycleFinder::_WriteStartNodesToFile(const map<int, vector<uint64_t>, greater<int>>& start_nodes_chunked, const std::string& filename) {
+    std::ofstream outfile(filename);
+
+    if (!outfile.is_open()) {
+        std::cerr << "Failed to open file for writing: " << filename << std::endl;
+        return;
+    }
+
+    for (const auto& [key, value] : start_nodes_chunked) {
+        outfile << "log2_mult: " << key << " Number of nodes: " << value.size() << endl;
+        for (const auto& node : value) {
+            outfile << node << endl;
+        }
+    }
+
+    outfile.close();
+}
+// @brief Reads the start nodes to a file - developer function
+void CycleFinder::_ReadStartNodesFromFile(map<int, vector<uint64_t>, greater<int>>& start_nodes_chunked, const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file) {
+        std::cerr << "Error opening file!" << std::endl;
+        return;
+    }
+    
+    std::string line;
+    int currentKey = 0;
+    
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        
+        if (line.back() == ':') {
+            line.pop_back(); // Remove the colon
+            currentKey = std::stoi(line);
+            start_nodes_chunked[currentKey] = {}; // Initialize the vector
+        } else {
+            uint64_t value = std::stoull(line);
+            start_nodes_chunked[currentKey].push_back(value);
+        }
+    }
+    
+    file.close();
+    
+}
+// @brief Writes the cycles to a file - developer function
+void CycleFinder::_WriteMapToFile(const std::unordered_map<uint64_t,  std::vector<std::vector<uint64_t>>>& cycles, const std::string& filename) {
+    std::ofstream outfile(filename);
+
+    if (!outfile.is_open()) {
+        std::cerr << "Failed to open file for writing: " << filename << std::endl;
+        return;
+    }
+
+    for (const auto& pair : cycles) {
+        uint64_t key = pair.first;
+        const std::vector<std::vector<uint64_t>>& nested_vectors = pair.second;
+
+        // Write the key
+        outfile << key << ":";
+
+        // Write the nested vectors
+        for (size_t i = 0; i < nested_vectors.size(); ++i) {
+            const std::vector<uint64_t>& vec = nested_vectors[i];
+            
+            outfile << "[";
+            for (size_t j = 0; j < vec.size(); ++j) {
+                outfile << vec[j];
+                if (j < vec.size() - 1) {
+                    outfile << ",";
+                }
+            }
+            outfile << "]";
+            
+            if (i < nested_vectors.size() - 1) {
+                outfile << ";"; // Separate nested vectors with a semicolon
+            }
+        }
+
+        outfile << std::endl; // Newline to separate entries
+    }
+
+    outfile.close();
+}
 
 /**
  * @brief Checks if any incoming edge of a node is not equal to the node itself.
@@ -35,6 +119,9 @@ bool CycleFinder::_IncomingNotEqualToCurrentNode(uint64_t node, size_t edge_inde
  */
 bool CycleFinder::_BackgroundCheck(auto original_node, size_t repeat_multiplicity, auto neighbor_node) {
     auto neighbor_node_multiplicity = sdbg.EdgeMultiplicity(neighbor_node);
+    if(this->visited[neighbor_node]) {
+        return false;
+    }
     if (repeat_multiplicity / neighbor_node_multiplicity > 500) {
         return false;
     }
@@ -51,14 +138,15 @@ bool CycleFinder::_BackgroundCheck(auto original_node, size_t repeat_multiplicit
 void CycleFinder::_GetOutgoings(auto node, unordered_set<uint64_t>& outgoings_set, size_t repeat_multiplicity) {
    
     int edge_outdegree = sdbg.EdgeOutdegree(node);
-    if (edge_outdegree == 0 || node==-1) {
+    if (edge_outdegree == 0 || !this->sdbg.IsValidEdge(node)) {
         return;
     }
-    uint64_t outgoings[edge_outdegree];
-    sdbg.OutgoingEdges(node, outgoings);
-    for (const auto& outgoing : outgoings)
-        if (this->_BackgroundCheck(node, repeat_multiplicity, outgoing))
-            outgoings_set.insert(outgoing);
+     uint64_t outgoings[edge_outdegree];
+    int flag =sdbg.OutgoingEdges(node, outgoings);
+    if(flag!=-1)    
+        for (const auto& outgoing : outgoings)
+            if (this->_BackgroundCheck(node, repeat_multiplicity, outgoing))
+                outgoings_set.insert(outgoing);
     
     
 }
@@ -68,14 +156,15 @@ void CycleFinder::_GetOutgoings(auto node, unordered_set<uint64_t>& outgoings_se
 void CycleFinder::_GetIncomings(auto node, unordered_set<uint64_t>& incomings_set, size_t repeat_multiplicity) {
   
     int edge_indegree = sdbg.EdgeIndegree(node);
-    if (edge_indegree == 0 || node==-1) {
+    if (edge_indegree == 0 || !this->sdbg.IsValidEdge(node)) {
         return;
     }
     uint64_t incomings[edge_indegree];
-    sdbg.IncomingEdges(node, incomings);
-    for (const auto& incoming : incomings)
-        if (this->_BackgroundCheck(node, repeat_multiplicity, incoming))
-            incomings_set.insert(incoming);
+    int flag =sdbg.IncomingEdges(node, incomings);
+    if (flag==-1)
+        for (const auto& incoming : incomings)
+            if (this->_BackgroundCheck(node, repeat_multiplicity, incoming))
+                incomings_set.insert(incoming);
 }
 // ## START: HELPER FUNCTIONS FOR DLS ##
 /**
@@ -84,14 +173,15 @@ void CycleFinder::_GetIncomings(auto node, unordered_set<uint64_t>& incomings_se
 void CycleFinder::_GetOutgoings(auto node, unordered_set<uint64_t>& outgoings_set) {
    
     int edge_outdegree = sdbg.EdgeOutdegree(node);
-    if (edge_outdegree == 0 || node==-1) {
+    if (edge_outdegree == 0 || !this->sdbg.IsValidEdge(node)) {
         return;
     }
     uint64_t outgoings[edge_outdegree];
-    sdbg.OutgoingEdges(node, outgoings);
-    for (const auto& outgoing : outgoings)
-        if (sdbg.EdgeMultiplicity(outgoing) > 1)
-            outgoings_set.insert(outgoing);
+    int flag = sdbg.OutgoingEdges(node, outgoings);
+    if(flag!=-1)
+        for (const auto& outgoing : outgoings)
+            if (sdbg.EdgeMultiplicity(outgoing) > 1)
+                outgoings_set.insert(outgoing);
     
     
 }
@@ -101,14 +191,15 @@ void CycleFinder::_GetOutgoings(auto node, unordered_set<uint64_t>& outgoings_se
 void CycleFinder::_GetIncomings(auto node, unordered_set<uint64_t>& incomings_set) {
   
     int edge_indegree = sdbg.EdgeIndegree(node);
-    if (edge_indegree == 0 || node==-1) {
+    if (edge_indegree == 0 || !this->sdbg.IsValidEdge(node)) {
         return;
     }
     uint64_t incomings[edge_indegree];
-    sdbg.IncomingEdges(node, incomings);
-    for (const auto& incoming : incomings)
-        if (sdbg.EdgeMultiplicity(incoming) > 1)
-            incomings_set.insert(incoming);
+    int flag = sdbg.IncomingEdges(node, incomings);
+    if (flag!=-1)
+        for (const auto& incoming : incomings)
+            if (sdbg.EdgeMultiplicity(incoming) > 1)
+                incomings_set.insert(incoming);
 }
 
 // ## END: HELPER FUNCTIONS FOR DLS ##
@@ -206,9 +297,10 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
     #pragma omp critical
     {
         for (const auto& cycle : cycles) 
-            PathWriter("a", this->sdbg, cycle, 
-            this->genome_name, "fastq", this->visited);
+            for (const auto& node : cycle) 
+                this->visited[node] = true;
     }
+    
     return cycles;
 }
 
@@ -317,7 +409,7 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
                     if(this->_IncomingNotEqualToCurrentNode(node,edge_indegree)) continue;
                     int reached_depth = 0;
                     
-                    bool dls = this->DepthLevelSearch(node, node, 100, reached_depth);
+                    bool dls = this->DepthLevelSearch(node, node, this->maximal_length, reached_depth);
                     if(!dls) continue; //|-> the last version!
             
                     double log2_mult = ceil(log2(double(this->sdbg.EdgeMultiplicity(node))));
@@ -325,50 +417,13 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
             }
         }
     }
+   //writeStartNodesToFile(start_nodes_chunked, "start_nodes.txt");
     size_t sum_of_all_quantities_in_all_chunks = 0;
     for (const auto& [key, value] : start_nodes_chunked) {
         std::cout << "log2_mult: " << key << " Number of nodes: " << value.size() << endl;
         sum_of_all_quantities_in_all_chunks += value.size();
     }
     return sum_of_all_quantities_in_all_chunks;
-}
-void CycleFinder::writeMapToFile(const std::unordered_map<uint64_t,  std::vector<std::vector<uint64_t>>>& cycles, const std::string& filename) {
-    std::ofstream outfile(filename);
-
-    if (!outfile.is_open()) {
-        std::cerr << "Failed to open file for writing: " << filename << std::endl;
-        return;
-    }
-
-    for (const auto& pair : cycles) {
-        uint64_t key = pair.first;
-        const std::vector<std::vector<uint64_t>>& nested_vectors = pair.second;
-
-        // Write the key
-        outfile << key << ":";
-
-        // Write the nested vectors
-        for (size_t i = 0; i < nested_vectors.size(); ++i) {
-            const std::vector<uint64_t>& vec = nested_vectors[i];
-            
-            outfile << "[";
-            for (size_t j = 0; j < vec.size(); ++j) {
-                outfile << vec[j];
-                if (j < vec.size() - 1) {
-                    outfile << ",";
-                }
-            }
-            outfile << "]";
-            
-            if (i < nested_vectors.size() - 1) {
-                outfile << ";"; // Separate nested vectors with a semicolon
-            }
-        }
-
-        outfile << std::endl; // Newline to separate entries
-    }
-
-    outfile.close();
 }
 
 
@@ -407,7 +462,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
         std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>> all_cycles;
 
     map<int, vector<uint64_t>, greater<int>> start_nodes_chunked;
-    size_t start_nodes_amount = ChunkStartNodes(start_nodes_chunked);
+    size_t start_nodes_amount=this->ChunkStartNodes(start_nodes_chunked);
     std::cout << "Number of start_nodes: " << start_nodes_amount << endl;
     size_t counter = 0;
     size_t n_th_counter = 0;
@@ -437,7 +492,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
     std::cout << "Number of cycles: " << cumulative << endl;
     // std::cout number of nodes in results
     std::cout << "Number of nodes in results: " << this->results.size() << endl;
-    writeMapToFile(this->results, "results.txt");
+    //writeMapToFile(this->results, "results.txt");
 
     std::cout << endl;
     std::cout << "Number of Cycles: " << cumulative << endl;
