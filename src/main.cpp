@@ -2,7 +2,7 @@
 #include <iostream>
 #include "sdbg/sdbg.h"
 #include "cycle_finder.h"
-#include "system_resources.h"
+
 #include <fstream>
 #include <sstream>
 #include <chrono>
@@ -105,7 +105,6 @@ Settings parseArguments(int argc, char* argv[]) {
 
 int main(int argc, char** argv) {
     Settings settings = parseArguments(argc, argv);
-    print_welcome(argv[0]);    
     string name_of_genome = "test";
     if(check_for_error(settings)) return 1;
     SDBGBuild sdbg_build(settings);
@@ -119,12 +118,12 @@ int main(int argc, char** argv) {
     
     cout << "Cycle Algorithm Start" << endl;
     auto start_time = std::chrono::high_resolution_clock::now();
-    CycleFinder cycle_finder(sdbg, length_bound, 27, std::string(argv[2]).c_str());
+    CycleFinder cycle_finder(sdbg, length_bound, 27, std::string(argv[2]).c_str(),settings.threads);
     int number_of_spacers_total = 0;
     auto cycles = cycle_finder.results;
     cout << "Number of nodes in results: " << cycles.size() << endl;
     Filters filters(sdbg,cycles);
-    string results_file = "/vol/d/development/git/mCAAT/proof_of_concept/data/"+name_of_genome+"/cycles/CRISPR_arrays.txt";
+    string results_file = settings.output_folder;
     int number_of_spacers = filters.WriteToFile(results_file);
     cout<<"Saved in: "<<results_file<<endl;
     number_of_spacers_total += number_of_spacers;

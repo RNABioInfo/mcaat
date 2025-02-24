@@ -7,11 +7,10 @@ set(CMAKE_VERBOSE_MAKEFILE OFF)
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 
-# Find required packages
-#find_package(TBB REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(Threads REQUIRED)
+
 # Options
 option(COVERAGE "Generate coverage report" ON)
 option(STATIC_BUILD "Build static executation" OFF)
@@ -52,10 +51,7 @@ if (STATIC_BUILD)
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 endif (STATIC_BUILD)
 
-# Add subdirectories
-# add_subdirectory(libs/vendor/edlib EXCLUDE_FROM_ALL)
 add_subdirectory(libs/hwinfo)
-add_subdirectory(libs/CLI11)
 
 # Compiler and linker flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
@@ -79,9 +75,9 @@ if (STATIC_BUILD)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--whole-archive -lpthread -Wl,--no-whole-archive -static")
     set_target_properties(mcaat PROPERTIES LINK_SEARCH_START_STATIC ON CXX_STANDARD 17)
 endif (STATIC_BUILD)
-target_include_directories(mcaat PRIVATE libs/cli11/include)
+
 # Link libraries
-target_link_libraries(mcaat ${ZLIB_LIBRARIES} hwinfo::HWinfo CLI11::CLI11)
+target_link_libraries(mcaat ${ZLIB_LIBRARIES} hwinfo::HWinfo)
 
 # Threading configuration
 if(THREADS_HAVE_PTHREAD_ARG)

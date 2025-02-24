@@ -212,8 +212,8 @@ void CycleFinder::_GetIncomings(auto node, unordered_set<uint64_t>& incomings_se
  * @param minimal_length The minimum length of the path to be considered.
  * @param genome_name The name of the genome.
  */
-CycleFinder::CycleFinder(SDBG& sdbg, int length_bound, int minimal_length, string genome_name)
-    : maximal_length(length_bound), minimal_length(minimal_length), sdbg(sdbg), genome_name(genome_name), cluster_bounds(500) {
+CycleFinder::CycleFinder(SDBG& sdbg, int length_bound, int minimal_length, string genome_name,int threads_count)
+    : maximal_length(length_bound), minimal_length(minimal_length), sdbg(sdbg), genome_name(genome_name), cluster_bounds(500), threads_count(threads_count) {
     this->FindApproximateCRISPRArrays();
 }
 
@@ -395,7 +395,7 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
     uint64_t loaded = 0;
     const int chunk_size = 20000;
     this->InvalidateMultiplicityOneNodes();
-    #pragma omp parallel num_threads(24)
+    #pragma omp parallel num_threads(this->threads_count)
     {
         #pragma omp for schedule(dynamic, chunk_size)
         for (uint64_t node = 0; node < this->sdbg.size(); node++) {
@@ -467,7 +467,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
     size_t counter = 0;
     size_t n_th_counter = 0;
     for (auto nodes_iterator = start_nodes_chunked.begin(); nodes_iterator != start_nodes_chunked.end(); nodes_iterator++) {
-        auto thread_count = 24;
+        auto thread_count = this->threads_count;
         if (nodes_iterator->second.size() < thread_count)
             thread_count = nodes_iterator->second.size();
         #pragma omp parallel for num_threads(thread_count) reduction(+:cumulative) shared(nodes_iterator, sdbg, visited)
