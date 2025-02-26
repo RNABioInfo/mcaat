@@ -84,11 +84,17 @@ Settings parseArguments(int argc, char* argv[]) {
     if (input_files_default.size() < 1 || input_files_default.size() > 2) {
         throw std::runtime_error("Error: You must provide one or two input files.");
     }
+    int count = 0;
     for (const auto& file : input_files_default) {
         if (!std::filesystem::exists(file)) {
             throw std::runtime_error("Error: Input file " + file + " does not exist.");
         }
-        settings.input_files+=file+" ";
+        count++;
+        if(count==1)
+            settings.input_files+=file;
+        if(count==2)
+            settings.input_files+=" "+file+" ";
+        
     }
     
 
