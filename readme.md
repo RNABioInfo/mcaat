@@ -1,27 +1,55 @@
-## Conceptual summary of the `CycleFinder` class and its functions:
+# Command-Line Tool Usage
 
-1. **CycleFinder Constructor**: Initializes the `CycleFinder` object with the given parameters and starts the cycle finding process.
+## Compilation
 
-2. **_IncomingNotEqualToCurrentNode**: Checks if any incoming edge of a node is not equal to the node itself.
+After compiling the software, you can run the tool using the following command:
 
-3. **_BackgroundCheck**: Performs a background check on a neighbor node to determine if it meets certain criteria.
+```bash
+./your_program --input_files <file1> [file2] [options]
+```
 
-4. **_GetOutgoings**: Retrieves the outgoing edges of a node that pass the background check.
+## Required Arguments
 
-5. **_GetIncomings**: Retrieves the incoming edges of a node that pass the background check.
+- `--input_files <file1> [file2]`
+  - You must provide **one or two** input files - **paired-end or signle-end** reads.
+  - If an input file does not exist, the program will terminate with an error.
 
-6. **RelaxLock**: Relaxes the lock values for nodes during backtracking to allow further exploration.
+## Optional Arguments
 
-7. **ProcessNeighbors**: Processes the neighbors of the current node and updates the path and stack accordingly.
+- `--ram <value>`
 
-8. **Backtrack**: Performs backtracking during the cycle finding process to explore alternative paths.
+  - Sets the amount of RAM (in MiB) to be used.
+  - **Default:** 90% of total system memory.
 
-9. **FindCycle**: Finds cycles starting from a given node using a depth-first search approach with backtracking.
+- `--threads <num>`
 
-10. **FindCycleUtil**: Utility function to initialize and start the cycle finding process from a given node.
+  - Number of threads to use.
+  - **Default:** Total available CPU cores minus 2. If you have only 2 cores software takes both.
 
-11. **ChunkStartNodes**: Chunks the start nodes based on their multiplicity for parallel processing.
+- `--graph-folder <path>`
 
-12. **DepthLevelSearch**: Performs a depth-limited search to determine if a path exists between two nodes within a certain depth.
+  - Specifies the directory where graph-related files will be stored. In future might be omitted.
 
-13. **FindCycles**: Finds all cycles in the graph by iterating over chunked start nodes and utilizing parallel processing.
+- `--cycles-folder <path>`
+
+  - Specifies the directory where cycle-related files will be stored. In future might be omitted.
+
+- `--output-folder <path>`
+
+  - Specifies the directory for storing output files.
+
+## Example Usage
+
+```bash
+./mcaat --input_files R1.fastq R2.fastq --ram 4000 --threads 8 --output-folder results/
+```
+
+This command:
+
+- Uses `data1.fastq` and `data2.fastq` as input files.
+- Allocates 4000 MiB of RAM.
+- Runs with 8 threads.
+- Saves outputs to the `results/` directory.
+
+If an option is not provided, the tool applies default values where applicable.
+
