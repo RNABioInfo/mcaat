@@ -1,4 +1,4 @@
-# MCAAT
+# MCAAT - metagenomic CRISPR array analysis tool
 
 ## Compilation
 To compile the software, ensure you have CMake (minimum version 3.12) installed. Then, follow these steps:
@@ -42,14 +42,13 @@ docker run --rm -v $(pwd):/mcaat mcaat_image --input_files <file1.fastq> [file2.
   - Number of threads to use.  
   - **Default:** Total available CPU cores minus 2. If the device has only 2 both will be used.
 
-- `--graph-folder <path>`  
-  - Specifies the directory where graph-related files will be stored. Will be omitted in future. 
-
-- `--cycles-folder <path>`  
-  - Specifies the directory where cycle-related files will be stored. Will be omitted in future. 
+- `--k <k-mer>`  
+  - Specifies the k-mer size.
 
 - `--output-folder <path>`  
   - Specifies the directory for storing output files.
+> **IMPORTANT**
+> MCAAT saves the graph under output_folder/graph. If a user stops the software early(by pressing CMD+C), the folder will not be deleted.   
 
 ## Example Usage
 ```bash

@@ -2,7 +2,7 @@
 #include <iostream>
 #include "sdbg/sdbg.h"
 #include "cycle_finder.h"
-
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <chrono>
@@ -18,6 +18,8 @@
 ///using namespace seqan;
 using namespace std;
 using std::istringstream;
+namespace fs = std::filesystem;
+
 void print_usage(const char* program_name) {
     cout << "-------------------------------------------------------" << endl;
     cout<<"\n";
@@ -59,27 +61,24 @@ Settings parseArguments(int argc, char* argv[]) {
             } else {
                 throw std::runtime_error("Error: Missing value for --threads");
             }
-        } else if (arg == "--graph-folder") {
-            if (++i < argc) {
-                settings.graph_folder = argv[i];
-            } else {
-                throw std::runtime_error("Error: Missing value for --graph-folder");
-            }
-        } else if (arg == "--cycles-folder") {
-            if (++i < argc) {
-                settings.cycles_folder = argv[i];
-            } else {
-                throw std::runtime_error("Error: Missing value for --cycles-folder");
-            }
         } else if (arg == "--output-folder") {
             if (++i < argc) {
                 settings.output_folder = argv[i];
+                settings.graph_folder = settings.output_folder+"/graph";
+                settings.output_file = settings.output_folder+"/CRISPR_Arrays.txt";
+                
             } else {
                 throw std::runtime_error("Error: Missing value for --output-folder");
             }
         }
     }
-
+    fs::path path_output_folder = settings.output_folder;
+    fs::path path_graph_folder = settings.graph_folder;
+    if (!path_output_folder.is_absolute()) {
+        settings.output_folder = fs::current_path().string() + "/" + settings.output_folder;
+        settings.output_file = fs::current_path().string() + "/" + settings.output_file;
+        settings.graph_folder = fs::current_path().string() + "/" + settings.graph_folder;
+    }
     // Validate input files
     if (input_files_default.size() < 1 || input_files_default.size() > 2) {
         throw std::runtime_error("Error: You must provide one or two input files.");
@@ -105,34 +104,55 @@ Settings parseArguments(int argc, char* argv[]) {
     
     hwinfo::Memory memory;
     if (settings.ram == 0) 
-          settings.ram = hwinfo::unit::bytes_to_MiB(memory.total_Bytes())*0.9;
+          settings.ram = memory.total_Bytes()*0.9;
     return settings;
 }
 
 int main(int argc, char** argv) {
+
+    // %% PARSE ARGUMENTS %%
     Settings settings = parseArguments(argc, argv);
     string name_of_genome = "test";
     if(check_for_error(settings)) return 1;
+     // %% PARSE ARGUMENTS %%
+
+    // %% BUILD GRAPH %%
     SDBGBuild sdbg_build(settings);
+    // %% BUILD GRAPH %%
+    
+   
     int length_bound = 77;
     SDBG sdbg;
-    // convert it to char * to be able to use it in the function
+    settings.graph_folder+="/graph";
     char * cstr = new char [settings.graph_folder.length()+1];
     std::strcpy (cstr, settings.graph_folder.c_str());
+    cout << "Graph folder: " << cstr << endl;
     sdbg.LoadFromFile(cstr);
-    cout << "Loaded the graph\nPress something\n" << endl;
-    
-    cout << "Cycle Algorithm Start" << endl;
+    cout << "Loaded the graph" << endl;
+
+    // %% FBCE ALGORITHM %%
+    cout << "FBCE START:" << endl;
     auto start_time = std::chrono::high_resolution_clock::now();
     CycleFinder cycle_finder(sdbg, length_bound, 27, std::string(argv[2]).c_str(),settings.threads);
     int number_of_spacers_total = 0;
     auto cycles = cycle_finder.results;
     cout << "Number of nodes in results: " << cycles.size() << endl;
+    // %% FBCE ALGORITHM %%
+
+    // %% FILTERS %%
+    cout << "FILTERS START:" << endl;
     Filters filters(sdbg,cycles);
     string results_file = settings.output_folder;
     int number_of_spacers = filters.WriteToFile(results_file);
     cout<<"Saved in: "<<results_file<<endl;
+    // %% FILTERS %%
+
     number_of_spacers_total += number_of_spacers;
     cout << "Number of spacers: " << number_of_spacers_total << endl;
+
+    // %% DELETE THE GRAPH FOLDER %%
+    fs::remove_all(settings.graph_folder);
+    // %% DELETE THE GRAPH FOLDER %%
+
             
 }
