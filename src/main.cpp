@@ -46,7 +46,13 @@ Settings parseArguments(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "--input_files") {
             while (++i < argc && argv[i][0] != '-') {
-                input_files_default.push_back(argv[i]);
+                //check if the the format is .fastq
+                if (std::string(argv[i]).find(".fastq") != std::string::npos) {
+                    input_files_default.push_back(argv[i]);
+                } else {
+                    throw std::runtime_error("Error: Input file " + std::string(argv[i]) + " is not a .fastq file.");
+                }
+                
             }
             --i;
         } else if (arg == "--ram") {
@@ -123,6 +129,7 @@ int main(int argc, char** argv) {
    
     int length_bound = 77;
     SDBG sdbg;
+    string graph_folder_old = settings.graph_folder;
     settings.graph_folder+="/graph";
     char * cstr = new char [settings.graph_folder.length()+1];
     std::strcpy (cstr, settings.graph_folder.c_str());
@@ -142,16 +149,16 @@ int main(int argc, char** argv) {
     // %% FILTERS %%
     cout << "FILTERS START:" << endl;
     Filters filters(sdbg,cycles);
-    string results_file = settings.output_folder;
+    string results_file = settings.output_file;
     int number_of_spacers = filters.WriteToFile(results_file);
     cout<<"Saved in: "<<results_file<<endl;
     // %% FILTERS %%
 
     number_of_spacers_total += number_of_spacers;
     cout << "Number of spacers: " << number_of_spacers_total << endl;
-
+    cout << settings.graph_folder << endl;
     // %% DELETE THE GRAPH FOLDER %%
-    fs::remove_all(settings.graph_folder);
+    fs::remove_all(graph_folder_old);
     // %% DELETE THE GRAPH FOLDER %%
 
             

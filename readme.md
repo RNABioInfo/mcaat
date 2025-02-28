@@ -35,8 +35,10 @@ docker run --rm -v $(pwd):/mcaat mcaat_image --input_files <file1.fastq> [file2.
 
 ## Optional Arguments
 - `--ram <value>`  
-  - Sets the amount of RAM (in MiB) to be used.  
+  - Sets the amount of RAM (in Bytes) to be used.  
   - **Default:** 90% of total system memory.
+>**IMPORTANT**
+> For the current version of MCAAT, it is recommended to keep the RAM at its default value. It is easy to make mistakes with zeros when dealing with bytes.
 
 - `--threads <num>`  
   - Number of threads to use.  
