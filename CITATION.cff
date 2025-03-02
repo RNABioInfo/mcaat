@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "MCAAT"
+authors:
+  - family-names: "Talibli"
+    given-names: "Fikrat"
+  - family-names: "Voß"
+    given-names: "Björn"
+version: "0.1.0"
+date-released: "2025-02-20"
+url: "https://github.com/RNABioInfo/mcaat.git"
