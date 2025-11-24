@@ -27,6 +27,7 @@ struct Settings {
     std::string graph_folder; // Folder for graph data
     std::string cycles_folder; // Folder for cycle data
     std::string output_file; // Path to the main output file
+    std::string benchmark_file;
     // Sdbg
 
     struct CycleFinderSettings {

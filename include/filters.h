@@ -43,4 +43,3 @@ public:
     void searchPattern(char* mapped, off_t size, const char* pattern);
     void cleanUp(char* mapped, off_t size, int fd);
 };
-

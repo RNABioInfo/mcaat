@@ -1,23 +1,16 @@
-//test myLib.h
 #include <iostream>
-#include "sdbg/sdbg.h"
-#include "cycle_finder.h"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <cstring>
+#include <cctype>
+#include <unordered_map>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "settings.h"
-#include "filters.h"
-#include <cstring>
-#include "sdbg_build.h"
-#include "post_processing.h"
-#include <cctype>
-#include <unordered_map>
-#include "phage_curator.h"
-#include "isolate_protospacers.h"
+
 #ifdef __linux__
 #include <sys/sysinfo.h>
 #elif defined(_WIN32)
@@ -28,6 +21,17 @@
 #ifdef DEBUG
 #include "io_ops.h"
 #endif
+
+#include "main_run_and_debug.h"
+#include "cycle_finder.h"
+#include "filters.h"
+#include "post_processing.h"
+#include "sdbg/sdbg.h"
+#include "sdbg_build.h"
+#include "settings.h"
+#include "phage_curator.h"
+#include "isolate_protospacers.h"
+
 using namespace std;
 namespace fs = std::filesystem;
 #ifdef DEBUG
@@ -113,6 +117,7 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "  --ram <amount>                  RAM to use (e.g., 4G, 500M). Default: 95% of system RAM\n"
                  << "  --threads <num>                 Number of threads. Default: CPU cores - 2\n"
                  << "  --output-folder <path>          Output directory. If not provided, a timestamped folder is created\n"
+                 << "  --benchmark <file>              File containing expected crispr sequences line separated\n"
                  << "  --cycle-max-length <int>       Maximum cycle length to search (default in settings)\n"
                  << "  --cycle-min-length <int>       Minimum cycle length to search (default in settings)\n"
                  << "  --threshold-multiplicity <int> Minimum multiplicity threshold for start nodes (default in settings)\n"
@@ -129,6 +134,13 @@ Settings parse_arguments(int argc, char* argv[]) {
             }
             --i;
             required_files_provided = true;
+        } else if (arg == "--benchmark") {
+            if (++i < argc) {
+                settings.benchmark_file = argv[i];
+            } else {
+                throw runtime_error("Error: Missing value for --benchmark");
+            }
+            --i;
         } else if (arg == "--ram") {
             if (++i < argc) {
                 string ram_input = argv[i];
@@ -484,10 +496,9 @@ int main(int argc, char** argv) {
 int main(int argc, char** argv) {
     // %% PARSE ARGUMENTS %%
     Settings settings = parse_arguments(argc, argv);
-    string name_of_genome = "test";
     if (check_for_error(settings)){
-        //tell the user which folder we are deleting
-        cout<< "Folder " << settings.output_folder << " will be deleted due to errors." << endl;
+        cout << "Folder " << settings.output_folder;
+        cout << " will be deleted due to errors." << endl;
         
         cout << "Do you want that folder to be removed? (y/n): ";
         char answer;
@@ -506,7 +517,7 @@ int main(int argc, char** argv) {
     SDBGBuild sdbg_build(settings);
     // %% BUILD GRAPH %%
     
-   
+    // %% LOAD GRAPH %%
     // cycle finder max/min length are read from settings.cycle_finder_settings
     SDBG sdbg;
     string graph_folder_old = settings.graph_folder;
@@ -517,37 +528,65 @@ int main(int argc, char** argv) {
     sdbg.LoadFromFile(cstr);
     cout << "Loaded the graph" << endl;
     settings.sdbg = &sdbg;
-
     // %% LOAD GRAPH %%
-    
-    delete[] cstr;
 
-    
     // %% FBCE ALGORITHM %%
     cout << "FBCE START:" << endl;
     auto start_time = chrono::high_resolution_clock::now();
     CycleFinder cycle_finder(settings);
     // number_of_spacers_total unused
-    auto cycles = cycle_finder.results;
-    cout << "Number of nodes in results: " << cycles.size() << endl;
+    auto cycles_map = cycle_finder.results;
+    cout << "Number of nodes in results: " << cycles_map.size() << endl;
     // %% FBCE ALGORITHM %%
     
-    int number_of_spacers = 0;
-    // %% FILTERS %%
-    cout << "FILTERS START:" << endl;
-    Filters filters(sdbg, cycles);
-    auto  SYSTEMS = filters.ListArrays(number_of_spacers);
-    cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
-    // %% FILTERS %%
-    //%% POST PROCESSING %%
+    auto cycles = cycles_map_to_cycles(cycles_map); // easier type to handle
+
+    cout << "\n══════════════════════════════════════════════" << endl;
+    cout << "🔸STEP 6: Finding relevant reads" << endl;
+    cout << "══════════════════════════════════════════════" << endl;
+    const auto reads = run_and_debug_finding_of_relevant_reads(
+        cycles,
+        settings,
+        sdbg
+    );
+
+    cout << "\n══════════════════════════════════════════════" << endl;
+    cout << "🔸STEP 7: Order the spacers" << endl;
+    cout << "══════════════════════════════════════════════" << endl;
+    const auto found_systems = run_and_debug_spacer_ordering(reads, sdbg, cycles);
+
+
+    if (settings.benchmark_file != "") {
+        cout << "\n══════════════════════════════════════════════" << endl;
+        cout << "🔸STEP 8: Compare to ground of truth using benchmark file" << endl;
+        cout << "══════════════════════════════════════════════" << endl;
+        run_and_debug_benchmark_results(settings, found_systems);
+    } else {
+        cout << "\n══════════════════════════════════════════════" << endl;
+        cout << "🔸STEP 8: Results" << endl;
+        cout << "══════════════════════════════════════════════" << endl;
+        run_and_debug_results(found_systems);
+    }
+    
+    cout << "══════════════════════════════════════════════" << endl;
+
+    // %% POST PROCESSING %%
     cout << "POST PROCESSING START:" << endl;
-    CRISPRAnalyzer analyzer(SYSTEMS, settings.output_file);
+    unordered_map<string, vector<string>> all_systems;
+    for (const auto& [_sequence, repeat, spacers, _conf_a, _conf_b] : found_systems) {
+        all_systems[repeat] = spacers;
+    }
+    CRISPRAnalyzer analyzer(all_systems, settings.output_file);
     analyzer.run_analysis();
     cout << "Saved in: " << settings.output_file << endl;
-    //%% POST PROCESSING %%
+    // %% POST PROCESSING %%
 
     // %% DELETE THE GRAPH FOLDER %%
-    fs::remove_all(graph_folder_old);
+    try {
+        fs::remove_all(settings.graph_folder);
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Warning: Could not remove graph folder: " << e.what() << std::endl;
+    }
     // %% DELETE THE GRAPH FOLDER %%            
 }
 #endif

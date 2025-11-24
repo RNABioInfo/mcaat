@@ -436,6 +436,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
     vector<uint64_t> tips = this->CollectTips();
     std::cout << "Graph size: " << this->settings.sdbg->size() << " nodes; gathered tips: " << tips.size() << std::endl;
     
+    this->InvalidateMultiplicityOneNodes();
     for (uint64_t tip : tips) {
         this->RecursiveReduction(tip);
     }

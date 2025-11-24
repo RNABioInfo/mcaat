@@ -1,3 +1,12 @@
+[submodule "libs/cft"]
+	path = libs/cft
+	url = https://github.com/c4v4/cft
+[submodule "libs/googletest"]
+	path = libs/googletest
+	url = https://github.com/google/googletest.git
+[submodule "libs/kseqpp"]
+	path = libs/kseqpp
+	url = https://github.com/cartoonist/kseqpp.git
 [submodule "libs/megahit"]
 	path = libs/megahit
 	url = https://github.com/voutcn/megahit.git
