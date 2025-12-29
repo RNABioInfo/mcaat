@@ -109,7 +109,111 @@
 
 ---
 
-If you'd like, I can also:
-- Add a short benchmark script that automates runs at multiple thread counts and produces a small CSV/plot; or
-- Add micro-benchmarks for the visited bitmap vs a lock-based approach for small stress tests.
+### Expanded Documentation: files, API, usage, testing, and benchmarks 🧾
+
+Below are additional sections documenting the implementation and usage in more depth.
+
+---
+
+## Detailed file-by-file changes 🔍
+
+- `src/cycle_finder.cpp`
+  - Implemented the lock-free visited bitmap (`s_visited_words`) and helpers:
+    - `InitializeVisitedGlobal(size_t n_nodes)`
+    - `bool IsVisitedGlobal(uint32_t node)`
+    - `void MarkVisitedGlobal(uint32_t node)`
+  - Added per-thread collectors and serial merge logic used in `ChunkStartNodes` and `FindApproximateCRISPRArrays`.
+  - Implemented `static thread_local` DLS pools used by `DepthLevelSearch`.
+  - Added traversal micro-optimizations: prefetch, fixed-size neighbor buffers, and branch hints.
+  - Included optional calls to `malloc_trim(0)` in long-running buckets.
+
+- `include/cycle_finder.h`
+  - Exposed new helper declarations (initialization and debugging helpers) and configuration knobs for pool sizes and prefetch tuning.
+
+- `tests/` (recommended additions)
+  - `tests/visited_bitmap_stress.cpp`: small test that races many threads marking visited bits to validate monotonic behavior.
+  - `tests/benchmark_multi_threaded.sh`: a script to run the cycle finder across multiple thread counts and collect wall-clock results.
+
+---
+
+## API reference (important functions) 📚
+
+- `void InitializeVisitedGlobal(size_t n_nodes)`
+  - Pre-allocates and zero-initializes the visited bitset for `n_nodes` nodes.
+
+- `bool IsVisitedGlobal(uint32_t node)`
+  - Returns whether a node is marked visited. Uses relaxed atomics; can return false positives transiently but never returns a persistent false negative once a node is marked.
+
+- `void MarkVisitedGlobal(uint32_t node)`
+  - Atomically sets the visited bit for `node` using `__atomic_fetch_or` with `__ATOMIC_RELAXED`.
+
+- `std::vector<Cycle> CycleFinder::FindApproximateCRISPRArrays(...)`
+  - Main entry point for the current algorithm; now uses per-thread collectors and merges results serially.
+
+- `DepthLevelSearch` (internal)
+  - Uses per-thread pools and fixed-size buffers; configured via compile-time constants or optional runtime flags in `cycle_finder.h`.
+
+> Note: The above helpers are designed for monotonic bitset updates (0→1 only); they are not a general-purpose concurrent set implementation.
+
+---
+
+## Build & run (quick guide) ⚙️
+
+1. Checkout the branch:
+   - `git checkout optimizations`
+2. Build (out-of-source recommended):
+   - `mkdir -p build && cd build`
+   - `cmake .. && make -j$(nproc)`
+3. Run the cycle finder with typical arguments (example):
+   - `./bin/cycle_finder --input graphs/huge_graph.bin --threads 24 --out results.json`
+4. Recommended environment variables:
+   - `MALLOC_ARENA_MAX=4` to limit glibc arenas and reduce allocator noise for some workloads.
+
+---
+
+## Benchmarks & validation plan 📈
+
+- Quick smoke tests:
+  - Run the binary with `--verify-only` or with small graphs to confirm identical cycle sets are returned versus the baseline branch.
+
+- Automated benchmark script (recommended): `bench/run_benchmarks.sh`
+  - Runs the same workload across a list of thread counts (e.g., 1, 4, 8, 24, 48) and records wall clock and cycles found in a CSV.
+  - Produces a simple gnuplot/matplotlib script to visualize scaling.
+
+- Profiling:
+  - Use `perf record -g` and `perf report` to verify decreased time in atomic/lock hotspots and reduced allocator overhead.
+  - On NUMA machines, use `numactl --show` and `numastat` to diagnose memory binding issues.
+
+---
+
+## Testing suggestions ✅
+
+- Unit tests:
+  - Add a deterministic `visited_bitmap_unit_test` that runs many threads marking bits and then verifies the expected counts.
+
+- Integration tests:
+  - A small-run integration test that compares cycles discovered by the optimized implementation against the canonical reference implementation for multiple small graphs.
+
+- Stress tests:
+  - Large graph runs with tracking of memory usage (RSS) and peak-resident sizes to validate `malloc_trim` benefits.
+
+---
+
+## Examples & useful commands 💡
+
+- Run with pinned threads and CPU affinity (Linux):
+  - `taskset -c 0-23 ./bin/cycle_finder --input graphs/huge_graph.bin --threads 24`
+
+- Compare results between branches:
+  - `git checkout main && make && mv bin/cycle_finder bin/cycle_finder.main`
+  - `git checkout optimizations && make && mv bin/cycle_finder bin/cycle_finder.opt`
+  - `./bin/cycle_finder.opt --input graphs/huge_graph.bin --threads 24 -o out.opt.json`
+  - `./bin/cycle_finder.main --input graphs/huge_graph.bin --threads 1 -o out.main.json`
+  - `python scripts/compare_results.py out.main.json out.opt.json`
+
+---
+
+## Changelog and rationale 📝
+
+- 2025-12-29 — Introduced per-thread buffers + serial merging, lock-free visited bitmap, and per-thread pools to reduce contention and allocator pressure. Rationale: scale beyond ~24 cores and reduce per-edge overhead.
 
