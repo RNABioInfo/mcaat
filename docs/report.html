@@ -77,55 +77,5 @@
   <hr/>
   <p><strong>Files touched:</strong> <code>src/cycle_finder.cpp</code> (+ associated header updates).</p>
   <p>TL;DR: per-thread buffers + lock-free visited bitmap + reused pools = less contention and better parallel throughput.</p>
-  <h2>Detailed file-by-file changes 🔍</h2>
-  <ul>
-    <li><code>src/cycle_finder.cpp</code>
-      <ul>
-        <li>Lock-free visited bitmap (<code>s_visited_words</code>) and helpers: <code>InitializeVisitedGlobal</code>, <code>IsVisitedGlobal</code>, <code>MarkVisitedGlobal</code>.</li>
-        <li>Per-thread collectors and serial merge logic for <code>ChunkStartNodes</code> and <code>FindApproximateCRISPRArrays</code>.</li>
-        <li><code>static thread_local</code> DLS pools for <code>DepthLevelSearch</code>, prefetch and fixed-size buffers.</li>
-      </ul>
-    </li>
-    <li><code>include/cycle_finder.h</code>: declarations and tuning knobs for pool sizes and prefetching.</li>
-    <li><code>tests/</code> (recommended): add unit/stress tests for the visited bitmap and a benchmark script.</li>
-  </ul>
-
-  <h2>API reference 📚</h2>
-  <dl>
-    <dt><code>void InitializeVisitedGlobal(size_t n_nodes)</code></dt>
-    <dd>Pre-allocates and zero-initializes the visited bitset.</dd>
-
-    <dt><code>bool IsVisitedGlobal(uint32_t node)</code></dt>
-    <dd>Returns whether a node is marked visited; uses relaxed atomic loads.</dd>
-
-    <dt><code>void MarkVisitedGlobal(uint32_t node)</code></dt>
-    <dd>Atomically sets the visited bit for <code>node</code> using a relaxed atomic OR.</dd>
-
-    <dt><code>std::vector<Cycle> CycleFinder::FindApproximateCRISPRArrays(...)</code></dt>
-    <dd>Main entry point; uses per-thread collectors and serial merge for results.</dd>
-  </dl>
-
-  <h2>Build & run (quick guide) ⚙️</h2>
-  <ol>
-    <li><code>git checkout optimizations</code></li>
-    <li>Build: <code>mkdir -p build &amp;&amp; cd build &amp;&amp; cmake .. &amp;&amp; make -j$(nproc)</code></li>
-    <li>Run: <code>./bin/cycle_finder --input graphs/huge_graph.bin --threads 24 --out results.json</code></li>
-    <li>Tip: set <code>MALLOC_ARENA_MAX=4</code> to limit allocator noise.</li>
-  </ol>
-
-  <h2>Benchmarks & validation plan 📈</h2>
-  <p>Add <code>bench/run_benchmarks.sh</code> to run across thread counts and produce CSV results. Use <code>perf</code> and <code>numastat</code> to profile and confirm reduced contention and allocator hotspots.</p>
-
-  <h2>Testing suggestions ✅</h2>
-  <ul>
-    <li>Add a deterministic unit test for the visited bitset under heavy concurrent marking.</li>
-    <li>Add an integration test that compares cycle outputs against the reference implementation for small graphs.</li>
-    <li>Add a stress test that monitors RSS and peak memory to validate <code>malloc_trim</code> usefulness.</li>
-  </ul>
-
-  <h2>Examples & useful commands 💡</h2>
-  <p>Pin threads: <code>taskset -c 0-23 ./bin/cycle_finder --input graphs/huge_graph.bin --threads 24</code></p>
-
-
- </body>
+</body>
 </html>
