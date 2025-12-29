@@ -6,25 +6,6 @@
 // Parallel hashmap for better performance in DLS
 #include <parallel_hashmap/phmap.h>
 
-// Lock-free global visited bitmap (1 bit per node) to avoid header mismatches and reduce contention.
-// Words stored as uint64_t and accessed with atomic builtins to avoid vector-of-atomic pitfalls.
-static std::vector<uint64_t> s_visited_words;
-static inline void InitializeVisitedGlobal(size_t n) {
-    size_t words = (n + 63) / 64;
-    s_visited_words.resize(words);
-    for (auto &w : s_visited_words) w = 0;
-}
-static inline bool IsVisitedGlobal(uint64_t node) {
-    size_t idx = node >> 6;
-    uint64_t mask = 1ULL << (node & 63);
-    return (__atomic_load_n(&s_visited_words[idx], __ATOMIC_RELAXED) & mask) != 0;
-}
-static inline void MarkVisitedGlobal(uint64_t node) {
-    size_t idx = node >> 6;
-    uint64_t mask = 1ULL << (node & 63);
-    __atomic_fetch_or(&s_visited_words[idx], mask, __ATOMIC_RELAXED);
-}
-
 /**
  * @file cycle_finder.cpp
  * @brief Implementation of functions for cycle detection and analysis in a sequence graph.
@@ -59,7 +40,10 @@ bool CycleFinder::_IncomingNotEqualToCurrentNode(uint64_t node, size_t edge_inde
 bool CycleFinder::_BackgroundCheck(uint64_t original_node, size_t repeat_multiplicity, uint64_t neighbor_node) {
     auto neighbor_node_multiplicity = this->settings.sdbg->EdgeMultiplicity(neighbor_node);
     // Use lock-free visited test (atomic bitset) to avoid contention
-    if (IsVisitedGlobal(neighbor_node)) {
+    size_t idx = neighbor_node >> 6;
+    uint64_t mask = 1ULL << (neighbor_node & 63);
+    int tid = omp_get_thread_num();
+    if ((per_thread_visited[tid][idx] & mask) != 0) {
         return false;
     }
     if (repeat_multiplicity / neighbor_node_multiplicity > 500) {
@@ -236,8 +220,12 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
 
     // Mark visited nodes atomically (no global critical section)
     for (const auto& cycle : cycles)
-        for (const auto& node : cycle)
-            MarkVisitedGlobal(node);
+        for (const auto& node : cycle) {
+            size_t idx = node >> 6;
+            uint64_t mask = 1ULL << (node & 63);
+            int tid = omp_get_thread_num();
+            per_thread_visited[tid][idx] |= mask;
+        }
 
     return cycles;
 }
@@ -478,7 +466,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
     std::cout << "Graph size: " << this->settings.sdbg->size() << " nodes; gathered tips: " << tips.size() << std::endl;
     
     this->InvalidateMultiplicityOneNodes();
-    for (uint64_t tip : tips) {
+    for ( uint64_t tip : tips) {
         this->RecursiveReduction(tip);
     }
     int valid_edges = 0;
@@ -496,7 +484,6 @@ int CycleFinder::FindApproximateCRISPRArrays()
     int cumulative = 0;
     std::cout << "Total nodes in graph: " << this->settings.sdbg->size() << std::endl;
     string mode = "fastq";
-    InitializeVisitedGlobal(this->settings.sdbg->size());
     std::cout << "Starting cycle enumeration: max_len=" << this->settings.cycle_finder_settings.cycle_max_length
               << " min_len=" << this->settings.cycle_finder_settings.cycle_min_length
               << " threads=" << this->settings.threads << std::endl;
@@ -506,6 +493,12 @@ int CycleFinder::FindApproximateCRISPRArrays()
     size_t start_nodes_amount=this->ChunkStartNodes(start_nodes_chunked);
     std::cout << "Start nodes found in chunks: " << start_nodes_amount << std::endl;
     size_t counter = 0;
+    int max_threads = static_cast<int>(this->settings.threads);
+    size_t words = (this->settings.sdbg->size() + 63) / 64;
+    per_thread_visited.resize(max_threads);
+    for (auto &v : per_thread_visited) {
+        v.resize(words, 0);
+    }
     for (auto nodes_iterator = start_nodes_chunked.begin(); nodes_iterator != start_nodes_chunked.end(); nodes_iterator++) {
         size_t cumulative_at_bucket_start = cumulative;
         auto thread_count = static_cast<int>(this->settings.threads);
@@ -523,7 +516,6 @@ int CycleFinder::FindApproximateCRISPRArrays()
             #pragma omp for schedule(static)
             for (uint64_t start_node_index = 0; start_node_index < nodes_iterator->second.size(); start_node_index++) {
                 uint64_t start_node = nodes_iterator->second[start_node_index];
-                if (IsVisitedGlobal(start_node)) continue;
                 vector<vector<uint64_t>> cycles = this->FindCycleUtil(start_node);
                 local_cycle_counts[tid] += cycles.size();
                 local_processed[tid] += 1;

@@ -514,14 +514,14 @@ int main(int argc, char** argv) {
     // %% PARSE ARGUMENTS %%
 
     // %% BUILD GRAPH %%
-    SDBGBuild sdbg_build(settings);
+    //SDBGBuild sdbg_build(settings);
     // %% BUILD GRAPH %%
     
     // %% LOAD GRAPH %%
     // cycle finder max/min length are read from settings.cycle_finder_settings
     SDBG sdbg;
     string graph_folder_old = settings.graph_folder;
-    settings.graph_folder+="/graph";
+    settings.graph_folder = "/home/alex/mcaat_iterations/optimization/mcaat/build/mcaat_run_2025-12-29_10-33-49/graph/graph";
     char * cstr = new char [settings.graph_folder.length()+1];
     std::strcpy (cstr, settings.graph_folder.c_str());
     cout << "Graph folder: " << cstr << endl;

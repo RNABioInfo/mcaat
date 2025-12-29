@@ -31,25 +31,9 @@ class CycleFinder {
         //SDBG& sdbg;
         uint16_t cluster_bounds;
         // visited bitset stored as 64-bit words (1 bit per node). Use atomic builtins on the words to avoid non-copyable std::atomic in vectors.
-        std::vector<uint64_t> visited_words;
+        vector<vector<uint64_t>> per_thread_visited;
         vector<bool> look_up_table;
 
-        // helpers for visited bitset (lock-free via gcc/clang atomic builtins)
-        inline void InitializeVisited(size_t n) {
-            size_t words = (n + 63) / 64;
-            this->visited_words.resize(words);
-            for (auto &w : this->visited_words) w = 0;
-        }
-        inline bool IsVisited(uint64_t node) const {
-            size_t idx = node >> 6;
-            uint64_t mask = 1ULL << (node & 63);
-            return (__atomic_load_n(&this->visited_words[idx], __ATOMIC_RELAXED) & mask) != 0;
-        }
-        inline void MarkVisited(uint64_t node) {
-            size_t idx = node >> 6;
-            uint64_t mask = 1ULL << (node & 63);
-            __atomic_fetch_or(&this->visited_words[idx], mask, __ATOMIC_RELAXED);
-        }
         // thread count obtained from settings
 
         //#### DEVELOPER FUNCTIONS ####
