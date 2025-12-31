@@ -1,19 +1,25 @@
-## 😸 MCAAT - Metagenomic CRISPR Array Analysis Tool
+## MCAAT — Metagenomic CRISPR Array Analysis Tool
 
-- CRISPR-Cas is a bacterial immune system also famous for its use in genome editing. The diversity of known systems could be significantly increased by metagenomic data. 
-- Here we present the Metagenomic CRISPR Array Analysis Tool MCAAT, a highly sensitive algorithm for finding CRISPR Arrays in un-assembled metagenomic data. 
-- It takes advantage of the properties of CRISPR arrays that form multicycles in de Bruijn graphs. 
-- MCAAT's assembly-free graph-based strategy outperforms assembly-based workflows and other assembly-free methods on synthetic and real metagenomes. 
----
+Usage
+-----
+```
+./mcaat --input-files <file1> [file2] [--ram <amount>] [--threads <num>] [--output-folder <path>] [--help]
+```
 
-### 🥳 NEWS
-- Docker container available under: https://hub.docker.com/r/feeka94/mcaat
-- Version 0.3 makes use of following optimization techniques:
-  - Better data structures for preprocessing, `phmap::flat_hash_set`
-  - Added compiler intrinsics to guide the hardware in the right direction
-  - Reserving the capacity to prevent rehashing
-In depth technical details: [educational resource](./src/z_educational_guide.md) and [optimization developer notes](./src/z_optimization_dev_notes.md). 
+Quick description
+-----------------
+MCAAT detects CRISPR arrays in unassembled metagenomic reads using de Bruijn graph cycle detection. 
 
+Examples
+--------
+Paired-end:
+```
+./mcaat --input-files reads_R1.fastq reads_R2.fastq --ram 8G --threads 12 --output-folder results
+```
+Single-end:
+```
+./mcaat --input-files reads.fastq
+```
 
 ### Installation using docker
 #### Docker Build
@@ -57,7 +63,7 @@ docker rmi mcaat
 
 ### Compiling the project
 
-#### 🔧 Build the Project
+#### Build the Project
 To allow ./install.sh make changes, we execute following command:
 ```bash
 chmod +x ./install.sh
@@ -73,35 +79,20 @@ It is also possible to install the library by simply putting the --install flag.
 To clean up you can use --clean flag.
 
 ---
+### Command-Line Arguments
 
+Required
+- `--input_files <file1> [file2]` — One or two FASTA/FASTQ files (single or paired-end).
 
-### Usage
-
-```bash
-./mcaat --input-files <file1> [file2] [--ram <amount>] [--threads <num>] [--output-folder <path>] [--help]
-```
-
----
-### 🧾 Command-Line Arguments
-
-#### ✅ Required
-
-| Argument                  | Description                                                                 |
-|---------------------------|-----------------------------------------------------------------------------|
-| `--input_files <file1> [file2]` | One or two input FASTA/FASTQ files. If one file is provided, it is treated as single-end data. If two files are provided, they are treated as paired-end reads. |
-
-#### ⚙️ Optional
-
-| Argument                  | Description                                                                 |
-|---------------------------|-----------------------------------------------------------------------------|
-| `--ram <amount>`          | Maximum RAM to use. Units: `B`, `K`, `M`, `G`. <br>**Default:** 95% of system RAM <br>**Example:** `--ram 4G` |
-| `--threads <num>`         | Number of threads to use. <br>**Default:** total CPU cores minus 2          |
-| `--output-folder <path>`  | Output directory for results. <br>If not provided, a timestamped folder will be created automatically. If provided, the folder is used exactly as given. |
-| `--help`, `-h`            | Show usage information and exit                                            |
+Optional
+- `--ram <amount>` — Max RAM (e.g. 4G). Default: ~95% of system RAM.
+- `--threads <num>` — Number of threads. Default: CPU cores - 2.
+- `--output-folder <path>` — Output directory (default: timestamped folder).
+- `--help`, `-h` — Show help and exit.
 
 ---
 
-### 📁 Output Structure
+### Output
 
 The tool creates the following directory structure inside the specified output folder:
 
@@ -112,7 +103,7 @@ The tool creates the following directory structure inside the specified output f
 
 ---
 
-### 🧪 Example Usage
+### Examples
 
 | Scenario                     | Command                                                                 |
 |-----------------------------|-------------------------------------------------------------------------|
@@ -130,29 +121,23 @@ The tool creates the following directory structure inside the specified output f
 
 ---
 
-### ⚙️ Settings file support
+### Settings file
 
 Create a simple key=value text file (one setting per line) and pass it with `--settings /path/to/file`.
 
-The program reads values from this file unless you override them with CLI flags. If you change the file, run the program again — new values will be used.
+CLI flags override file values.
 
-Example of ```settings.txt``` (must include `input_files`):
+Example `settings.txt` (must include `input_files`):
 ```
-# MUST INCLUDE
-input_files=/data/sample_folder/1.fastq /data/sample_folder/2.fastq.fastq
+input_files=/data/sample/1.fastq /data/sample/2.fastq
 ram=128G
 threads=26
-output_folder=results/run_2025-11-19
-# OPTIONAL
-cycle_max_length=77
-cycle_min_length=27
-threshold_multiplicity=20
-low_abundance=true
+output_folder=results/run1
 ```
 
 Notes:
-- `input_files` accepts one or two paths; entries may be separated by spaces, commas, or semicolons.
-- Terminal values will override the ```settings.txt```. For example for simplicity you can use the ```settings.txt``` file and change only ```-i``` parameter.
+- `input_files` accepts one or two paths (space, comma, or semicolon separated).
+- CLI flags override file values.
 
 ---
 
