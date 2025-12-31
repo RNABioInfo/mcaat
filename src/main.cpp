@@ -553,7 +553,9 @@ int main(int argc, char** argv) {
     //%% POST PROCESSING %%
     
     // %% DELETE THE GRAPH FOLDER %%
+
     fs::remove_all(graph_folder_old);
+    std::cout << "Removed folder: " << graph_folder_old << std::endl;
     // %% DELETE THE GRAPH FOLDER %%      
     
     /*
