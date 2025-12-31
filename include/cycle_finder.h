@@ -30,8 +30,10 @@ class CycleFinder {
         // Use SDBG pointer from settings everywhere instead of storing a separate reference
         //SDBG& sdbg;
         uint16_t cluster_bounds;
-        vector<bool> visited;
+        // visited bitset stored as 64-bit words (1 bit per node). Use atomic builtins on the words to avoid non-copyable std::atomic in vectors.
+        vector<vector<uint64_t>> per_thread_visited;
         vector<bool> look_up_table;
+
         // thread count obtained from settings
 
         //#### DEVELOPER FUNCTIONS ####

@@ -39,16 +39,20 @@ bool CycleFinder::_IncomingNotEqualToCurrentNode(uint64_t node, size_t edge_inde
  */
 bool CycleFinder::_BackgroundCheck(uint64_t original_node, size_t repeat_multiplicity, uint64_t neighbor_node) {
     auto neighbor_node_multiplicity = this->settings.sdbg->EdgeMultiplicity(neighbor_node);
-    if(this->visited[neighbor_node]) {
+    // Use lock-free visited test (atomic bitset) to avoid contention
+    size_t idx = neighbor_node >> 6;
+    uint64_t mask = 1ULL << (neighbor_node & 63);
+    int tid = omp_get_thread_num();
+    if ((per_thread_visited[tid][idx] & mask) != 0) {
         return false;
     }
     if (repeat_multiplicity / neighbor_node_multiplicity > 500) {
         return false;
     }
-    if(original_node == neighbor_node) {
+    if (original_node == neighbor_node) {
         return false;
     }
-    return true;
+    return true; 
 }
 
 
@@ -212,15 +216,17 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
     }
     
     
-    if(cycles.empty()) return {};
-    
-    #pragma omp critical
-    {
-        for (const auto& cycle : cycles) 
-            for (const auto& node : cycle) 
-                this->visited[node] = true;
-    }
-    
+    if (cycles.empty()) return {};
+
+    // Mark visited nodes atomically (no global critical section)
+    for (const auto& cycle : cycles)
+        for (const auto& node : cycle) {
+            size_t idx = node >> 6;
+            uint64_t mask = 1ULL << (node & 63);
+            int tid = omp_get_thread_num();
+            per_thread_visited[tid][idx] |= mask;
+        }
+
     return cycles;
 }
 
@@ -344,17 +350,31 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
 
 
 vector<uint64_t> CycleFinder::CollectTips() {
-    
-    unordered_set<uint64_t> tips;
+    size_t n = this->settings.sdbg->size();
+    int threads = static_cast<int>(this->settings.threads);
+    vector<vector<uint64_t>> local_tips(threads);
 
-    #pragma omp parallel for
-    for (uint64_t node = 0; node < this->settings.sdbg->size(); node++) 
-        if(this->settings.sdbg->EdgeOutdegree(node) == 0 && this->settings.sdbg->IsValidEdge(node)) {
-            #pragma omp critical
-            tips.insert(node);
+    #pragma omp parallel num_threads(threads)
+    {
+        int tid = omp_get_thread_num();
+        #pragma omp for schedule(static)
+        for (uint64_t node = 0; node < n; node++) {
+            if (this->settings.sdbg->EdgeOutdegree(node) == 0 && this->settings.sdbg->IsValidEdge(node)) {
+                local_tips[tid].push_back(node);
+            }
         }
-    return vector<uint64_t>(tips.begin(), tips.end());
-}
+    }
+
+    // Merge results while keeping memory usage minimal
+    size_t total = 0;
+    for (auto &v : local_tips) total += v.size();
+    vector<uint64_t> tips;
+    tips.reserve(total);
+    for (auto &v : local_tips) {
+        tips.insert(tips.end(), v.begin(), v.end());
+    }
+    return tips;
+} 
 
 void CycleFinder::RecursiveReduction(uint64_t tip) {
     if (this->settings.sdbg->EdgeOutdegree(tip)> 0) 
@@ -385,38 +405,47 @@ void CycleFinder::InvalidateMultiplicityOneNodes() {
  * @brief Chunks the start nodes based on their multiplicity for parallel processing.
  */
 size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& start_nodes_chunked) {
-    uint64_t loaded = 0;
     const int chunk_size = 20000;
-    (void)0; // jump_stride removed; placeholder to mark consideration for future optimisation
     if(!this->settings.cycle_finder_settings.low_abundance){
         this->InvalidateMultiplicityOneNodes();
     }
-    #pragma omp parallel num_threads(static_cast<int>(this->settings.threads))
+    size_t n = this->settings.sdbg->size();
+    int threads = static_cast<int>(this->settings.threads);
+
+    // Per-thread chunk collectors to avoid global critical regions
+    vector<unordered_map<int, vector<uint64_t>>> local_chunks(threads);
+    std::atomic<uint64_t> loaded(0);
+
+    #pragma omp parallel num_threads(threads)
     {
+        int tid = omp_get_thread_num();
         #pragma omp for schedule(dynamic, chunk_size)
-        for (uint64_t node = 0; node < this->settings.sdbg->size(); node++) {
+        for (uint64_t node = 0; node < n; node++) {
             if(!this->settings.sdbg->IsValidEdge(node)) continue;
             size_t edge_indegree = this->settings.sdbg->EdgeIndegree(node);
-                // size_t edge_outdegree = this->settings.sdbg->EdgeOutdegree(node); // unused
-                loaded+=1; 
-                // Provide occasional progress updates during the expensive chunk scan (every 50M nodes)
-                if(loaded % 50000000 == 0) std::cout << "ChunkStartNodes: scanned " << (loaded / 1000000) << "M nodes" << std::endl;
-                if (edge_indegree >= 2 && this->settings.sdbg->EdgeMultiplicity(node) > this->settings.cycle_finder_settings.threshold_multiplicity)
-                {
-                    
-                    
-                    if(this->_IncomingNotEqualToCurrentNode(node,edge_indegree)) continue;
-                    int reached_depth = 0;
+            uint64_t my_loaded = loaded.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (my_loaded % 1000000 == 0) std::cout << "ChunkStartNodes: scanned " << (my_loaded / 1000000) << "M nodes" << std::endl;
+            if (edge_indegree >= 2 && this->settings.sdbg->EdgeMultiplicity(node) > this->settings.cycle_finder_settings.threshold_multiplicity)
+            {
+                if(this->_IncomingNotEqualToCurrentNode(node, edge_indegree)) continue;
+                int reached_depth = 0;
 
-                    bool dls = this->DepthLevelSearch(node, node, this->settings.cycle_finder_settings.cycle_max_length, reached_depth);
-                    if(!dls) continue; //|-> the last version!
-            
-                    double log2_mult = ceil(log2(double(this->settings.sdbg->EdgeMultiplicity(node))));
-                    #pragma omp critical
-                    start_nodes_chunked[log2_mult].push_back(node);
+                bool dls = this->DepthLevelSearch(node, node, this->settings.cycle_finder_settings.cycle_max_length, reached_depth);
+                if(!dls) continue;
+                int log2_mult = static_cast<int>(ceil(log2(double(this->settings.sdbg->EdgeMultiplicity(node)))));
+                local_chunks[tid][log2_mult].push_back(node);
             }
         }
     }
+
+    // Merge local chunks into the shared map (serial merge to avoid contention)
+    for (int t = 0; t < threads; ++t) {
+        for (auto &entry : local_chunks[t]) {
+            auto &vec = start_nodes_chunked[entry.first];
+            vec.insert(vec.end(), entry.second.begin(), entry.second.end());
+        }
+    }
+
    //writeStartNodesToFile(start_nodes_chunked, "start_nodes.txt");
     size_t sum_of_all_quantities_in_all_chunks = 0;
     for (const auto& [key, value] : start_nodes_chunked) {
@@ -424,7 +453,7 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
         sum_of_all_quantities_in_all_chunks += value.size();
     }
     return sum_of_all_quantities_in_all_chunks;
-}
+} 
 
 
 /**
@@ -437,7 +466,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
     std::cout << "Graph size: " << this->settings.sdbg->size() << " nodes; gathered tips: " << tips.size() << std::endl;
     
     this->InvalidateMultiplicityOneNodes();
-    for (uint64_t tip : tips) {
+    for ( uint64_t tip : tips) {
         this->RecursiveReduction(tip);
     }
     int valid_edges = 0;
@@ -455,7 +484,6 @@ int CycleFinder::FindApproximateCRISPRArrays()
     int cumulative = 0;
     std::cout << "Total nodes in graph: " << this->settings.sdbg->size() << std::endl;
     string mode = "fastq";
-    this->visited.resize(this->settings.sdbg->size(), false);
     std::cout << "Starting cycle enumeration: max_len=" << this->settings.cycle_finder_settings.cycle_max_length
               << " min_len=" << this->settings.cycle_finder_settings.cycle_min_length
               << " threads=" << this->settings.threads << std::endl;
@@ -465,25 +493,52 @@ int CycleFinder::FindApproximateCRISPRArrays()
     size_t start_nodes_amount=this->ChunkStartNodes(start_nodes_chunked);
     std::cout << "Start nodes found in chunks: " << start_nodes_amount << std::endl;
     size_t counter = 0;
+    int max_threads = static_cast<int>(this->settings.threads);
+    size_t words = (this->settings.sdbg->size() + 63) / 64;
+    per_thread_visited.resize(max_threads);
+    for (auto &v : per_thread_visited) {
+        v.resize(words, 0);
+    }
     for (auto nodes_iterator = start_nodes_chunked.begin(); nodes_iterator != start_nodes_chunked.end(); nodes_iterator++) {
         size_t cumulative_at_bucket_start = cumulative;
         auto thread_count = static_cast<int>(this->settings.threads);
         if (static_cast<int>(nodes_iterator->second.size()) < thread_count)
             thread_count = nodes_iterator->second.size();
-        #pragma omp parallel for num_threads(thread_count) reduction(+:cumulative) shared(nodes_iterator, visited)
-        for (uint64_t start_node_index = 0; start_node_index < nodes_iterator->second.size(); start_node_index++) {
-            uint64_t start_node = nodes_iterator->second[start_node_index];
-            if (this->visited[start_node]) continue;
-            vector<vector<uint64_t>> cycles = this->FindCycleUtil(start_node);
-            cumulative += cycles.size();
-            this->results[start_node] = cycles;
-            ++counter;
+
+        // Per-thread results to avoid concurrent modification of shared unordered_map
+        vector<unordered_map<uint64_t, vector<vector<uint64_t>>>> local_results(thread_count);
+        vector<size_t> local_cycle_counts(thread_count, 0);
+        vector<size_t> local_processed(thread_count, 0);
+
+        #pragma omp parallel num_threads(thread_count)
+        {
+            int tid = omp_get_thread_num();
+            #pragma omp for schedule(static)
+            for (uint64_t start_node_index = 0; start_node_index < nodes_iterator->second.size(); start_node_index++) {
+                uint64_t start_node = nodes_iterator->second[start_node_index];
+                vector<vector<uint64_t>> cycles = this->FindCycleUtil(start_node);
+                local_cycle_counts[tid] += cycles.size();
+                local_processed[tid] += 1;
+                if (!cycles.empty()) {
+                    local_results[tid][start_node] = std::move(cycles);
+                }
+            }
         }
+
+        // Merge local results into shared structures (serial merge)
+        for (int t = 0; t < thread_count; ++t) {
+            for (auto &entry : local_results[t]) {
+                this->results[entry.first] = std::move(entry.second);
+            }
+            cumulative += local_cycle_counts[t];
+            counter += local_processed[t];
+        }
+
         malloc_trim(0);
-          // Summarize work performed for this multiplicity bucket and avoid printing too often
+        // Summarize work performed for this multiplicity bucket and avoid printing too often
         size_t cycles_in_bucket = cumulative - cumulative_at_bucket_start;
-          std::cout << "Bucket log2_mult=" << nodes_iterator->first << ": processed " << nodes_iterator->second.size()
-                << " nodes, found " << cycles_in_bucket << " cycles (cumulative " << cumulative << ")" << std::endl;
+        std::cout << "Bucket log2_mult=" << nodes_iterator->first << ": processed " << nodes_iterator->second.size()
+                  << " nodes, found " << cycles_in_bucket << " cycles (cumulative " << cumulative << ")" << std::endl;
     }
         // Completed cycle enumeration
         std::cout << "Cycle enumeration completed: total cycles=" << cumulative

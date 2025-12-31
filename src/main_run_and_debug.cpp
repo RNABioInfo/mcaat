@@ -37,7 +37,11 @@ vector<tuple<string, string, vector<string>, float, float>> run_and_debug_spacer
     chrono::_V2::system_clock::time_point start_time = chrono::high_resolution_clock::now();
     
     cout << "  ▸ Splitting into subproblems" << endl;
-    const size_t reads_size = reads.at(0).size();
+    if (reads.empty()) {
+        cout << "  ▸ No reads found, skipping spacer ordering" << endl;
+        return {};
+    }
+    const size_t reads_size = reads[0].size();
     auto subgraphs = get_crispr_regions_extended_by_k(sdbg, reads_size, cycles);
 
     cout << "  🔄 Filtering subproblems:" << endl;
