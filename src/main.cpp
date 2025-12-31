@@ -513,15 +513,25 @@ int main(int argc, char** argv) {
     }
     // %% PARSE ARGUMENTS %%
 
+<<<<<<< HEAD
     // %% BUILD GRAPH %%
     //SDBGBuild sdbg_build(settings);
+=======
+    //// %% BUILD GRAPH %%
+    SDBGBuild sdbg_build(settings);
+>>>>>>> 828441a (rolled back from ordering)
     // %% BUILD GRAPH %%
     
     // %% LOAD GRAPH %%
     // cycle finder max/min length are read from settings.cycle_finder_settings
     SDBG sdbg;
     string graph_folder_old = settings.graph_folder;
+<<<<<<< HEAD
     settings.graph_folder = "/home/alex/mcaat_iterations/optimization/mcaat/build/mcaat_run_2025-12-29_10-33-49/graph/graph";
+=======
+    settings.graph_folder+="/graph";
+    //settings.graph_folder="/vol/d/development/git/mcaat_master/optimizations/mcaat/build/mcaat_run_2025-12-29_11-15-30/graph/graph";
+>>>>>>> 828441a (rolled back from ordering)
     char * cstr = new char [settings.graph_folder.length()+1];
     std::strcpy (cstr, settings.graph_folder.c_str());
     cout << "Graph folder: " << cstr << endl;
@@ -538,7 +548,24 @@ int main(int argc, char** argv) {
     auto cycles_map = cycle_finder.results;
     cout << "Number of nodes in results: " << cycles_map.size() << endl;
     // %% FBCE ALGORITHM %%
+    int number_of_spacers = 0;
+    // %% FILTERS %%
+    cout << "FILTERS START:" << endl;
+    Filters filters(sdbg, cycles_map);
+    auto  SYSTEMS = filters.ListArrays(number_of_spacers);
+    cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
+    //%% POST PROCESSING %%
+    cout << "POST PROCESSING START:" << endl;
+    CRISPRAnalyzer analyzer(SYSTEMS, settings.output_file);
+    analyzer.run_analysis();
+    cout << "Saved in: " << settings.output_file << endl;
+    //%% POST PROCESSING %%
     
+    // %% DELETE THE GRAPH FOLDER %%
+    fs::remove_all(graph_folder_old);
+    // %% DELETE THE GRAPH FOLDER %%      
+    
+    /*
     auto cycles = cycles_map_to_cycles(cycles_map); // easier type to handle
 
     cout << "\n══════════════════════════════════════════════" << endl;
@@ -587,6 +614,10 @@ int main(int argc, char** argv) {
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Warning: Could not remove graph folder: " << e.what() << std::endl;
     }
-    // %% DELETE THE GRAPH FOLDER %%            
+        
+    // %% DELETE THE GRAPH FOLDER %%
+                
+}
+    */
 }
 #endif

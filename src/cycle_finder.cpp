@@ -424,7 +424,7 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
             if(!this->settings.sdbg->IsValidEdge(node)) continue;
             size_t edge_indegree = this->settings.sdbg->EdgeIndegree(node);
             uint64_t my_loaded = loaded.fetch_add(1, std::memory_order_relaxed) + 1;
-            if (my_loaded % 5000 == 0 && omp_get_thread_num() == 0) std::cout << "ChunkStartNodes: scanned " << (my_loaded / 1000000) << "M nodes" << std::endl;
+            if (my_loaded % 1000000 == 0) std::cout << "ChunkStartNodes: scanned " << (my_loaded / 1000000) << "M nodes" << std::endl;
             if (edge_indegree >= 2 && this->settings.sdbg->EdgeMultiplicity(node) > this->settings.cycle_finder_settings.threshold_multiplicity)
             {
                 if(this->_IncomingNotEqualToCurrentNode(node, edge_indegree)) continue;
