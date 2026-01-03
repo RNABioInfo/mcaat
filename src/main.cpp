@@ -514,14 +514,14 @@ int main(int argc, char** argv) {
     // %% PARSE ARGUMENTS %%
 
     //// %% BUILD GRAPH %%
-    SDBGBuild sdbg_build(settings);
+    //SDBGBuild sdbg_build(settings);
     //// %% BUILD GRAPH %%
     
     // %% LOAD GRAPH %%
     // cycle finder max/min length are read from settings.cycle_finder_settings
     SDBG sdbg;
     string graph_folder_old = settings.graph_folder;
-    settings.graph_folder+="/graph";
+    settings.graph_folder="/vol/d/development/git/mcaat_master/optimizations/mcaat/build/mcaat_run_2026-01-01_08-28-47/graph/graph";
     //settings.graph_folder="/vol/d/development/git/mcaat_master/optimizations/mcaat/build/mcaat_run_2025-12-29_11-15-30/graph/graph";
       char * cstr = new char [settings.graph_folder.length()+1];
     std::strcpy (cstr, settings.graph_folder.c_str());
@@ -554,7 +554,7 @@ int main(int argc, char** argv) {
     
     // %% DELETE THE GRAPH FOLDER %%
 
-    fs::remove_all(graph_folder_old);
+    //fs::remove_all(graph_folder_old);
     std::cout << "Removed folder: " << graph_folder_old << std::endl;
     // %% DELETE THE GRAPH FOLDER %%      
     

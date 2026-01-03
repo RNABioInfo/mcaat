@@ -45,14 +45,14 @@ class CycleFinder {
         //#### HELPER FUNCTIONS FOR CYCLE ENUMERATION ####
         bool _IncomingNotEqualToCurrentNode(uint64_t node, size_t edge_indegree);
         bool _BackgroundCheck(uint64_t original_node, size_t repeat_multiplicity, uint64_t current_node);
-        void _GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set, size_t repeat_multiplicity);
-        void _GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set, size_t repeat_multiplicity);
+        void _GetOutgoings(uint64_t node, phmap::flat_hash_set<uint64_t>& outgoings_set, size_t repeat_multiplicity);
+        void _GetIncomings(uint64_t node, phmap::flat_hash_set<uint64_t>& incomings_set, size_t repeat_multiplicity);
         //#### HELPER FUNCTIONS FOR CYCLE ENUMERATION ####
 
 
         //#### HELPER FUNCTIONS FOR DLS ###
-        void _GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set);
-        void _GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set);
+        void _GetOutgoings(uint64_t node, phmap::flat_hash_set<uint64_t>& outgoings_set);
+        void _GetIncomings(uint64_t node, phmap::flat_hash_set<uint64_t>& incomings_set);
         //#### HELPER FUNCTIONS FOR DLS ####
 
     public:
@@ -73,7 +73,7 @@ class CycleFinder {
         //#### DLS ####
         string CreateFolder();
         //#### CYCLE ENUMERATION ####
-        vector<vector<uint64_t>> FindCycle(uint64_t start_node, vector<uint64_t> path, map<uint64_t, int> lock, vector<unordered_set<uint64_t>> stack, vector<int> backtrack_lengths);
+        vector<vector<uint64_t>> FindCycle(uint64_t start_node, vector<uint64_t>& path, phmap::flat_hash_map<uint64_t, int>& lock, vector<phmap::flat_hash_set<uint64_t>>& stack, vector<int>& backtrack_lengths);
         vector<vector<uint64_t>> FindCycleUtil(uint64_t startnode);
         //#### CYCLE ENUMERATION ####
         void MarkCycleNodesUpTo100();

@@ -59,7 +59,7 @@ bool CycleFinder::_BackgroundCheck(uint64_t original_node, size_t repeat_multipl
 /**
  * @brief Gets the outgoing edges of a node that pass the background check.
  */
-void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set, size_t repeat_multiplicity) {
+void CycleFinder::_GetOutgoings(uint64_t node, phmap::flat_hash_set<uint64_t>& outgoings_set, size_t repeat_multiplicity) {
    
     int edge_outdegree = this->settings.sdbg->EdgeOutdegree(node);
     if (edge_outdegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -77,7 +77,7 @@ void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoing
 /**
  * @brief Retrieves the incoming edges of a node that pass the background check.
  */
-void CycleFinder::_GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set, size_t repeat_multiplicity) {
+void CycleFinder::_GetIncomings(uint64_t node, phmap::flat_hash_set<uint64_t>& incomings_set, size_t repeat_multiplicity) {
   
     int edge_indegree = this->settings.sdbg->EdgeIndegree(node);
     if (edge_indegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -94,7 +94,7 @@ void CycleFinder::_GetIncomings(uint64_t node, unordered_set<uint64_t>& incoming
 /**
  * @brief Gets the outgoing edges of a node that pass the background check.
  */
-void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set) {
+void CycleFinder::_GetOutgoings(uint64_t node, phmap::flat_hash_set<uint64_t>& outgoings_set) {
    
     int edge_outdegree = this->settings.sdbg->EdgeOutdegree(node);
     if (edge_outdegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -112,7 +112,7 @@ void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoing
 /**
  * @brief Retrieves the incoming edges of a node that pass the background check.
  */
-void CycleFinder::_GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set) {
+void CycleFinder::_GetIncomings(uint64_t node, phmap::flat_hash_set<uint64_t>& incomings_set) {
   
     int edge_indegree = this->settings.sdbg->EdgeIndegree(node);
     if (edge_indegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -141,8 +141,8 @@ CycleFinder::CycleFinder(Settings& settings)
     this->FindApproximateCRISPRArrays();
 }
 
-vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint64_t> path, map<uint64_t, int> lock, vector<unordered_set<uint64_t>> stack, 
-                                        vector<int> backtrack_lengths) {
+vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint64_t>& path, phmap::flat_hash_map<uint64_t, int>& lock, vector<phmap::flat_hash_set<uint64_t>>& stack, 
+                                        vector<int>& backtrack_lengths) {
     int counter = 0;
     uint64_t current_node = start_node;
     vector<vector<uint64_t>> cycles;
@@ -154,7 +154,7 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
             break;
         }
         
-        unordered_set<uint64_t> neighbors = stack.back();
+        phmap::flat_hash_set<uint64_t> neighbors = stack.back();
         bool flag = true;
         for (auto neighbor : neighbors) {
             current_node = neighbor;
@@ -175,9 +175,9 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                 backtrack_lengths.push_back(this->settings.cycle_finder_settings.cycle_max_length);
                 lock[neighbor] = path.size();
                 stack.back().erase(neighbor);
-                unordered_set<uint64_t> outgoings;
+                phmap::flat_hash_set<uint64_t> outgoings;
                 this->_GetOutgoings(neighbor, outgoings, this->settings.sdbg->EdgeMultiplicity(start_node));
-                stack.push_back(outgoings);
+                stack.push_back(std::move(outgoings));
                 flag = false;
                 break;
             }
@@ -196,7 +196,7 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                 vector<pair<int, int>> relax_stack;
                 relax_stack.push_back(make_pair(backtrack_length, v));
 
-                unordered_set<uint64_t> path_set(path.begin(), path.end());
+                phmap::flat_hash_set<uint64_t> path_set(path.begin(), path.end());
 
                 while (!relax_stack.empty()) {
                     int bl = relax_stack.back().first;
@@ -204,7 +204,7 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                     relax_stack.pop_back();
                     if (lock.try_emplace(u, this->settings.cycle_finder_settings.cycle_max_length).first->second < this->settings.cycle_finder_settings.cycle_max_length - bl + 1) {
                         lock[u] = this->settings.cycle_finder_settings.cycle_max_length - bl + 1;
-                        unordered_set<uint64_t> incomings;
+                        phmap::flat_hash_set<uint64_t> incomings;
                         this->_GetIncomings(u, incomings, this->settings.sdbg->EdgeMultiplicity(start_node));
                         for (auto w : incomings)
                             if (path_set.find(w) == path_set.end())
@@ -236,23 +236,26 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
  */
 vector<vector<uint64_t>> CycleFinder::FindCycleUtil(uint64_t start_node) {
     vector<uint64_t> path;
-    map<uint64_t, int> lock;
-    vector<unordered_set<uint64_t>> stack;
+    phmap::flat_hash_map<uint64_t, int> lock;
+    vector<phmap::flat_hash_set<uint64_t>> stack;
     vector<int> backtrack_lengths;
+    path.reserve(this->settings.cycle_finder_settings.cycle_max_length);
+    backtrack_lengths.reserve(this->settings.cycle_finder_settings.cycle_max_length);
+    stack.reserve(this->settings.cycle_finder_settings.cycle_max_length);
     path.push_back(start_node);
     lock[start_node] = 0;
-    unordered_set<uint64_t> outgoings;
+    phmap::flat_hash_set<uint64_t> outgoings;
     this->_GetOutgoings(start_node, outgoings, this->settings.sdbg->EdgeMultiplicity(start_node));
-    stack.push_back(outgoings);
+    stack.push_back(std::move(outgoings));
     backtrack_lengths.push_back(this->settings.cycle_finder_settings.cycle_max_length);
     return FindCycle(start_node, path, lock, stack, backtrack_lengths);
 }
 /**
  * @brief Performs a depth-limited search to determine if a path exists between two nodes within a certain depth.
- * Optimized using megahit's graph traversal patterns.
+ * Optimized with early termination on cycle detection.
+ * Only returns true if cycle length is between min_cycle_length and max_cycle_length.
  */
 bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, int& reached_depth) {
-    // Megahit-style memory pool: Dynamic thread-local pools for reuse (no heuristic sizing)
     struct StackEntry {
         uint64_t node;
         int depth;
@@ -261,24 +264,21 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
     static thread_local std::vector<StackEntry> dls_stack_pool;
     static thread_local phmap::flat_hash_set<uint64_t> dls_visited_pool;
     
-    // Clear but keep capacity (megahit memory reuse pattern) - no fixed reserve
+    // Clear but keep capacity for reuse
     dls_stack_pool.clear();
     dls_visited_pool.clear();
     
-    // Reserve reasonable initial capacity to avoid reallocations
-    if (dls_stack_pool.capacity() == 0) {
-        dls_stack_pool.reserve(64);  // Small initial reserve
-    }
-
-    // Use pooled structures
     auto& dls_stack = dls_stack_pool;
     auto& dls_visited = dls_visited_pool;
 
-    // Cache values for faster comparison
+    // Cache SDBG pointer and settings to avoid repeated indirection
+    auto* sdbg = this->settings.sdbg;
     const uint64_t target_node = target;
-    const uint64_t start_node = start;
+    const int min_cycle_len = this->settings.cycle_finder_settings.cycle_min_length;
+    const int max_cycle_len = limit;  // limit is cycle_max_length
 
-    dls_stack.push_back({start_node, 0});
+    dls_stack.push_back({start, 0});
+    // Don't mark start as visited - we want to find it as a neighbor
     reached_depth = 0;
 
     while (!dls_stack.empty()) {
@@ -287,61 +287,60 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
         uint64_t v = current.node;
         int depth = current.depth;
 
-        // Check if the current node is valid
-        if (!this->settings.sdbg->IsValidEdge(v)) {
+        // Update reached depth
+        if (depth > reached_depth) {
+            reached_depth = depth;
+        }
+
+        // Depth limit reached - don't explore further from this node
+        if (depth >= max_cycle_len) {
             continue;
         }
 
-        // Update reached depth
-        reached_depth = depth;
+        // Skip invalid edges
+        if (__builtin_expect(!sdbg->IsValidEdge(v), 0)) {
+            continue;
+        }
 
-        // Get neighbors using SDBG API directly (megahit's pattern) - moved up for better branch prediction
-        // Use megahit's efficient zero-degree check for early termination
-        if (__builtin_expect(this->settings.sdbg->EdgeOutdegreeZero(v), 0)) {
+        // Early exit if no outgoing edges
+        if (__builtin_expect(sdbg->EdgeOutdegreeZero(v), 0)) {
             continue;
         }
         
-        int outdegree = this->settings.sdbg->EdgeOutdegree(v);
-
-        // Use fixed-size array for neighbors (megahit's pattern)
+        int outdegree = sdbg->EdgeOutdegree(v);
         uint64_t neighbors[MAX_EDGE_COUNT];
-        int flag = this->settings.sdbg->OutgoingEdges(v, neighbors);
+        int flag = sdbg->OutgoingEdges(v, neighbors);
 
         if (__builtin_expect(flag == -1, 0)) {
             continue;
         }
 
-        // Prefetch neighbors for better cache performance
-        __builtin_prefetch(&neighbors[0], 0, 1);
-
-        // Exceeded depth limit - check after we know we have neighbors
-        if (__builtin_expect(depth >= limit, 0)) {
-            continue;
-        }
-
-        // Process all neighbors to maintain correctness (removed faulty simple path optimization)
-        // Process neighbors in forward order (SIMD-friendly pattern from megahit)
-        // Unroll loop for small outdegrees to reduce overhead
-            // Unrolled loop for common case (de Bruijn graph max degree = 4)
-            for (int i = 0; i < outdegree; ++i) {
-                uint64_t neighbor = neighbors[i];
-                // Check if the neighbor is valid
-                if (!this->settings.sdbg->IsValidEdge(neighbor)) {
-                    continue;
-                }
-                auto visited_it = dls_visited.find(neighbor);
-                bool not_visited = (visited_it == dls_visited.end());
-                bool is_start_revisit = (neighbor == start_node && depth > 0);
-                
-                if (__builtin_expect(not_visited || is_start_revisit, 1)) {
-                    dls_visited.insert(neighbor);
-                    dls_stack.push_back({neighbor, depth + 1});
-                }
+        // Process neighbors with early cycle detection
+        for (int i = 0; i < outdegree; ++i) {
+            uint64_t neighbor = neighbors[i];
+            
+            // Skip invalid neighbors
+            if (!sdbg->IsValidEdge(neighbor)) {
+                continue;
             }
-        
-        // Megahit-style aggressive early cycle detection
-        if (__builtin_expect(v == target_node && depth > 1, 0)) {
-            return true;  // Found cycle - exit immediately
+            
+            // Check if we found cycle back to target
+            if (neighbor == target_node) {
+                int cycle_length = depth + 1;
+                // Only accept cycles within valid length range
+                if (cycle_length >= min_cycle_len && cycle_length <= max_cycle_len) {
+                    reached_depth = cycle_length;
+                    return true;
+                }
+                // Cycle too short - continue searching for longer cycles
+                continue;
+            }
+            
+            // Only explore unvisited nodes
+            if (dls_visited.find(neighbor) == dls_visited.end()) {
+                dls_visited.insert(neighbor);
+                dls_stack.push_back({neighbor, depth + 1});
+            }
         }
     }
 
@@ -379,7 +378,7 @@ vector<uint64_t> CycleFinder::CollectTips() {
 void CycleFinder::RecursiveReduction(uint64_t tip) {
     if (this->settings.sdbg->EdgeOutdegree(tip)> 0) 
         return;
-    unordered_set<uint64_t> parents;
+    phmap::flat_hash_set<uint64_t> parents;
     this->_GetIncomings(tip, parents);
     this->settings.sdbg->SetInvalidEdge(tip);
     for (uint64_t parent : parents) 
