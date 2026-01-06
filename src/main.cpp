@@ -514,14 +514,14 @@ int main(int argc, char** argv) {
     // %% PARSE ARGUMENTS %%
 
     //// %% BUILD GRAPH %%
-    //SDBGBuild sdbg_build(settings);
+    SDBGBuild sdbg_build(settings);
     //// %% BUILD GRAPH %%
     
     // %% LOAD GRAPH %%
     // cycle finder max/min length are read from settings.cycle_finder_settings
     SDBG sdbg;
     string graph_folder_old = settings.graph_folder;
-    settings.graph_folder="/vol/d/development/git/mcaat_master/optimizations/mcaat/build/mcaat_run_2026-01-01_08-28-47/graph/graph";
+    settings.graph_folder+="/graph";
     //settings.graph_folder="/vol/d/development/git/mcaat_master/optimizations/mcaat/build/mcaat_run_2025-12-29_11-15-30/graph/graph";
       char * cstr = new char [settings.graph_folder.length()+1];
     std::strcpy (cstr, settings.graph_folder.c_str());
@@ -530,7 +530,29 @@ int main(int argc, char** argv) {
     cout << "Loaded the graph" << endl;
     settings.sdbg = &sdbg;
     // %% LOAD GRAPH %%
+    // per graph calculate in and outdegree distributions of all multiplicity>=2 nodes
 
+    delete[] cstr;
+    double average_indegree = 0.0;
+    double average_outdegree = 0.0;
+
+    for (uint64_t node = 0; node < sdbg.size(); ++node) {
+        if (sdbg.IsValidEdge(node) && sdbg.EdgeMultiplicity(node) >= 2) {
+            average_indegree += sdbg.EdgeIndegree(node);
+            average_outdegree += sdbg.EdgeOutdegree(node);
+        }
+    }
+    average_indegree /= sdbg.size();
+    average_outdegree /= sdbg.size();
+    //append to a file in the output folder
+    ofstream dist_file("degree_distributions.txt", ios::app);
+
+    dist_file << "Input files: " << settings.input_files << endl;
+    dist_file << "Average Indegree of multiplicity>=2 nodes: " << average_indegree << endl;
+    dist_file << "Average Outdegree of multiplicity>=2 nodes: " << average_outdegree << endl;
+    dist_file << "----------------------------------------" << endl;    
+    dist_file.close();
+    /*
     // %% FBCE ALGORITHM %%
     cout << "FBCE START:" << endl;
     auto start_time = chrono::high_resolution_clock::now();
