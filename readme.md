@@ -12,16 +12,7 @@ Beam search-based amino acid translator for de Bruijn graph traversal.
 
 **Compile & Run:**
 ```bash
-g++ -std=c++17 -O3 -march=native -fopenmp -g \
-  -I./include -I./libs/megahit/src -I./libs/kseqpp/include \
-  -DXXH_INLINE_ALL -ftemplate-depth=3000 -Wall -Wno-unused-function \
-  -fprefetch-loop-arrays -funroll-loops \
-  src/main_test_acidator.cpp src/amino_acidator.cpp \
-  libs/megahit/src/sdbg/sdbg_meta.cpp \
-  libs/megahit/src/sdbg/sdbg_raw_content.cpp \
-  libs/megahit/src/sdbg/sdbg_writer.cpp \
-  libs/megahit/src/utils/options_description.cpp \
-  -lz -lpthread -o test_acidator
+g++ -std=c++17 -O3 -march=native -fopenmp -g -I./include -I./libs/megahit/src -I./libs/kseqpp/include -DXXH_INLINE_ALL -ftemplate-depth=3000 -Wall -Wno-unused-function -fprefetch-loop-arrays -funroll-loops src/main_test_acidator.cpp src/amino_acidator.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp -lz -lpthread -o test_acidator
 
 ./test_acidator
 ```
@@ -44,9 +35,7 @@ Reads and stores HMMER3 profile HMM files for sequence alignment scoring.
 
 **Compile & Run:**
 ```bash
-g++ -std=c++17 -O3 -g -I./include \
-  src/test_profile.cpp src/profile.cpp \
-  -o test_profile
+g++ -std=c++17 -O3 -g -I./include src/test_profile.cpp src/profile.cpp -o test_profile
 
 ./test_profile
 # or with custom HMM file:
@@ -96,6 +85,42 @@ python3 generate_sim_reads.py the_sequence.fasta 1000000 1000000 30 150
 - `insert_emissions`: 20 amino acid insertion scores
 - `transitions`: 7 transition probabilities
 - `consensus`: consensus amino acid character
+
+---
+
+### HMM-Guided Amino Acid Translation
+
+**Complete Workflow:**
+1. Generate simulated reads: `python3 generate_sim_reads.py sequence.fasta 1000000 1000000 30 150`
+2. Build graph: `./build_sim_graph` (output: sim_graph_output/graph/graph)
+3. Find start k-mer: `./find_kmer_id sim_graph_output/graph/graph GCGATTCAGACCCAGAGCAACCT`
+4. Run HMM search: `./test_hmm_acidator sim_graph_output/graph/graph hmm_test.hmm <node_id>`
+
+**Compile Graph Builder:**
+```bash
+g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o build_sim_graph src/build_sim_graph.cpp src/sdbg_build.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/sorting/kmer_counter.cpp libs/megahit/src/sorting/read_to_sdbg_s1.cpp libs/megahit/src/sorting/read_to_sdbg_s2.cpp libs/megahit/src/sorting/seq_to_sdbg.cpp libs/megahit/src/utils/options_description.cpp libs/megahit/src/sorting/base_engine.cpp libs/megahit/src/sorting/kmsort_selector.cpp libs/megahit/src/sequence/io/fastx_reader.cpp libs/megahit/src/sequence/io/sequence_lib.cpp libs/megahit/src/sequence/io/paired_fastx_reader.cpp -lz
+```
+
+**Compile K-mer Finder:**
+```bash
+g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o find_kmer_id src/find_kmer_id.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
+```
+
+**Compile HMM Acidator Test:**
+```bash
+g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o test_hmm_acidator src/test_hmm_acidator.cpp src/amino_acidator.cpp src/profile.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
+```
+
+**Files:**
+- `src/test_hmm_acidator.cpp` - Integration test with graph, profile, and beam search
+- `src/build_sim_graph.cpp` - Graph builder from FASTQ
+- `src/find_kmer_id.cpp` - K-mer to node ID lookup
+
+**HMM Scores:**
+- Scores are **negative log probabilities** (log-odds)
+- Less negative = better match (e.g., -800 better than -1200)
+- Sum of emission + transition scores across all HMM positions
+- Full alignment (328 positions) typically: -800 to -1200
 
 ---
 

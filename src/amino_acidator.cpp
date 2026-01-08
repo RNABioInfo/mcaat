@@ -3,8 +3,11 @@
 #include <queue>
 #include <set>
 #include <unordered_map>
+#include <cmath>
 
-AminoAcidator::AminoAcidator(SDBG& sdbg) : sdbg(sdbg) {}
+AminoAcidator::AminoAcidator(SDBG& sdbg) : sdbg(sdbg), profile_(nullptr) {}
+
+AminoAcidator::AminoAcidator(SDBG& sdbg, Profile* profile) : sdbg(sdbg), profile_(profile) {}
 
 char AminoAcidator::CodonToAminoAcid(const std::string& codon) {
     static const std::unordered_map<std::string, char> codon_table = {
@@ -75,6 +78,7 @@ void AminoAcidator::BeamTraverse(
         std::string accumulated_sequence;
         uint64_t current_node;
         int depth;
+        int hmm_position;  // Current position in HMM profile
     };
     
     auto comp = [](const BeamState& a, const BeamState& b) {
@@ -87,9 +91,11 @@ void AminoAcidator::BeamTraverse(
     BeamState initial;
     initial.node_path.push_back(start_node);
     initial.current_node = start_node;
-    initial.total_score = static_cast<double>(start_node); 
-    initial.scores.push_back(initial.total_score);
+    initial.total_score = 0.0;  // Start with zero score
+    initial.scores.push_back(0.0);
     initial.accumulated_sequence = GetNodeSequence(start_node);
+    initial.depth = 0;
+    initial.hmm_position = 0;  // Start at beginning of HMM
     initial.depth = 0;
     
     current_layer.push_back(initial);
@@ -111,6 +117,7 @@ void AminoAcidator::BeamTraverse(
                 path_info.scores = state.scores;
                 path_info.total_score = state.total_score;
                 path_info.dna_sequence = state.accumulated_sequence;
+                path_info.hmm_position = state.hmm_position;
                 result_paths.push_back(path_info);
                 continue;
             }
@@ -153,18 +160,56 @@ void AminoAcidator::BeamTraverse(
                 
                 // Process triplets into amino acids
                 new_state.amino_acids = state.amino_acids;
+                new_state.hmm_position = state.hmm_position;
                 size_t seq_len = extended_seq.length();
                 size_t num_complete_codons = seq_len / 3;
                 
-                // Convert complete triplets to amino acids
+                double codon_score = 0.0;
+                
+                // Convert complete triplets to amino acids and score with HMM
                 for (size_t j = state.amino_acids.size(); j < num_complete_codons; ++j) {
                     std::string codon = extended_seq.substr(j * 3, 3);
                     char aa = CodonToAminoAcid(codon);
                     new_state.amino_acids.push_back(std::string(1, aa));
+                    
+                    // Score with HMM if profile is available
+                    if (profile_ != nullptr && new_state.hmm_position < profile_->GetLength()) {
+                        new_state.hmm_position++;  // Move to next HMM position
+                        
+                        try {
+                            // Get match emission score (negative log probability)
+                            // Lower score = better match in HMMER format
+                            double emission_score = profile_->GetMatchEmission(new_state.hmm_position, aa);
+                            
+                            // Also get transition score M->M (match to match)
+                            double transition_score = 0.0;
+                            if (new_state.hmm_position > 1) {
+                                transition_score = profile_->GetTransition(new_state.hmm_position - 1, 
+                                                                          new_state.hmm_position, 
+                                                                          'M', 'M');
+                            }
+                            
+                            // HMMER uses negative log probabilities, so lower is better
+                            // We negate to make higher scores better for beam search
+                            codon_score -= (emission_score + transition_score);
+                            
+                        } catch (const std::exception& e) {
+                            // If we go past HMM length, stop scoring
+                            codon_score = 0.0;
+                        }
+                    }
                 }
                 
-                // Score is node ID for now
-                double node_score = static_cast<double>(sdbg.EdgeOutdegree(next_node));
+                // Final score calculation
+                double node_score;
+                if (profile_ != nullptr) {
+                    // Use HMM-based score
+                    node_score = codon_score;
+                } else {
+                    // Fallback to simple node degree scoring
+                    node_score = static_cast<double>(sdbg.EdgeOutdegree(next_node));
+                }
+                
                 new_state.scores = state.scores;
                 new_state.scores.push_back(node_score);
                 new_state.total_score = state.total_score + node_score;
@@ -198,6 +243,7 @@ void AminoAcidator::BeamTraverse(
         path_info.scores = state.scores;
         path_info.total_score = state.total_score;
         path_info.dna_sequence = state.accumulated_sequence;
+        path_info.hmm_position = state.hmm_position;
         result_paths.push_back(path_info);
     }
 }

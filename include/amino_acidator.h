@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <sdbg/sdbg.h>
+#include "profile.h"
 
 struct AminoAcidPathInfo {
     std::vector<std::string> amino_acids;
@@ -12,11 +13,13 @@ struct AminoAcidPathInfo {
     std::vector<double> scores;
     double total_score;
     std::string dna_sequence;
+    int hmm_position;  // Current position in HMM profile
 };
 
 class AminoAcidator {
 private:
     SDBG& sdbg;
+    Profile* profile_;  // Optional HMM profile for scoring
     
     // Convert DNA codon (triplet) to amino acid
     char CodonToAminoAcid(const std::string& codon);
@@ -34,6 +37,7 @@ private:
 
 public:
     AminoAcidator(SDBG& sdbg);
+    AminoAcidator(SDBG& sdbg, Profile* profile);
     
     // Main beam search that converts triplets to amino acids
     std::vector<AminoAcidPathInfo> BeamSearchAminoAcids(
