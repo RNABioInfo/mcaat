@@ -1,4 +1,4 @@
-# mCAAT - Metagenomic CRISPR Array Analysis Tool
+# mCAAT-CAS
 
 ## New Components (January 2026)
 
