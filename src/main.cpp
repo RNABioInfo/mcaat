@@ -29,16 +29,14 @@
 #include "sdbg/sdbg.h"
 #include "sdbg_build.h"
 #include "settings.h"
-#include "phage_curator.h"
-#include "isolate_protospacers.h"
 
 using namespace std;
 namespace fs = std::filesystem;
-#ifdef DEBUG
-#pragma message("DEBUG is defined")
-#else
-#pragma message("DEBUG is NOT defined")
-#endif
+// #ifdef DEBUG
+// #pragma message("DEBUG is defined")
+// #else
+// #pragma message("DEBUG is NOT defined")
+// #endif
 void print_usage(const char* program_name) {
     cout << "-------------------------------------------------------" << endl;
     cout << "\n";
@@ -354,145 +352,145 @@ std::map<uint64_t, std::vector<std::vector<uint64_t>>> createRepeatToSpacerNodes
     return repeat_to_spacer_nodes;
 }
 
-#ifdef DEBUG
-int main(int argc, char** argv) {
-    // %% PARSE ARGUMENTS %%
-    Settings settings = parse_arguments(argc, argv);
-    string name_of_genome = "test";
-    if (check_for_error(settings)){
-        //tell the user which folder we are deleting
-        cout<< "Folder " << settings.output_folder << " will be deleted due to errors." << endl;
+// #ifdef DEBUG
+// int main(int argc, char** argv) {
+//     // %% PARSE ARGUMENTS %%
+//     Settings settings = parse_arguments(argc, argv);
+//     string name_of_genome = "test";
+//     if (check_for_error(settings)){
+//         //tell the user which folder we are deleting
+//         cout<< "Folder " << settings.output_folder << " will be deleted due to errors." << endl;
         
-        cout << "Do you want that folder to be removed? (y/n): ";
-        char answer;
-        cin >> answer;
-        if (answer != 'y' && answer != 'Y') {
-            cout << "Exiting the program." << endl;
-            return 1;
-        }
-        cout << "Removing folder: " << settings.output_folder << endl;
-        fs::remove_all(settings.output_folder); 
-        return 1;
-    }
-    // %% PARSE ARGUMENTS %%
+//         cout << "Do you want that folder to be removed? (y/n): ";
+//         char answer;
+//         cin >> answer;
+//         if (answer != 'y' && answer != 'Y') {
+//             cout << "Exiting the program." << endl;
+//             return 1;
+//         }
+//         cout << "Removing folder: " << settings.output_folder << endl;
+//         fs::remove_all(settings.output_folder); 
+//         return 1;
+//     }
+//     // %% PARSE ARGUMENTS %%
 
-    // %% BUILD GRAPH %%
-    SDBGBuild sdbg_build(settings);
-    // %% BUILD GRAPH %%
+//     // %% BUILD GRAPH %%
+//     SDBGBuild sdbg_build(settings);
+//     // %% BUILD GRAPH %%
     
    
-    // cycle finder max/min length are read from settings.cycle_finder_settings
-    SDBG sdbg;
-    vector<string> folders = {"/vol/d/development/git/mcaat_master/mcaat/_build/mcaat_run_2025-08-27_09-53-11/graph/graph","/vol/d/development/git/mcaat_master/mcaat/_build/mcaat_run_2025-08-28_13-26-39/graph/graph",
-    "/vol/d/development/git/mcaat_master/mcaat/build/mcaat_run_2025-10-24_12-27-47/graph/graph","/vol/d/data/real/graph"};
-    string graph_folder_old = settings.graph_folder;///vol/d/development/git/mcaat_master/mcaat/_build/mcaat_run_2025-08-28_13-23-46
-    settings.graph_folder=settings.graph_folder+"/graph";
-    char * cstr = new char [settings.graph_folder.length()+1];
-    std::strcpy (cstr, settings.graph_folder.c_str());
-    cout << "Graph folder: " << cstr << endl;
-    sdbg.LoadFromFile(cstr);
-    cout << "Loaded the graph" << endl;
-    settings.sdbg = &sdbg;
+//     // cycle finder max/min length are read from settings.cycle_finder_settings
+//     SDBG sdbg;
+//     vector<string> folders = {"/vol/d/development/git/mcaat_master/mcaat/_build/mcaat_run_2025-08-27_09-53-11/graph/graph","/vol/d/development/git/mcaat_master/mcaat/_build/mcaat_run_2025-08-28_13-26-39/graph/graph",
+//     "/vol/d/development/git/mcaat_master/mcaat/build/mcaat_run_2025-10-24_12-27-47/graph/graph","/vol/d/data/real/graph"};
+//     string graph_folder_old = settings.graph_folder;///vol/d/development/git/mcaat_master/mcaat/_build/mcaat_run_2025-08-28_13-23-46
+//     settings.graph_folder=settings.graph_folder+"/graph";
+//     char * cstr = new char [settings.graph_folder.length()+1];
+//     std::strcpy (cstr, settings.graph_folder.c_str());
+//     cout << "Graph folder: " << cstr << endl;
+//     sdbg.LoadFromFile(cstr);
+//     cout << "Loaded the graph" << endl;
+//     settings.sdbg = &sdbg;
 
-    // %% LOAD GRAPH %%
+//     // %% LOAD GRAPH %%
     
-    delete[] cstr;
-    string ending_seq = "CAGAGATAGAAATTATTTTTATTATACGTTTTTTTGT";
-    vector<int64_t> end_nodes;
-    //using findNodeFromKmer find all the node ids in the ending_seq
-    for (size_t i = 0; i <= ending_seq.size() - settings.sdbg->k(); ++i) {
-        string kmer = ending_seq.substr(i, sdbg.k());
-        uint64_t node = findNodeFromKmer(settings, kmer);
-        if (node != UINT64_MAX) {
-            end_nodes.push_back(node);
-        }
-    }
-    //print all the end nodes
-    cout << "End nodes: ";
-    for (const auto& node : end_nodes) {
-        cout << node << " ";
-    }
-    cout << endl;
-    // make some distribution of multiplicities of all nodes in the graph
-    std::map<int, int> multiplicity_distribution;
-    for (uint64_t node = 0; node < sdbg.size(); ++node) {
-        int mult = sdbg.EdgeMultiplicity(node);
-        multiplicity_distribution[mult]++;
-    }
-    cout << "Node Multiplicity Distribution:" << endl;
-    //write distribution to file
-    ofstream mult_file("node_multiplicities.txt");
-    for (const auto& [mult, count] : multiplicity_distribution) {
-        mult_file << "Multiplicity " << mult << ": " << count << " nodes" << endl;
-    }
+//     delete[] cstr;
+//     string ending_seq = "CAGAGATAGAAATTATTTTTATTATACGTTTTTTTGT";
+//     vector<int64_t> end_nodes;
+//     //using findNodeFromKmer find all the node ids in the ending_seq
+//     for (size_t i = 0; i <= ending_seq.size() - settings.sdbg->k(); ++i) {
+//         string kmer = ending_seq.substr(i, sdbg.k());
+//         uint64_t node = findNodeFromKmer(settings, kmer);
+//         if (node != UINT64_MAX) {
+//             end_nodes.push_back(node);
+//         }
+//     }
+//     //print all the end nodes
+//     cout << "End nodes: ";
+//     for (const auto& node : end_nodes) {
+//         cout << node << " ";
+//     }
+//     cout << endl;
+//     // make some distribution of multiplicities of all nodes in the graph
+//     std::map<int, int> multiplicity_distribution;
+//     for (uint64_t node = 0; node < sdbg.size(); ++node) {
+//         int mult = sdbg.EdgeMultiplicity(node);
+//         multiplicity_distribution[mult]++;
+//     }
+//     cout << "Node Multiplicity Distribution:" << endl;
+//     //write distribution to file
+//     ofstream mult_file("node_multiplicities.txt");
+//     for (const auto& [mult, count] : multiplicity_distribution) {
+//         mult_file << "Multiplicity " << mult << ": " << count << " nodes" << endl;
+//     }
 
-    mult_file.close();
-    // for (uint64_t node = 0; node < sdbg.size(); ++node) {
-    //     int mult = sdbg.EdgeMultiplicity(node);
-    //     mult_file << node << "\t" << mult << "\n";
-    // }
-    // mult_file.close();
-    // %% FBCE ALGORITHM %%
-    cout << "FBCE FROM DEBUG START:" << endl;
-    auto start_time = chrono::high_resolution_clock::now();
-    CycleFinder cycle_finder(settings);
-    // number_of_spacers_total not used; remove to avoid compiler warning
-    auto cycles = cycle_finder.results;
-    cout << "Number of nodes in results: " << cycles.size() << endl;
-    // %% FBCE ALGORITHM %%
+//     mult_file.close();
+//     // for (uint64_t node = 0; node < sdbg.size(); ++node) {
+//     //     int mult = sdbg.EdgeMultiplicity(node);
+//     //     mult_file << node << "\t" << mult << "\n";
+//     // }
+//     // mult_file.close();
+//     // %% FBCE ALGORITHM %%
+//     cout << "FBCE FROM DEBUG START:" << endl;
+//     auto start_time = chrono::high_resolution_clock::now();
+//     CycleFinder cycle_finder(settings);
+//     // number_of_spacers_total not used; remove to avoid compiler warning
+//     auto cycles = cycle_finder.results;
+//     cout << "Number of nodes in results: " << cycles.size() << endl;
+//     // %% FBCE ALGORITHM %%
     
-    int number_of_spacers = 0;
+//     int number_of_spacers = 0;
     
-    // %% FILTERS %%
-    cout << "FILTERS START:" << endl;
-    Filters filters(sdbg, cycles);
-    auto  SYSTEMS = filters.ListArrays(number_of_spacers);
-    cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
-    // %% FILTERS %%
+//     // %% FILTERS %%
+//     cout << "FILTERS START:" << endl;
+//     Filters filters(sdbg, cycles);
+//     auto  SYSTEMS = filters.ListArrays(number_of_spacers);
+//     cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
+//     // %% FILTERS %%
 
-    //%% POST PROCESSING %%
-    cout << "POST PROCESSING START:" << endl;
-    CRISPRAnalyzer analyzer(SYSTEMS, settings.output_file);
-    analyzer.run_analysis();
-    cout << "Saved in: " << settings.output_file << endl;
-    auto systems_from_analyzer = analyzer.getSystems();
-    auto repeat_to_spacer_nodes = createRepeatToSpacerNodes(settings, systems_from_analyzer);
-    cout << "Created repeat_to_spacer_nodes map with " << repeat_to_spacer_nodes.size() << " entries." << endl;
-    //%% POST PROCESSING %%
+//     //%% POST PROCESSING %%
+//     cout << "POST PROCESSING START:" << endl;
+//     CRISPRAnalyzer analyzer(SYSTEMS, settings.output_file);
+//     analyzer.run_analysis();
+//     cout << "Saved in: " << settings.output_file << endl;
+//     auto systems_from_analyzer = analyzer.getSystems();
+//     auto repeat_to_spacer_nodes = createRepeatToSpacerNodes(settings, systems_from_analyzer);
+//     cout << "Created repeat_to_spacer_nodes map with " << repeat_to_spacer_nodes.size() << " entries." << endl;
+//     //%% POST PROCESSING %%
 
-    //%% PROTOSPACER ISOLATION %%
-    IsolateProtospacers isolator(sdbg, repeat_to_spacer_nodes);
-    pair<std::map<uint64_t,std::set<uint64_t>>,std::map<uint64_t,std::set<uint64_t>>> protospacer_nodes = isolator.getProtospacerNodes();
-    auto grouped_paths_protospacers = isolator.DepthLimitedPathsFromInToOut(protospacer_nodes.first, protospacer_nodes.second, 50,1);
-       isolator.WritePathsToFile(grouped_paths_protospacers, "grouped_paths_protospacers.txt");
+//     //%% PROTOSPACER ISOLATION %%
+//     IsolateProtospacers isolator(sdbg, repeat_to_spacer_nodes);
+//     pair<std::map<uint64_t,std::set<uint64_t>>,std::map<uint64_t,std::set<uint64_t>>> protospacer_nodes = isolator.getProtospacerNodes();
+//     auto grouped_paths_protospacers = isolator.DepthLimitedPathsFromInToOut(protospacer_nodes.first, protospacer_nodes.second, 50,1);
+//        isolator.WritePathsToFile(grouped_paths_protospacers, "grouped_paths_protospacers.txt");
 
-    //auto grouped_paths_protospacers = isolator.ReadPathsFromFile("grouped_paths_protospacers.txt");
+//     //auto grouped_paths_protospacers = isolator.ReadPathsFromFile("grouped_paths_protospacers.txt");
     
-    //%% PROTOSPACER ISOLATION %%
-    PhageCurator phage_curator(sdbg, grouped_paths_protospacers, cycles);
+//     //%% PROTOSPACER ISOLATION %%
+//     PhageCurator phage_curator(sdbg, grouped_paths_protospacers, cycles);
 
-    // Find and output quality paths using DLS with multiplicity filters, writing live to file
-    //phage_curator.FindQualityPathsDLSFromGroupedPaths(3000, 3010, "QualityPaths.fasta");  // min_length 3000, max_length arbitrary large
-    vector<int> beam_widths = {50};
-    // Find and output quality paths using beam search with multiplicity filters, writing live to file
-    for (int beam_width : beam_widths) {
-        string filename = "QualityPaths_BeamWidth" + to_string(beam_width) + ".fasta";
-        phage_curator.FindQualityPathsBeamSearchFromGroupedPaths(3000, 3010, filename, beam_width);  // min_length 3000, max_length arbitrary large
-    }
-    //print multiplicities of nodes into a file
+//     // Find and output quality paths using DLS with multiplicity filters, writing live to file
+//     //phage_curator.FindQualityPathsDLSFromGroupedPaths(3000, 3010, "QualityPaths.fasta");  // min_length 3000, max_length arbitrary large
+//     vector<int> beam_widths = {50};
+//     // Find and output quality paths using beam search with multiplicity filters, writing live to file
+//     for (int beam_width : beam_widths) {
+//         string filename = "QualityPaths_BeamWidth" + to_string(beam_width) + ".fasta";
+//         phage_curator.FindQualityPathsBeamSearchFromGroupedPaths(3000, 3010, filename, beam_width);  // min_length 3000, max_length arbitrary large
+//     }
+//     //print multiplicities of nodes into a file
 
-    //io_ops::write_nodes_gfa("output.gfa", sdbg);
-    //io_ops::write_nodes_gfa("output.gfa", sdbg);
+//     //io_ops::write_nodes_gfa("output.gfa", sdbg);
+//     //io_ops::write_nodes_gfa("output.gfa", sdbg);
     
 
-    //%% POST PROCESSING %%
-    // %% DELETE THE GRAPH FOLDER %%
-    //fs::remove_all(graph_folder_old);
-    // %% DELETE THE GRAPH FOLDER %%          
+//     //%% POST PROCESSING %%
+//     // %% DELETE THE GRAPH FOLDER %%
+//     //fs::remove_all(graph_folder_old);
+//     // %% DELETE THE GRAPH FOLDER %%          
     
-}
+// }
 
-#else
+// #else
 int main(int argc, char** argv) {
     // %% PARSE ARGUMENTS %%
     Settings settings = parse_arguments(argc, argv);
@@ -611,4 +609,4 @@ int main(int argc, char** argv) {
 }
     */
 }
-#endif
+// #endif
