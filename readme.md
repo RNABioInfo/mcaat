@@ -1,154 +1,104 @@
-## MCAAT — Metagenomic CRISPR Array Analysis Tool
+# mCAAT - Metagenomic CRISPR Array Analysis Tool
 
-Usage
------
-```
-./mcaat --input-files <file1> [file2] [--ram <amount>] [--threads <num>] [--output-folder <path>] [--help]
-```
+## New Components (January 2026)
 
-Quick description
------------------
-MCAAT detects CRISPR arrays in unassembled metagenomic reads using de Bruijn graph cycle detection. 
+### AminoAcidator
+Beam search-based amino acid translator for de Bruijn graph traversal.
 
-Examples
---------
-Paired-end:
-```
-./mcaat --input-files reads_R1.fastq reads_R2.fastq --ram 8G --threads 12 --output-folder results
-```
-Single-end:
-```
-./mcaat --input-files reads.fastq
-```
+**Files:**
+- `include/amino_acidator.h`
+- `src/amino_acidator.cpp`
+- `src/main_test_acidator.cpp`
 
-### Installation using docker
-#### Docker Build
-
+**Compile & Run:**
 ```bash
-docker build -t mcaat .
+g++ -std=c++17 -O3 -march=native -fopenmp -g \
+  -I./include -I./libs/megahit/src -I./libs/kseqpp/include \
+  -DXXH_INLINE_ALL -ftemplate-depth=3000 -Wall -Wno-unused-function \
+  -fprefetch-loop-arrays -funroll-loops \
+  src/main_test_acidator.cpp src/amino_acidator.cpp \
+  libs/megahit/src/sdbg/sdbg_meta.cpp \
+  libs/megahit/src/sdbg/sdbg_raw_content.cpp \
+  libs/megahit/src/sdbg/sdbg_writer.cpp \
+  libs/megahit/src/utils/options_description.cpp \
+  -lz -lpthread -o test_acidator
+
+./test_acidator
 ```
+
+**Features:**
+- Beam search traversal through succinct de Bruijn graph
+- Converts DNA triplets to amino acids using standard genetic code
+- Avoids revisiting nodes (loop detection)
+- Returns paths with amino acid sequences, node paths, and scores
 
 ---
 
-#### Run the Tool Using Docker
+### Profile (HMMER3 HMM Parser)
+Reads and stores HMMER3 profile HMM files for sequence alignment scoring.
 
-Mount your working directory to access input/output files:
+**Files:**
+- `include/profile.h`
+- `src/profile.cpp`
+- `src/test_profile.cpp`
 
+**Compile & Run:**
 ```bash
-docker run --rm -v $(pwd):/data mcaat \
-  --input_files /data/reads_R1.fastq /data/reads_R2.fastq \
-  --output-folder /data/results
+g++ -std=c++17 -O3 -g -I./include \
+  src/test_profile.cpp src/profile.cpp \
+  -o test_profile
+
+./test_profile
+# or with custom HMM file:
+./test_profile path/to/profile.hmm
 ```
 
----
+**Features:**
+- Parses HMMER3 format HMM files
+- Stores match/insert emission scores (20 amino acids)
+- Stores transition probabilities (M->M, M->I, M->D, I->M, I->I, D->M, D->D)
+- Extracts consensus sequence
+- Query emission and transition scores by position
 
-#### Final Image Size
-
-The final image is based on `debian:bookworm-slim` and includes only:
-
-- The `mcaat` binary
-- Runtime libraries: `libomp5`, `zlib1g`
-
-This keeps the image small and portable.
+**Example HMM:** `hmm_test.hmm` (COG1518, 328 states)
 
 ---
 
-#### Clean Up
+### Simulated Read Generator
+Python script to generate FASTQ reads with flanking sequences.
 
-To remove the image:
+**File:** `build/generate_sim_reads.py`
 
+**Usage:**
 ```bash
-docker rmi mcaat
+python3 generate_sim_reads.py input.fasta [left_flank_bp] [right_flank_bp] [coverage] [read_length]
+
+# Default: 1M bp flanks, 30x coverage, 150 bp reads
+python3 generate_sim_reads.py the_sequence.fasta 1000000 1000000 30 150
 ```
 
-### Compiling the project
-
-#### Build the Project
-To allow ./install.sh make changes, we execute following command:
-```bash
-chmod +x ./install.sh
-```
-You can build the project and the working version will be saved in the build folder.
-```bash
-./install.sh
-```
-It is also possible to install the library by simply putting the --install flag.
-```bash
-./install.sh --install
-```
-To clean up you can use --clean flag.
-
----
-### Command-Line Arguments
-
-Required
-- `--input_files <file1> [file2]` — One or two FASTA/FASTQ files (single or paired-end).
-
-Optional
-- `--ram <amount>` — Max RAM (e.g. 4G). Default: ~95% of system RAM.
-- `--threads <num>` — Number of threads. Default: CPU cores - 2.
-- `--output-folder <path>` — Output directory (default: timestamped folder).
-- `--help`, `-h` — Show help and exit.
+**Output:** `sim_reads.fastq` (uppercase DNA sequences, Phred 30-40 quality)
 
 ---
 
-### Output
+## Key Data Structures
 
-The tool creates the following directory structure inside the specified output folder:
+**AminoAcidPathInfo:**
+- `amino_acids`: vector of amino acid strings
+- `node_path`: vector of node IDs traversed
+- `scores`: per-node scores
+- `total_score`: cumulative path score
+- `dna_sequence`: accumulated DNA sequence
 
-```
-<output-folder>/
-├── CRISPR_Arrays.txt         # Raw CRISPR array output
-```
-
----
-
-### Examples
-
-| Scenario                     | Command                                                                 |
-|-----------------------------|-------------------------------------------------------------------------|
-| Paired-end input with custom output | `./mcaat --input_files reads_R1.fastq reads_R2.fastq --ram 8G --threads 12 --output-folder results/my_run` |
-| Single-end input with default output | `./mcaat --input_files reads.fastq` <br>Creates a folder like `mcaat_run_2025-07-07_15-30-00/` |
-
+**ProfileState:**
+- `position`: match state position
+- `match_emissions`: 20 amino acid emission scores
+- `insert_emissions`: 20 amino acid insertion scores
+- `transitions`: 7 transition probabilities
+- `consensus`: consensus amino acid character
 
 ---
 
-#### Notes
+## Testing
 
-- Input files must exist and be accessible.
-- If RAM is set below 1 GB or above system capacity, the program will exit with an error.
-- If only one input file is provided, the tool assumes single-end data.
-
----
-
-### Settings file
-
-Create a simple key=value text file (one setting per line) and pass it with `--settings /path/to/file`.
-
-CLI flags override file values.
-
-Example `settings.txt` (must include `input_files`):
-```
-input_files=/data/sample/1.fastq /data/sample/2.fastq
-ram=128G
-threads=26
-output_folder=results/run1
-```
-
-Notes:
-- `input_files` accepts one or two paths (space, comma, or semicolon separated).
-- CLI flags override file values.
-
----
-
-#### Requirements
-
-- C++17 compiler
-- [RapidFuzz](https://github.com/maxbachmann/rapidfuzz-cpp) (for fuzzy string matching)
-- Filesystem support (`<filesystem>`)
-
----
-
-## Support
-
-If you encounter issues or have questions, feel free to open an issue or write us an email: fikrat.talibli@ibmg.uni-stuttgart.de. If you are using this software please cite this paper: https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558.
+All test files compile independently with minimal dependencies (see commands above).
