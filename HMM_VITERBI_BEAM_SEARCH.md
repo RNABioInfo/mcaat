@@ -357,4 +357,4 @@ AA sequence: AIQTQSNLLEDAIT...
 ## Authors & License
 
 Created: January 2026
-License: See LICENSE.txt
+License: See [LICENSE](./LICENSE.txt)
