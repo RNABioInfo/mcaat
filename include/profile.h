@@ -35,6 +35,12 @@ private:
     std::vector<double> compo_insert_;
     std::vector<double> compo_transitions_;
     
+    // Special state transitions (HMMER3 style: N, C, J, B, E)
+    // Special states: N=0, B=1, E=2, C=3, J=4
+    // Transitions stored as: [from_state][MOVE/LOOP]
+    std::vector<std::vector<double>> special_transitions_;  // 5 states x 2 transitions
+    bool is_local_;  // Local vs glocal mode
+    
     // Parse helper functions
     bool ParseHeader(const std::string& line);
     bool ParseHMMLine(const std::string& line);
@@ -72,6 +78,12 @@ public:
     
     // Get transition score
     double GetTransition(int from_state, int to_state, char from_type, char to_type) const;
+    
+    // Get special state transition (N=0, B=1, E=2, C=3, J=4; move=0, loop=1)
+    double GetSpecialTransition(int state, int type) const;
+    
+    // Check if local mode
+    bool IsLocal() const { return is_local_; }
     
     // Print summary
     void PrintSummary() const;

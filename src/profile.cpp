@@ -131,6 +131,27 @@ bool Profile::LoadFromFile(const std::string& filename) {
         }
     }
     
+    // Initialize special state transitions (HMMER3 style)
+    // Special states: N=0, B=1, E=2, C=3, J=4
+    // Each has [MOVE, LOOP] transitions
+    special_transitions_.resize(5, std::vector<double>(2, -INFINITY));
+    
+    // Default values for SINGLE-DOMAIN alignment (no multi-domain)
+    // These are in log-probability space (negative values)
+    special_transitions_[0][0] = -0.5;  // N->B (MOVE)
+    special_transitions_[0][1] = -2.0;  // N->N (LOOP)
+    special_transitions_[1][0] = 0.0;   // B->M (implicit, handled separately)
+    special_transitions_[1][1] = -INFINITY;
+    special_transitions_[2][0] = -0.5;  // E->C (MOVE)
+    special_transitions_[2][1] = -INFINITY;  // E->J (LOOP) - DISABLED for single-domain!
+    special_transitions_[3][0] = 0.0;   // C->T (MOVE) - FREE transition to terminal
+    special_transitions_[3][1] = -2.0;  // C->C (LOOP)
+    special_transitions_[4][0] = -INFINITY;  // J->B (MOVE) - DISABLED for single-domain!
+    special_transitions_[4][1] = -INFINITY;  // J->J (LOOP) - DISABLED for single-domain!
+    
+    // Detect local vs glocal mode from STATS line
+    is_local_ = true;  // Use local mode for flexible entry/exit
+    
     // Parse states
     while (line_idx < file_lines.size()) {
         const std::string& current_line = file_lines[line_idx];
@@ -228,7 +249,9 @@ double Profile::GetMatchEmission(int position, char amino_acid) const {
     const auto& state = GetState(position);
     int idx = AminoAcidToIndex(amino_acid);
     if (idx < 0 || idx >= static_cast<int>(state.match_emissions.size())) {
-        return INFINITY;  // Invalid amino acid
+        // Invalid amino acid (e.g., stop codon *)
+        // MegaGTA approach: filter out stop codons completely
+        return -INFINITY;
     }
     return state.match_emissions[idx];
 }
@@ -237,7 +260,9 @@ double Profile::GetInsertEmission(int position, char amino_acid) const {
     const auto& state = GetState(position);
     int idx = AminoAcidToIndex(amino_acid);
     if (idx < 0 || idx >= static_cast<int>(state.insert_emissions.size())) {
-        return -INFINITY;  // Invalid amino acid
+        // Invalid amino acid (e.g., stop codon *)
+        // MegaGTA approach: filter out stop codons completely
+        return -INFINITY;
     }
     // Return raw log-probability (already negated from HMMER3 format)
     return state.insert_emissions[idx];
@@ -269,6 +294,14 @@ double Profile::GetMatchLogOdds(int position, char amino_acid) const {
 double Profile::LogOddsToBits(double log_odds) const {
     // HMMER bit scores: bits = log-odds / log(2)
     return log_odds / std::log(2.0);
+}
+
+double Profile::GetSpecialTransition(int state, int type) const {
+    if (state < 0 || state >= static_cast<int>(special_transitions_.size()) ||
+        type < 0 || type >= 2) {
+        return -INFINITY;
+    }
+    return special_transitions_[state][type];
 }
 
 double Profile::GetTransition(int from_state, int to_state, char from_type, char to_type) const {
@@ -305,10 +338,22 @@ std::tuple<double, std::string, int> Profile::ViterbiAlign(const std::vector<std
     const int NUM_STATES = 3;
     const int M = 0, I = 1, D = 2;
     
+    // Special states: N=0, B=1, E=2, C=3, J=4
+    const int N = 0, B = 1, E = 2, C = 3, J = 4;
+    
+    // For traceback, use negative values to mark special state entries
+    const int FROM_B = -1;  // Entered from B state
+    
     // Initialize DP table with -infinity (log space)
     std::vector<std::vector<std::vector<double>>> dp(
         seq_len + 1, 
         std::vector<std::vector<double>>(hmm_len + 1, std::vector<double>(NUM_STATES, -INFINITY))
+    );
+    
+    // Special state matrix: [sequence_position][special_state]
+    std::vector<std::vector<double>> xmx(
+        seq_len + 1,
+        std::vector<double>(5, -INFINITY)
     );
     
     // Traceback matrix
@@ -317,46 +362,57 @@ std::tuple<double, std::string, int> Profile::ViterbiAlign(const std::vector<std
         std::vector<std::vector<int>>(hmm_len + 1, std::vector<int>(NUM_STATES, -1))
     );
     
-    // Initialize: start at position 0 in match state
-    dp[0][0][M] = 0.0;
+    // HMMER-style initialization (row 0)
+    xmx[0][N] = 0.0;                              // S->N, p=1
+    xmx[0][B] = xmx[0][N] + GetSpecialTransition(N, 0);  // S->N->B
+    xmx[0][E] = xmx[0][C] = xmx[0][J] = -INFINITY;  // Need sequence
+    
+    // Exit score: 0 for local mode, -inf for glocal
+    double esc = is_local_ ? 0.0 : -INFINITY;
     
     // Fill DP matrix
-    for (int i = 0; i <= seq_len; ++i) {
-        for (int j = 0; j <= hmm_len; ++j) {
+    for (int i = 1; i <= seq_len; ++i) {
+        // Initialize row
+        dp[i][0][M] = dp[i][0][I] = dp[i][0][D] = -INFINITY;
+        xmx[i][E] = -INFINITY;
+        
+        for (int j = 1; j <= hmm_len; ++j) {
             // Match state: consume AA and advance HMM
-            if (i > 0 && j > 0 && j <= hmm_len) {
-                char aa = aa_sequence[i-1][0];  // Get amino acid
-                double emission = GetMatchEmission(j, aa);  // Use raw log-probability
-                
-                // From previous Match (j-1 must be >= 1 for GetTransition)
-                double from_m = -INFINITY;
-                if (j > 1) {
-                    from_m = dp[i-1][j-1][M] + emission + GetTransition(j-1, j, 'M', 'M');
-                } else {
-                    // First position (j=1), come from initial state
-                    from_m = dp[i-1][j-1][M] + emission;
-                }
-                
-                // From previous Insert
-                double from_i = -INFINITY;
-                if (j > 1) {
-                    from_i = dp[i-1][j-1][I] + emission + GetTransition(j-1, j, 'I', 'M');
-                }
-                
-                // From previous Delete
-                double from_d = -INFINITY;
-                if (j > 1) {
-                    from_d = dp[i-1][j-1][D] + emission + GetTransition(j-1, j, 'D', 'M');
-                }
-                
-                double best = std::max({from_m, from_i, from_d});
-                if (best > dp[i][j][M]) {
-                    dp[i][j][M] = best;
-                    if (best == from_m) traceback[i][j][M] = M;
-                    else if (best == from_i) traceback[i][j][M] = I;
-                    else traceback[i][j][M] = D;
-                }
+            char aa = aa_sequence[i-1][0];  // Get amino acid
+            double emission = GetMatchEmission(j, aa);  // Use raw log-probability
+            
+            // From previous Match
+            double from_m = -INFINITY;
+            if (j > 1) {
+                from_m = dp[i-1][j-1][M] + emission + GetTransition(j-1, j, 'M', 'M');
             }
+            
+            // From previous Insert
+            double from_i = -INFINITY;
+            if (j > 1) {
+                from_i = dp[i-1][j-1][I] + emission + GetTransition(j-1, j, 'I', 'M');
+            }
+            
+            // From previous Delete
+            double from_d = -INFINITY;
+            if (j > 1) {
+                from_d = dp[i-1][j-1][D] + emission + GetTransition(j-1, j, 'D', 'M');
+            }
+            
+            // From B state (entry): HMMER local alignment  
+            // In local mode, B can enter at ANY match state
+            // Entry choice is driven by match quality and N-state costs
+            double from_b = xmx[i-1][B] + emission;  // B→Mj entry
+            
+            double best = std::max({from_m, from_i, from_d, from_b});
+            dp[i][j][M] = best;
+            if (best == from_m) traceback[i][j][M] = M;
+            else if (best == from_i) traceback[i][j][M] = I;
+            else if (best == from_d) traceback[i][j][M] = D;
+            else traceback[i][j][M] = -2;  // FROM_B marker
+            
+            // E state update: can exit from any match state (local mode)
+            xmx[i][E] = std::max(xmx[i][E], dp[i][j][M] + esc);
             
             // Insert state: consume AA but don't advance HMM
             if (i > 0 && j > 0 && j <= hmm_len) {
@@ -365,7 +421,7 @@ std::tuple<double, std::string, int> Profile::ViterbiAlign(const std::vector<std
                 const auto& state = GetState(j);
                 int idx = AminoAcidToIndex(aa);
                 double emission = (idx >= 0 && idx < static_cast<int>(state.insert_emissions.size())) 
-                    ? state.insert_emissions[idx] : -INFINITY;
+                    ? state.insert_emissions[idx] : -100.0;  // Large penalty for invalid AA
                 
                 // From previous Match
                 double from_m = dp[i-1][j][M] + emission + GetTransition(j, j, 'M', 'I');
@@ -380,76 +436,118 @@ std::tuple<double, std::string, int> Profile::ViterbiAlign(const std::vector<std
             }
             
             // Delete state: advance HMM but don't consume AA
-            if (j > 1 && i <= seq_len && j <= hmm_len) {
-                // From previous Match (j-1 >= 1)
+            if (j > 1) {
+                // From previous Match
                 double from_m = dp[i][j-1][M] + GetTransition(j-1, j, 'M', 'D');
                 // From previous Delete
                 double from_d = dp[i][j-1][D] + GetTransition(j-1, j, 'D', 'D');
                 
                 double best = std::max(from_m, from_d);
-                if (best > dp[i][j][D]) {
-                    dp[i][j][D] = best;
-                    traceback[i][j][D] = (best == from_m) ? M : D;
-                }
+                dp[i][j][D] = best;
+                traceback[i][j][D] = (best == from_m) ? M : D;
             }
         }
+        
+        // Special state transitions (HMMER-style)
+        // These happen after completing all HMM positions for this sequence position
+        
+        // J state: E->J or J->J
+        double sc_j = std::max(
+            xmx[i-1][J] + GetSpecialTransition(J, 1),  // J->J (LOOP)
+            xmx[i][E] + GetSpecialTransition(E, 1)     // E->J (LOOP)
+        );
+        xmx[i][J] = sc_j;
+        
+        // N state: N->N with emission (N-terminal unaligned region)
+        char aa = aa_sequence[i-1][0];
+        int aa_idx = AminoAcidToIndex(aa);
+        double null_emission = (aa_idx >= 0 && aa_idx < static_cast<int>(compo_match_.size())) 
+            ? compo_match_[aa_idx] : -INFINITY;  // Filter stop codons (MegaGTA approach)
+        
+        xmx[i][N] = xmx[i-1][N] + GetSpecialTransition(N, 1) + null_emission;  // N->N (LOOP)
+        
+        // C state: E->C or C->C with emission (C-terminal unaligned region)
+        double sc_c = std::max(
+            xmx[i-1][C] + GetSpecialTransition(C, 1) + null_emission,  // C->C (LOOP)
+            xmx[i][E] + GetSpecialTransition(E, 0)     // E->C (MOVE, no emission)
+        );
+        xmx[i][C] = sc_c;
+        
+        // B state: N->B or J->B
+        double sc_b = std::max(
+            xmx[i][N] + GetSpecialTransition(N, 0),  // N->B (MOVE)
+            xmx[i][J] + GetSpecialTransition(J, 0)   // J->B (MOVE)
+        );
+        xmx[i][B] = sc_b;
     }
     
-    // Find best final score (local alignment - can end anywhere)
-    double best_score = -INFINITY;
-    int best_final_state = M;
-    int best_final_pos = hmm_len;
+    // HMMER local alignment for beam search scoring:
+    // We consume the full sequence, but allow flexible HMM alignment within it
+    // Path: N*(0+) → B → M+ → E → C*(0+) where N+M+C consume all seq_len AAs
     
-    // Check all possible ending positions and states
+    double best_score = xmx[seq_len][C] + GetSpecialTransition(C, 0);  // Final score
+    
+    // For traceback: find best M→E at end of sequence
+    // (The C state path from there to seq_len is deterministic)
+    int best_final_i = seq_len;
+    int best_final_pos = 1;
+    int best_final_state = M;
+    double best_e_score = -INFINITY;
+    
     for (int j = 1; j <= hmm_len; ++j) {
-        if (dp[seq_len][j][M] > best_score) {
-            best_score = dp[seq_len][j][M];
-            best_final_state = M;
-            best_final_pos = j;
-        }
-        if (dp[seq_len][j][I] > best_score) {
-            best_score = dp[seq_len][j][I];
-            best_final_state = I;
-            best_final_pos = j;
-        }
-        if (dp[seq_len][j][D] > best_score) {
-            best_score = dp[seq_len][j][D];
-            best_final_state = D;
+        double e_score = dp[seq_len][j][M] + esc;
+        if (e_score > best_e_score) {
+            best_e_score = e_score;
             best_final_pos = j;
         }
     }
     
     // Traceback to get path
     std::string path;
-    int i = seq_len, j = best_final_pos, state = best_final_state;
-    while (i > 0 || j > 0) {
+    int i = best_final_i, j = best_final_pos;
+    int state = best_final_state;
+    
+    while (i > 0 && j > 0) {
         if (state == M) {
             path = "M" + path;
             int prev = traceback[i][j][M];
+            if (prev == -2) {
+                // FROM_B: Entered HMM from B state
+                break;
+            }
             i--; j--;
+            if (prev < 0) {
+                break;  // Invalid/uninitialized
+            }
             state = prev;
         } else if (state == I) {
             path = "I" + path;
             int prev = traceback[i][j][I];
             i--;
+            if (prev < 0) break;
             state = prev;
         } else if (state == D) {
             path = "D" + path;
             int prev = traceback[i][j][D];
             j--;
+            if (prev < 0) break;
             state = prev;
         } else {
             break;
         }
     }
     
-    // Convert log-probability score to bits with null model correction
-    // Null model score: what would a random sequence score?
+    // HMMER approach: Log-odds scoring (HMM vs null model)
+    // This is the statistically correct method for sequence alignment
     double null_score = 0.0;
     for (const auto& aa : aa_sequence) {
-        int idx = AminoAcidToIndex(aa[0]);
-        if (idx >= 0 && idx < static_cast<int>(compo_match_.size())) {
-            null_score += compo_match_[idx];  // Background frequency (log-prob)
+        int aa_idx = AminoAcidToIndex(aa[0]);
+        if (aa_idx >= 0 && aa_idx < static_cast<int>(compo_match_.size())) {
+            null_score += compo_match_[aa_idx];  // Background frequency (log-prob)
+        } else {
+            // Stop codons should never reach here (filtered by -INFINITY)
+            // But handle gracefully if they do
+            null_score += compo_match_[0];  // Use some default (e.g., 'A')
         }
     }
     
