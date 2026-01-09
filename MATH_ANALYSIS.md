@@ -2,10 +2,10 @@
 
 ## Implementation: HMMER-Compatible Log-Odds Scoring
 
-Based on the HMMER3 algorithm ([Eddy, 2011](https://doi.org/10.1371/journal.pcbi.1002195)).
+Based on the HMMER3 algorithm.
 
 ### Formula
-Log-odds scoring ([Durbin et al., 1998](https://www.cambridge.org/core/books/biological-sequence-analysis/BBC92E1B295B790B8B5AEBDBA1E111AF)):
+Log-odds scoring (standard HMM approach):
 ```
 Score = log₂ [P(sequence | HMM) / P(sequence | null)]
       = [log P(sequence | HMM) - log P(sequence | null)] / log(2)
@@ -13,16 +13,16 @@ Score = log₂ [P(sequence | HMM) / P(sequence | null)]
 
 ### Components
 
-**HMM Score** (numerator) - Viterbi algorithm ([Viterbi, 1967](https://doi.org/10.1109/TIT.1967.1054010)):
+**HMM Score** (numerator) - Viterbi algorithm:
 - Sum of transition probabilities (M→M, M→I, etc.)
 - Sum of emission probabilities (match/insert states)
-- Special state transitions (N, B, E, C for local alignment) ([Eddy, 2008](https://doi.org/10.1093/bioinformatics/btn079))
+- Special state transitions (N, B, E, C for local alignment)
 
-**Null Model Score** (denominator) - background model ([Karlin & Altschul, 1990](https://doi.org/10.1073/pnas.87.6.2264)):
+**Null Model Score** (denominator) - background model:
 - Background amino acid frequencies from HMM file (COMPO line)
 - Σᵢ log P(aaᵢ | background)
 
-**Log-Odds** - likelihood ratio test ([Durbin et al., 1998](https://www.cambridge.org/core/books/biological-sequence-analysis/BBC92E1B295B790B8B5AEBDBA1E111AF)):
+**Log-Odds** - likelihood ratio test:
 - Subtract null from HMM score before converting to bits
 - Result is length-independent statistical measure
 
@@ -50,10 +50,10 @@ Score = log₂ [P(sequence | HMM) / P(sequence | null)]
 
 ### Stop Codon Handling
 
-**Emission scores**: Return -INFINITY for stop codon (`*`) ([MegaGTA approach](https://doi.org/10.1093/bioinformatics/btw269))
+**Emission scores**: Return -INFINITY for stop codon (`*`)
 - Blocks paths with stop codons in DP
 - Results in very large negative scores
-- Biologically correct: genes shouldn't have internal stop codons ([Belinky et al., 2018](https://doi.org/10.1093/gbe/evy046))
+- Biologically correct: genes shouldn't have internal stop codons
 
 **Null model**: Skip stop codons (use default background frequency)
 - Stop codons filtered at emission level
@@ -61,7 +61,7 @@ Score = log₂ [P(sequence | HMM) / P(sequence | null)]
 
 ### Mathematical Properties
 
-**Length independence** ([Altschul et al., 2001](https://doi.org/10.1093/nar/25.17.3389)):
+**Length independence**:
 ```
 Score(seq₁ ∪ seq₂) ≈ Score(seq₁) + Score(seq₂)
 ```
@@ -71,7 +71,7 @@ Each position contributes independent evidence.
 Higher score = stronger homology evidence
 Can rank sequences or paths by score.
 
-**Statistical validity** ([Karlin & Altschul, 1990](https://doi.org/10.1073/pnas.87.6.2264)):
+**Statistical validity**:
 - Likelihood ratio test statistic
 - Score > 0 provides evidence for homology
 - Magnitude indicates strength of evidence
@@ -86,16 +86,16 @@ Can rank sequences or paths by score.
   - No reference point for "good" vs "bad"
   - Can't compare to HMMER
   
-**MegaGTA approach** ([Li et al., 2016](https://doi.org/10.1093/bioinformatics/btw269)) - A* graph search:
+**MegaGTA approach** (A* graph search):
 - Formula: Score = log P(path | HMM) + exit_penalty
-- Context: Ranking variable-length paths in de Bruijn graph ([Pevzner et al., 2001](https://doi.org/10.1073/pnas.171285098))
+- Context: Ranking variable-length paths in de Bruijn graph
 - Not applicable to our Viterbi alignment use case
 
 ### Implementation Details
 
 **File**: src/profile.cpp, lines 540-555
-**Algorithm**: HMMER3 local alignment - Plan7 architecture ([Eddy, 2011](https://doi.org/10.1371/journal.pcbi.1002195))
-**States**: N, B, M, I, D, E, C, J (J disabled for single-domain) ([Eddy, 2008](https://doi.org/10.1093/bioinformatics/btn079))
+**Algorithm**: HMMER3 local alignment - Plan7 architecture
+**States**: N, B, M, I, D, E, C, J (J disabled for single-domain)
 **Special transitions**: Loaded from HMM file (xsc table)
 
 ### Validation
@@ -107,22 +107,8 @@ Can rank sequences or paths by score.
 
 ## References
 
-1. **Eddy, S.R. (2011).** Accelerated profile HMM searches. *PLoS Computational Biology*, 7(10), e1002195. [https://doi.org/10.1371/journal.pcbi.1002195](https://doi.org/10.1371/journal.pcbi.1002195)
+1. Eddy SR. (2011) Accelerated Profile HMM Searches. *PLoS Comput Biol* 7(10): e1002195. https://doi.org/10.1371/journal.pcbi.1002195
 
-2. **Eddy, S.R. (2008).** A probabilistic model of local sequence alignment that simplifies statistical significance estimation. *Bioinformatics*, 24(7), 860-869. [https://doi.org/10.1093/bioinformatics/btn079](https://doi.org/10.1093/bioinformatics/btn079)
+2. Durbin R, Eddy SR, Krogh A, Mitchison G. (1998) *Biological Sequence Analysis: Probabilistic Models of Proteins and Nucleic Acids.* Cambridge University Press.
 
-3. **Durbin, R., Eddy, S.R., Krogh, A., & Mitchison, G. (1998).** *Biological Sequence Analysis: Probabilistic Models of Proteins and Nucleic Acids*. Cambridge University Press. [Link](https://www.cambridge.org/core/books/biological-sequence-analysis/BBC92E1B295B790B8B5AEBDBA1E111AF)
-
-4. **Viterbi, A. (1967).** Error bounds for convolutional codes and an asymptotically optimum decoding algorithm. *IEEE Transactions on Information Theory*, 13(2), 260-269. [https://doi.org/10.1109/TIT.1967.1054010](https://doi.org/10.1109/TIT.1967.1054010)
-
-5. **Karlin, S., & Altschul, S.F. (1990).** Methods for assessing the statistical significance of molecular sequence features. *PNAS*, 87(6), 2264-2268. [https://doi.org/10.1073/pnas.87.6.2264](https://doi.org/10.1073/pnas.87.6.2264)
-
-6. **Altschul, S.F., Madden, T.L., Schäffer, A.A., et al. (2001).** Gapped BLAST and PSI-BLAST: a new generation of protein database search programs. *Nucleic Acids Research*, 25(17), 3389-3402. [https://doi.org/10.1093/nar/25.17.3389](https://doi.org/10.1093/nar/25.17.3389)
-
-7. **Li, D., Luo, R., Liu, C.M., et al. (2016).** MEGAHIT v1.0: A fast and scalable metagenome assembler driven by advanced methodologies and community practices. *Methods*, 102, 3-11. [https://doi.org/10.1016/j.ymeth.2016.02.020](https://doi.org/10.1016/j.ymeth.2016.02.020)
-
-8. **Li, D., Liu, C.M., Luo, R., et al. (2016).** MegaGTA: a sensitive and accurate metagenomic gene-targeted assembler using iterative de Bruijn graphs. *Bioinformatics*, 32(12), i201-i209. [https://doi.org/10.1093/bioinformatics/btw269](https://doi.org/10.1093/bioinformatics/btw269)
-
-9. **Pevzner, P.A., Tang, H., & Waterman, M.S. (2001).** An Eulerian path approach to DNA fragment assembly. *PNAS*, 98(17), 9748-9753. [https://doi.org/10.1073/pnas.171285098](https://doi.org/10.1073/pnas.171285098)
-
-10. **Belinky, F., Babenko, V.N., Rogozin, I.B., & Koonin, E.V. (2018).** Purifying and positive selection in the evolution of stop codons. *Genome Biology and Evolution*, 10(3), 924-934. [https://doi.org/10.1093/gbe/evy046](https://doi.org/10.1093/gbe/evy046)
+3. HMMER User Guide. http://eddylab.org/software/hmmer/Userguide.pdf
