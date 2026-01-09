@@ -31,7 +31,10 @@ std::vector<double> Profile::ParseScoreLine(const std::string& line) {
             scores.push_back(INFINITY);  // Special end marker
         } else {
             try {
-                scores.push_back(std::stod(token));
+                // HMMER3 format stores positive values representing -log(P)
+                // Convert to log(P) by negating
+                double value = std::stod(token);
+                scores.push_back(-value);  // Negate to get log probability
             } catch (...) {
                 // Skip non-numeric tokens
             }
@@ -104,8 +107,10 @@ bool Profile::LoadFromFile(const std::string& filename) {
     if (line_idx < file_lines.size() && file_lines[line_idx].find("COMPO") != std::string::npos) {
         auto tokens = SplitString(file_lines[line_idx]);
         if (tokens.size() > 1) {
+            // HMMER3 format stores positive values, negate to get log-probabilities
             for (size_t i = 1; i < tokens.size() && i <= 20; ++i) {
-                compo_match_.push_back(std::stod(tokens[i]));
+                double value = std::stod(tokens[i]);
+                compo_match_.push_back(-value);  // Negate to get log-probability
             }
         }
         line_idx++;
@@ -152,8 +157,11 @@ bool Profile::LoadFromFile(const std::string& filename) {
                 state.position = std::stoi(tokens[0]);
                 
                 // Parse match emissions (20 amino acids)
+                // HMMER3 format stores positive values representing -log(P)
+                // Negate to get log(P)
                 for (size_t i = 1; i < tokens.size() && i <= 20; ++i) {
-                    state.match_emissions.push_back(std::stod(tokens[i]));
+                    double value = std::stod(tokens[i]);
+                    state.match_emissions.push_back(-value);  // Negate to get log-probability
                 }
                 
                 // Get consensus amino acid - it's after position number (22nd token)
@@ -229,9 +237,38 @@ double Profile::GetInsertEmission(int position, char amino_acid) const {
     const auto& state = GetState(position);
     int idx = AminoAcidToIndex(amino_acid);
     if (idx < 0 || idx >= static_cast<int>(state.insert_emissions.size())) {
-        return INFINITY;  // Invalid amino acid
+        return -INFINITY;  // Invalid amino acid
     }
+    // Return raw log-probability (already negated from HMMER3 format)
     return state.insert_emissions[idx];
+}
+
+double Profile::GetMatchLogOdds(int position, char amino_acid) const {
+    const auto& state = GetState(position);
+    int idx = AminoAcidToIndex(amino_acid);
+    if (idx < 0 || idx >= static_cast<int>(state.match_emissions.size())) {
+        return -INFINITY;  // Invalid amino acid
+    }
+    
+    // Get emission score (log probability)
+    double emission = state.match_emissions[idx];
+    
+    // Get background frequency (null model)
+    double background = 0.0;
+    if (idx < static_cast<int>(compo_match_.size())) {
+        background = compo_match_[idx];
+    } else {
+        // Uniform background if not available
+        background = std::log(1.0 / 20.0);
+    }
+    
+    // Log-odds = log(P_match) - log(P_background) = log(P_match / P_background)
+    return emission - background;
+}
+
+double Profile::LogOddsToBits(double log_odds) const {
+    // HMMER bit scores: bits = log-odds / log(2)
+    return log_odds / std::log(2.0);
 }
 
 double Profile::GetTransition(int from_state, int to_state, char from_type, char to_type) const {
@@ -257,6 +294,172 @@ double Profile::GetTransition(int from_state, int to_state, char from_type, char
     }
     
     return state.transitions[trans_idx];
+}
+
+std::tuple<double, std::string, int> Profile::ViterbiAlign(const std::vector<std::string>& aa_sequence) const {
+    int seq_len = aa_sequence.size();
+    int hmm_len = length_;
+    
+    // DP matrix: [sequence_position][hmm_position][state_type]
+    // state_type: 0=Match, 1=Insert, 2=Delete
+    const int NUM_STATES = 3;
+    const int M = 0, I = 1, D = 2;
+    
+    // Initialize DP table with -infinity (log space)
+    std::vector<std::vector<std::vector<double>>> dp(
+        seq_len + 1, 
+        std::vector<std::vector<double>>(hmm_len + 1, std::vector<double>(NUM_STATES, -INFINITY))
+    );
+    
+    // Traceback matrix
+    std::vector<std::vector<std::vector<int>>> traceback(
+        seq_len + 1,
+        std::vector<std::vector<int>>(hmm_len + 1, std::vector<int>(NUM_STATES, -1))
+    );
+    
+    // Initialize: start at position 0 in match state
+    dp[0][0][M] = 0.0;
+    
+    // Fill DP matrix
+    for (int i = 0; i <= seq_len; ++i) {
+        for (int j = 0; j <= hmm_len; ++j) {
+            // Match state: consume AA and advance HMM
+            if (i > 0 && j > 0 && j <= hmm_len) {
+                char aa = aa_sequence[i-1][0];  // Get amino acid
+                double emission = GetMatchEmission(j, aa);  // Use raw log-probability
+                
+                // From previous Match (j-1 must be >= 1 for GetTransition)
+                double from_m = -INFINITY;
+                if (j > 1) {
+                    from_m = dp[i-1][j-1][M] + emission + GetTransition(j-1, j, 'M', 'M');
+                } else {
+                    // First position (j=1), come from initial state
+                    from_m = dp[i-1][j-1][M] + emission;
+                }
+                
+                // From previous Insert
+                double from_i = -INFINITY;
+                if (j > 1) {
+                    from_i = dp[i-1][j-1][I] + emission + GetTransition(j-1, j, 'I', 'M');
+                }
+                
+                // From previous Delete
+                double from_d = -INFINITY;
+                if (j > 1) {
+                    from_d = dp[i-1][j-1][D] + emission + GetTransition(j-1, j, 'D', 'M');
+                }
+                
+                double best = std::max({from_m, from_i, from_d});
+                if (best > dp[i][j][M]) {
+                    dp[i][j][M] = best;
+                    if (best == from_m) traceback[i][j][M] = M;
+                    else if (best == from_i) traceback[i][j][M] = I;
+                    else traceback[i][j][M] = D;
+                }
+            }
+            
+            // Insert state: consume AA but don't advance HMM
+            if (i > 0 && j > 0 && j <= hmm_len) {
+                char aa = aa_sequence[i-1][0];
+                // Get raw insert emission (log-probability)
+                const auto& state = GetState(j);
+                int idx = AminoAcidToIndex(aa);
+                double emission = (idx >= 0 && idx < static_cast<int>(state.insert_emissions.size())) 
+                    ? state.insert_emissions[idx] : -INFINITY;
+                
+                // From previous Match
+                double from_m = dp[i-1][j][M] + emission + GetTransition(j, j, 'M', 'I');
+                // From previous Insert
+                double from_i = dp[i-1][j][I] + emission + GetTransition(j, j, 'I', 'I');
+                
+                double best = std::max(from_m, from_i);
+                if (best > dp[i][j][I]) {
+                    dp[i][j][I] = best;
+                    traceback[i][j][I] = (best == from_m) ? M : I;
+                }
+            }
+            
+            // Delete state: advance HMM but don't consume AA
+            if (j > 1 && i <= seq_len && j <= hmm_len) {
+                // From previous Match (j-1 >= 1)
+                double from_m = dp[i][j-1][M] + GetTransition(j-1, j, 'M', 'D');
+                // From previous Delete
+                double from_d = dp[i][j-1][D] + GetTransition(j-1, j, 'D', 'D');
+                
+                double best = std::max(from_m, from_d);
+                if (best > dp[i][j][D]) {
+                    dp[i][j][D] = best;
+                    traceback[i][j][D] = (best == from_m) ? M : D;
+                }
+            }
+        }
+    }
+    
+    // Find best final score (local alignment - can end anywhere)
+    double best_score = -INFINITY;
+    int best_final_state = M;
+    int best_final_pos = hmm_len;
+    
+    // Check all possible ending positions and states
+    for (int j = 1; j <= hmm_len; ++j) {
+        if (dp[seq_len][j][M] > best_score) {
+            best_score = dp[seq_len][j][M];
+            best_final_state = M;
+            best_final_pos = j;
+        }
+        if (dp[seq_len][j][I] > best_score) {
+            best_score = dp[seq_len][j][I];
+            best_final_state = I;
+            best_final_pos = j;
+        }
+        if (dp[seq_len][j][D] > best_score) {
+            best_score = dp[seq_len][j][D];
+            best_final_state = D;
+            best_final_pos = j;
+        }
+    }
+    
+    // Traceback to get path
+    std::string path;
+    int i = seq_len, j = best_final_pos, state = best_final_state;
+    while (i > 0 || j > 0) {
+        if (state == M) {
+            path = "M" + path;
+            int prev = traceback[i][j][M];
+            i--; j--;
+            state = prev;
+        } else if (state == I) {
+            path = "I" + path;
+            int prev = traceback[i][j][I];
+            i--;
+            state = prev;
+        } else if (state == D) {
+            path = "D" + path;
+            int prev = traceback[i][j][D];
+            j--;
+            state = prev;
+        } else {
+            break;
+        }
+    }
+    
+    // Convert log-probability score to bits with null model correction
+    // Null model score: what would a random sequence score?
+    double null_score = 0.0;
+    for (const auto& aa : aa_sequence) {
+        int idx = AminoAcidToIndex(aa[0]);
+        if (idx >= 0 && idx < static_cast<int>(compo_match_.size())) {
+            null_score += compo_match_[idx];  // Background frequency (log-prob)
+        }
+    }
+    
+    // Log-odds = HMM score - null model score
+    double log_odds = best_score - null_score;
+    
+    // Convert to bits (HMMER-compatible)
+    double bit_score = log_odds / std::log(2.0);
+    
+    return {bit_score, path, best_final_pos};
 }
 
 void Profile::PrintSummary() const {

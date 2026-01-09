@@ -60,6 +60,16 @@ public:
     double GetMatchEmission(int position, char amino_acid) const;
     double GetInsertEmission(int position, char amino_acid) const;
     
+    // Get log-odds emission score (relative to null model)
+    double GetMatchLogOdds(int position, char amino_acid) const;
+    
+    // Get bit score from log-odds
+    double LogOddsToBits(double log_odds) const;
+    
+    // Viterbi alignment of amino acid sequence to HMM
+    // Returns: <bit_score, best_path_states, hmm_end_position>
+    std::tuple<double, std::string, int> ViterbiAlign(const std::vector<std::string>& aa_sequence) const;
+    
     // Get transition score
     double GetTransition(int from_state, int to_state, char from_type, char to_type) const;
     

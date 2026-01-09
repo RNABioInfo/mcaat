@@ -1,0 +1,267 @@
+@startuml Class_Diagram
+
+' Paste this into: https://www.planttext.com/
+' Or: http://www.plantuml.com/plantuml/uml/
+
+title HMM-Guided Beam Search Class Diagram
+
+' ==================== Core Classes ====================
+
+class Profile {
+    ' Profile HMM representation
+    
+    - std::string name_
+    - std::vector<std::vector<double>> match_emissions_
+    - std::vector<std::vector<double>> insert_emissions_
+    - std::vector<std::vector<double>> transitions_
+    - std::vector<double> compo_match_
+    - int length_
+    
+    + LoadFromFile(filename: string): bool
+    + GetMatchEmission(pos: int, aa: char): double
+    + GetInsertEmission(pos: int, aa: char): double
+    + GetTransition(pos: int, from: State, to: State): double
+    + GetMatchLogOdds(pos: int, aa: char): double
+    + ViterbiAlign(aa_seq: string): tuple<double, string, int>
+    + GetLength(): int
+    
+    - ParseScoreLine(line: string): vector<double>
+    - AminoAcidToIndex(aa: char): int
+}
+
+note right of Profile
+    **Key Methods:**
+    
+    ViterbiAlign() returns:
+    - bit_score (HMMER-compatible)
+    - alignment path ("MMMIMM...")
+    - hmm_end_position
+    
+    **Null Model Correction:**
+    bit_score = (viterbi - null) / log(2)
+end note
+
+class AminoAcidator {
+    ' Beam search on de Bruijn graph
+    
+    - SDBG& sdbg_
+    - Profile* profile_
+    
+    + AminoAcidator(sdbg: SDBG&, profile: Profile*)
+    + BeamSearchAminoAcids(start_node: uint64_t, beam_width: int, max_depth: int): vector<Path>
+    
+    - Translate(dna: string): string
+    - GetNodeSequence(node_id: uint64_t): string
+}
+
+note right of AminoAcidator
+    **Beam Search Algorithm:**
+    
+    1. Initialize with start node
+    2. For each depth level:
+       a. Expand all paths in beam
+       b. Translate to amino acids
+       c. Score with Viterbi
+       d. Keep top K by score
+    3. Stop when HMM complete (pos ≥ 328)
+end note
+
+class SDBG {
+    ' de Bruijn graph (succinct data structure)
+    
+    - KmerCollector kmer_collector_
+    - int kmer_k_
+    - uint64_t num_nodes_
+    
+    + LoadFromFile(prefix: string): void
+    + GetNode(node_id: uint64_t): Node
+    + GetOutgoingEdges(node_id: uint64_t): vector<Edge>
+    + GetKmerK(): int
+}
+
+note left of SDBG
+    **Graph Structure:**
+    
+    - Nodes: k-mers (k=23)
+    - Edges: (k-1) overlap
+    - 4M nodes total
+    - Stored in succinct format
+end note
+
+' ==================== Data Structures ====================
+
+class Path {
+    ' Represents a path through graph
+    
+    + std::vector<uint64_t> nodes
+    + std::vector<std::string> amino_acids
+    + std::string nucleotide_sequence
+    + double total_score
+    + int hmm_position
+    + std::string alignment_path
+}
+
+note top of Path
+    **Scored by Viterbi**
+    
+    total_score = HMMER bits
+    Higher = better match
+    
+    Example:
+    - score: 100.215 bits
+    - hmm_position: 328
+    - amino_acids: ["A","I","Q",...]
+end note
+
+class SearchState {
+    ' State during beam search
+    
+    + Path path
+    + uint64_t current_node
+    + int depth
+    
+    + operator<(other: SearchState): bool
+}
+
+enum ViterbiState {
+    MATCH = 0
+    INSERT = 1
+    DELETE = 2
+}
+
+note right of ViterbiState
+    **3-State Model:**
+    
+    M: Emit AA, advance HMM
+    I: Emit AA, stay at HMM pos
+    D: Skip AA, advance HMM
+end note
+
+' ==================== Relationships ====================
+
+AminoAcidator --> SDBG : uses
+AminoAcidator --> Profile : uses
+AminoAcidator ..> Path : creates
+AminoAcidator ..> SearchState : uses internally
+
+Profile ..> ViterbiState : uses in DP
+
+Path --> "0..*" SDBG : nodes in graph
+
+' ==================== Scoring Components ====================
+
+package "Scoring System" {
+    
+    class ViterbiDP {
+        ' Dynamic programming matrices
+        
+        + double dp[seq_len][hmm_len][3]
+        + int backpointer[seq_len][hmm_len][3]
+        
+        + Forward(): double
+        + Traceback(): string
+    }
+    
+    class NullModel {
+        ' Background frequency model
+        
+        + std::vector<double> background_freq
+        
+        + CalculateScore(seq: string): double
+    }
+    
+    note bottom of NullModel
+        **Null Model:**
+        
+        Score of random sequence
+        null_score = Σ log P(aa|background)
+        
+        Used to convert to log-odds:
+        log_odds = viterbi - null
+    end note
+    
+    Profile --> ViterbiDP : creates during align
+    Profile --> NullModel : uses for correction
+}
+
+' ==================== Algorithm Flow ====================
+
+package "Algorithm Flow" {
+    
+    class BeamSearchLoop {
+        <<algorithm>>
+        
+        + current_beam: priority_queue<SearchState>
+        + next_beam: vector<SearchState>
+        
+        + ExpandBeam(): void
+        + PruneBeam(width: int): void
+    }
+    
+    class ViterbiAlgorithm {
+        <<algorithm>>
+        
+        + Initialize(): void
+        + FillDPMatrix(): void
+        + FindBestScore(): double
+        + Traceback(): string
+        + ApplyNullCorrection(): double
+    }
+    
+    BeamSearchLoop --> ViterbiAlgorithm : calls for each path
+    AminoAcidator ..> BeamSearchLoop : implements
+    Profile ..> ViterbiAlgorithm : implements
+}
+
+' ==================== HMMER Integration ====================
+
+package "HMMER Compatibility" {
+    
+    class HMMER3Parser {
+        <<utility>>
+        
+        + ParseFile(filename: string): Profile
+        + ParseScoreLine(line: string): vector<double>
+        + NegateValues(values: vector<double>): void
+    }
+    
+    note bottom of HMMER3Parser
+        **HMMER3 Format:**
+        
+        File stores: +X (positive -log P)
+        We store: -X (negative log P)
+        
+        Example:
+        File: 2.90958
+        Internal: -2.90958
+    end note
+    
+    class BitScoreConverter {
+        <<utility>>
+        
+        + ToBits(log_odds: double): double
+        + ToLogOdds(viterbi: double, null: double): double
+    }
+    
+    Profile ..> HMMER3Parser : uses during load
+    Profile ..> BitScoreConverter : uses in ViterbiAlign
+}
+
+' ==================== Testing ====================
+
+class TestHmmAcidator {
+    <<executable>>
+    
+    + main(argc: int, argv: char**): int
+    
+    - LoadGraph(): SDBG
+    - LoadHMM(): Profile
+    - RunBeamSearch(): vector<Path>
+    - PrintResults(): void
+}
+
+TestHmmAcidator --> AminoAcidator : creates
+TestHmmAcidator --> Profile : creates
+TestHmmAcidator --> SDBG : creates
+
+@enduml

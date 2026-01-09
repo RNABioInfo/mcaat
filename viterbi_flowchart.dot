@@ -1,0 +1,145 @@
+// Viterbi Algorithm Detailed Flowchart
+// Paste this into: https://dreampuf.github.io/GraphvizOnline/
+// Or use: dot -Tpng viterbi_flowchart.dot -o viterbi.png
+
+digraph Viterbi_Algorithm {
+    // Graph settings
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Arial"];
+    edge [fontname="Arial", fontsize=10];
+    
+    // Define colors
+    node [fillcolor=lightblue, style="rounded,filled"];
+    
+    // Start
+    start [label="ViterbiAlign(aa_sequence)\nInput: AA sequence (e.g., 'AIQT...')", fillcolor=lightgreen];
+    
+    // Initialize
+    init_dp [label="Initialize DP matrices:\ndp[seq_len+1][hmm_len+1][3]\nStates: M=0, I=1, D=2\nAll values = -∞"];
+    init_start [label="Set start state:\ndp[0][0][M] = 0.0\n(log probability = 1.0)"];
+    
+    // Loops
+    seq_loop [label="For i = 0 to seq_len", shape=hexagon, fillcolor=lightcoral];
+    hmm_loop [label="For j = 0 to hmm_len", shape=hexagon, fillcolor=lightcoral];
+    
+    // Get current AA
+    get_aa [label="aa = aa_sequence[i]\naa_idx = AminoAcidToIndex(aa)"];
+    
+    // Compute Match state
+    subgraph cluster_match {
+        label = "Compute Match State M";
+        style=filled;
+        color=lightgreen;
+        fillcolor=honeydew;
+        
+        match_title [label="dp[i][j][M] = ?", fillcolor=lightgreen];
+        
+        match_from_m [label="Option 1: From M\nscore = dp[i-1][j-1][M]\n  + match_emit[j][aa]\n  + trans[j-1][M→M]"];
+        match_from_i [label="Option 2: From I\nscore = dp[i-1][j-1][I]\n  + match_emit[j][aa]\n  + trans[j-1][I→M]"];
+        match_from_d [label="Option 3: From D\nscore = dp[i-1][j-1][D]\n  + match_emit[j][aa]\n  + trans[j-1][D→M]"];
+        match_max [label="dp[i][j][M] = max(\n  Option 1,\n  Option 2,\n  Option 3\n)", fillcolor=yellow];
+        
+        match_title -> match_from_m;
+        match_title -> match_from_i;
+        match_title -> match_from_d;
+        match_from_m -> match_max;
+        match_from_i -> match_max;
+        match_from_d -> match_max;
+    }
+    
+    // Compute Insert state
+    subgraph cluster_insert {
+        label = "Compute Insert State I";
+        style=filled;
+        color=lightblue;
+        fillcolor=aliceblue;
+        
+        insert_title [label="dp[i][j][I] = ?", fillcolor=lightblue];
+        
+        insert_from_m [label="Option 1: From M\nscore = dp[i-1][j][M]\n  + insert_emit[j][aa]\n  + trans[j][M→I]"];
+        insert_from_i [label="Option 2: From I\nscore = dp[i-1][j][I]\n  + insert_emit[j][aa]\n  + trans[j][I→I]"];
+        insert_max [label="dp[i][j][I] = max(\n  Option 1,\n  Option 2\n)", fillcolor=yellow];
+        
+        insert_title -> insert_from_m;
+        insert_title -> insert_from_i;
+        insert_from_m -> insert_max;
+        insert_from_i -> insert_max;
+    }
+    
+    // Compute Delete state
+    subgraph cluster_delete {
+        label = "Compute Delete State D";
+        style=filled;
+        color=lightcoral;
+        fillcolor=mistyrose;
+        
+        delete_title [label="dp[i][j][D] = ?", fillcolor=lightcoral];
+        
+        delete_from_m [label="Option 1: From M\nscore = dp[i][j-1][M]\n  + trans[j-1][M→D]\n(no emission)"];
+        delete_from_d [label="Option 2: From D\nscore = dp[i][j-1][D]\n  + trans[j-1][D→D]\n(no emission)"];
+        delete_max [label="dp[i][j][D] = max(\n  Option 1,\n  Option 2\n)", fillcolor=yellow];
+        
+        delete_title -> delete_from_m;
+        delete_title -> delete_from_d;
+        delete_from_m -> delete_max;
+        delete_from_d -> delete_max;
+    }
+    
+    // Traceback
+    find_best [label="Find best final score:\nbest_score = max over all i,j:\n  max(dp[i][j][M],\n      dp[i][j][I],\n      dp[i][j][D])", fillcolor=plum];
+    
+    traceback [label="Traceback from best position:\n- Follow backpointers\n- Build path string: 'MMMIMMDM...'\n- Record hmm_end_position"];
+    
+    // Null model correction
+    subgraph cluster_null {
+        label = "Null Model Correction (HMMER-compatible scoring)";
+        style=filled;
+        color=purple;
+        fillcolor=lavender;
+        
+        calc_null [label="Calculate null score:\nnull_score = 0\nfor each aa in sequence:\n  null_score += background[aa]", fillcolor=lavender];
+        
+        log_odds [label="Log-odds:\nlog_odds = best_score - null_score", fillcolor=lavender];
+        
+        bit_score [label="Convert to bits:\nbit_score = log_odds / log(2)", fillcolor=lavender];
+        
+        calc_null -> log_odds -> bit_score;
+    }
+    
+    // Return
+    return_result [label="Return:\n{bit_score, path, hmm_end_pos}\n\nExample:\n{100.215,\n 'MMMMMIMMM...MMM',\n 328}", fillcolor=lightgreen];
+    
+    finish [label="END", fillcolor=lightgreen];
+    
+    // Main flow
+    start -> init_dp;
+    init_dp -> init_start;
+    init_start -> seq_loop;
+    
+    seq_loop -> hmm_loop;
+    hmm_loop -> get_aa;
+    get_aa -> match_title;
+    
+    match_max -> insert_title;
+    insert_max -> delete_title;
+    delete_max -> hmm_loop [label="Next j", style=dashed];
+    
+    hmm_loop -> seq_loop [label="All j done\nNext i", style=dashed];
+    seq_loop -> find_best [label="All i,j done"];
+    
+    find_best -> traceback;
+    traceback -> calc_null;
+    bit_score -> return_result;
+    return_result -> finish;
+    
+    // Annotations
+    note1 [label="KEY INSIGHT:\nAll scores are log probabilities\nHigher (less negative) = better\n\nEmissions: log P(aa|state)\nTransitions: log P(state'|state)\nCombination: Addition (not multiplication)", 
+           shape=note, fillcolor=lightyellow, style=filled];
+    
+    note2 [label="SCORING DIMENSIONS:\n\nMatch emission: -2.90 (log P)\nInsert emission: -2.68 (log P)\nTransition M→M: -0.01 (log P)\n\nCombined: -2.90 + -0.01 = -2.91\n\nAll negative until null correction!", 
+           shape=note, fillcolor=lightyellow, style=filled];
+    
+    // Position notes
+    {rank=same; init_dp; note1;}
+    {rank=same; match_max; note2;}
+}

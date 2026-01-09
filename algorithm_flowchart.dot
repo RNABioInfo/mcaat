@@ -1,0 +1,103 @@
+// HMM-Guided Beam Search Algorithm Flowchart
+// Paste this into: https://dreampuf.github.io/GraphvizOnline/
+// Or use: dot -Tpng algorithm_flowchart.dot -o algorithm.png
+
+digraph HMM_Beam_Search {
+    // Graph settings
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Arial"];
+    edge [fontname="Arial", fontsize=10];
+    
+    // Define colors
+    node [fillcolor=lightblue, style="rounded,filled"];
+    
+    // Main components
+    start [label="START\nInitialize Beam Search", fillcolor=lightgreen];
+    load_graph [label="Load De Bruijn Graph\n(4M nodes, k=23)", shape=cylinder, fillcolor=lightyellow];
+    load_hmm [label="Load HMM Profile\n(HMMER3 format)\n328 states", shape=cylinder, fillcolor=lightyellow];
+    init_beam [label="Initialize Beam\nstart_node → {empty_seq, score=0}"];
+    
+    // Main loop
+    depth_loop [label="For depth = 0 to max_depth\n(1200 iterations max)", shape=hexagon, fillcolor=lightcoral];
+    path_loop [label="For each path in beam\n(up to beam_width=10)", shape=hexagon, fillcolor=lightcoral];
+    
+    // Termination check
+    check_complete [label="HMM position ≥ 328?", shape=diamond, fillcolor=orange];
+    save_result [label="Save completed path\nto results", fillcolor=lightgreen];
+    
+    // Graph expansion
+    expand_edges [label="For each outgoing edge", shape=hexagon, fillcolor=lightcoral];
+    get_next_node [label="next_node = edge.destination"];
+    append_nuc [label="sequence += node.nucleotide"];
+    
+    // Translation
+    check_codon [label="len(sequence) % 3 == 0?", shape=diamond, fillcolor=orange];
+    translate [label="Translate last 3 nucleotides\nto amino acid"];
+    append_aa [label="aa_sequence += new_aa"];
+    
+    // Viterbi scoring box
+    subgraph cluster_viterbi {
+        label = "Viterbi Alignment (see detailed graph below)";
+        style=dashed;
+        color=blue;
+        
+        viterbi_call [label="ViterbiAlign(aa_sequence)", fillcolor=cyan];
+        viterbi_return [label="Return:\n{bit_score, path, hmm_pos}", fillcolor=cyan];
+    }
+    
+    // Path creation
+    create_path [label="Create new path:\n- nodes: current + next\n- aa_seq: updated\n- total_score: bit_score\n- hmm_position: hmm_pos"];
+    add_to_next [label="Add path to next_layer"];
+    
+    // Beam pruning
+    sort_beam [label="Sort next_layer by total_score\n(descending)", fillcolor=plum];
+    prune_beam [label="Keep top beam_width paths\n(default: 10)", fillcolor=plum];
+    update_beam [label="current_beam = pruned_layer"];
+    
+    // Termination
+    check_depth [label="depth < max_depth?", shape=diamond, fillcolor=orange];
+    output_results [label="Return all saved paths\n(sorted by score)", fillcolor=lightgreen];
+    finish [label="END", fillcolor=lightgreen];
+    
+    // Main flow
+    start -> load_graph;
+    start -> load_hmm;
+    load_graph -> init_beam;
+    load_hmm -> init_beam;
+    init_beam -> depth_loop;
+    
+    depth_loop -> path_loop;
+    path_loop -> check_complete;
+    
+    check_complete -> save_result [label="Yes"];
+    check_complete -> expand_edges [label="No\nContinue searching"];
+    
+    save_result -> path_loop [label="Next path", style=dashed];
+    
+    expand_edges -> get_next_node;
+    get_next_node -> append_nuc;
+    append_nuc -> check_codon;
+    
+    check_codon -> translate [label="Yes\nCodon complete"];
+    check_codon -> create_path [label="No\nNucleotide only", style=dashed];
+    translate -> append_aa;
+    append_aa -> viterbi_call;
+    
+    viterbi_call -> viterbi_return;
+    viterbi_return -> create_path;
+    create_path -> add_to_next;
+    
+    add_to_next -> expand_edges [label="Next edge", style=dashed];
+    expand_edges -> sort_beam [label="All edges done"];
+    
+    sort_beam -> prune_beam;
+    prune_beam -> update_beam;
+    update_beam -> check_depth;
+    
+    check_depth -> depth_loop [label="Yes\nContinue"];
+    check_depth -> output_results [label="No\nMax depth reached"];
+    
+    path_loop -> sort_beam [label="All paths done"];
+    
+    output_results -> finish;
+}

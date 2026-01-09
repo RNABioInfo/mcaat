@@ -122,6 +122,20 @@ void AminoAcidator::BeamTraverse(
                 continue;
             }
             
+            // Check if HMM is complete
+            if (profile_ != nullptr && state.hmm_position >= profile_->GetLength()) {
+                // HMM fully aligned, save this path and don't expand further
+                AminoAcidPathInfo path_info;
+                path_info.amino_acids = state.amino_acids;
+                path_info.node_path = state.node_path;
+                path_info.scores = state.scores;
+                path_info.total_score = state.total_score;
+                path_info.dna_sequence = state.accumulated_sequence;
+                path_info.hmm_position = state.hmm_position;
+                result_paths.push_back(path_info);
+                continue;
+            }
+            
             // Expand to ALL outgoing edges
             for (int i = 0; i < outdegree; ++i) {
                 uint64_t next_node = outgoings[i];
@@ -164,55 +178,31 @@ void AminoAcidator::BeamTraverse(
                 size_t seq_len = extended_seq.length();
                 size_t num_complete_codons = seq_len / 3;
                 
-                double codon_score = 0.0;
-                
-                // Convert complete triplets to amino acids and score with HMM
+                // Convert complete triplets to amino acids
                 for (size_t j = state.amino_acids.size(); j < num_complete_codons; ++j) {
                     std::string codon = extended_seq.substr(j * 3, 3);
                     char aa = CodonToAminoAcid(codon);
                     new_state.amino_acids.push_back(std::string(1, aa));
-                    
-                    // Score with HMM if profile is available
-                    if (profile_ != nullptr && new_state.hmm_position < profile_->GetLength()) {
-                        new_state.hmm_position++;  // Move to next HMM position
-                        
-                        try {
-                            // Get match emission score (negative log probability)
-                            // Lower score = better match in HMMER format
-                            double emission_score = profile_->GetMatchEmission(new_state.hmm_position, aa);
-                            
-                            // Also get transition score M->M (match to match)
-                            double transition_score = 0.0;
-                            if (new_state.hmm_position > 1) {
-                                transition_score = profile_->GetTransition(new_state.hmm_position - 1, 
-                                                                          new_state.hmm_position, 
-                                                                          'M', 'M');
-                            }
-                            
-                            // HMMER uses negative log probabilities, so lower is better
-                            // We negate to make higher scores better for beam search
-                            codon_score -= (emission_score + transition_score);
-                            
-                        } catch (const std::exception& e) {
-                            // If we go past HMM length, stop scoring
-                            codon_score = 0.0;
-                        }
-                    }
                 }
                 
-                // Final score calculation
-                double node_score;
-                if (profile_ != nullptr) {
-                    // Use HMM-based score
-                    node_score = codon_score;
+                // Score entire amino acid sequence with Viterbi alignment
+                double viterbi_score = 0.0;
+                if (profile_ != nullptr && !new_state.amino_acids.empty()) {
+                    // Run Viterbi on complete sequence to get optimal alignment score
+                    auto [bit_score, alignment_path, hmm_end_pos] = profile_->ViterbiAlign(new_state.amino_acids);
+                    viterbi_score = bit_score;
+                    
+                    // Update HMM position to the ending position from Viterbi
+                    new_state.hmm_position = hmm_end_pos;
                 } else {
                     // Fallback to simple node degree scoring
-                    node_score = static_cast<double>(sdbg.EdgeOutdegree(next_node));
+                    viterbi_score = static_cast<double>(sdbg.EdgeOutdegree(next_node));
                 }
                 
+                // Use Viterbi score directly as total score (not incremental)
                 new_state.scores = state.scores;
-                new_state.scores.push_back(node_score);
-                new_state.total_score = state.total_score + node_score;
+                new_state.scores.push_back(viterbi_score);
+                new_state.total_score = viterbi_score;  // Total score IS the Viterbi score
                 
                 next_layer.push_back(new_state);
             }

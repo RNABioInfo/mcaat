@@ -114,11 +114,25 @@ int main(int argc, char** argv) {
     
     for (int i = 0; i < num_to_display; ++i) {
         const auto& path = paths[i];
+        
+        // Beam search already used Viterbi scoring
+        double beam_viterbi_score = path.total_score;
+        
+        // Re-run Viterbi to show alignment details
+        auto [viterbi_bit_score, alignment_path, hmm_end_pos] = profile.ViterbiAlign(path.amino_acids);
+        int viterbi_matches = 0;
+        for (char c : alignment_path) {
+            if (c == 'M') viterbi_matches++;
+        }
+        
         cout << "\nPath " << (i + 1) << ":" << endl;
-        cout << "  HMM score: " << path.total_score << endl;
+        cout << "  Viterbi score: " << viterbi_bit_score << " bits" << endl;
+        cout << "  (Beam search ranked paths by this Viterbi score)" << endl;
+        cout << "  Viterbi alignment: " << alignment_path.substr(0, min((size_t)50, alignment_path.size())) 
+             << (alignment_path.size() > 50 ? "..." : "") << endl;
         cout << "  Nodes in path: " << path.node_path.size() << endl;
         cout << "  Amino acids: " << path.amino_acids.size() << endl;
-        cout << "  HMM position reached: " << path.hmm_position << " / " << profile.GetLength() << endl;
+        cout << "  HMM matches (Viterbi): " << viterbi_matches << " / " << profile.GetLength() << endl;
         
         // Display amino acid sequence
         cout << "  AA sequence: ";
