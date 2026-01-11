@@ -36,14 +36,14 @@ g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./l
 ./test_cas_gene_detector output_dir/graph/graph profile.hmm <node_id>
 ```
 
-## Validation (704 Cas Profiles)
+## Validation (17 Cas Profiles)
 
 ```bash
 ./validate.sh
 ```
 
 **Results:**
-- Profiles tested: 704
+- Profiles tested: 17 --> in progress ...
 - Average score difference vs HMMER: **2.16%**
 - Scoring method: HMMER3 log-odds with null model correction
 
