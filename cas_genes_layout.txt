@@ -1,0 +1,492 @@
+CRISPR-Cas Classification Reference (Complete)
+
+
+NAMING CONVENTION: Unified Cas# system
+Old subtype-specific names shown in (parentheses) for reference.
+
+
+
+                              SYSTEM OVERVIEW
+
+
+CRISPR-Cas systems consist of:
+
+1. CORE GENES — Essential for CRISPR function
+    Adaptation module: Cas1, Cas2, (Cas4) — acquire new spacers
+    Processing module: Cas6 — mature crRNA
+    Interference module: effector complex — destroy targets
+
+2. ACCESSORY GENES — Enhance defense, signaling, regulation
+    Signaling amplification (nucleases, membrane proteins)
+    Transcriptional regulation (HTH, WYL)
+    Alternative acquisition (RT)
+    Abortive infection (Abi)
+
+
+
+                          CLASS 1 — Multi-subunit
+
+Multiple proteins assemble together to form the interference machinery.
+
+
+
+ TYPE I — Signature: Cas3 (helicase-nuclease)                                
+
+                                                                             
+  I-A                                                                        
+    Interference: Cas3, Cas3HD, Cas5a, Cas6, Cas7a, Cas8a (CsaX), Csa5      
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  I-B                                                                        
+    Interference: Cas3, Cas5b, Cas6, Cas7b, Cas8b, Cas11b                    
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    PD_DExK, Unk_05                                            
+                                                                             
+  I-C                                                                        
+    Interference: Cas3, Cas5c, Cas7c, Cas8c                                  
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    HEAT_CxxC_PDDEXK, ST_Kinase                                
+                                                                             
+  I-D                                                                        
+    Interference: Cas3, Cas5d (Csc1), Cas6, Cas7d (Csc2), Cas10d,          
+                  Cas11d, Cas11d2                                            
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    HTH                                                        
+                                                                             
+  I-E                                                                        
+    Interference: Cas3, Cas3HD, Cas5e, Cas6e, Cas7e, Cas8e (Cse1),          
+                  Cas11e (Cse2)                                             
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:    RT, STAND_TPR, Unk_04                                      
+                                                                             
+  I-F                                                                        
+    Interference: Cas5f (Csy2), Cas6f, Cas7f (Csy3), Cas8f (Csy1)         
+    Fusion:       Cas3-Cas2                                                  
+    Adaptation:   Cas1                                                       
+    Accessory:    TniQ (in I-F_T)                                            
+                                                                             
+  I-F_T (Tn7-associated transposon)                                          
+    Interference: Cas5f (Csy2), Cas6f, Cas7f (Csy3), Cas8f (Csy1)         
+    Transposon:   TniQ                                                       
+    Adaptation:   (none — uses transposon machinery)                         
+                                                                             
+  I-G (formerly I-U)                                                         
+    Interference: Cas3, Cas5u (Csb2), Cas7u (Csb1), Cas8u (Csb3)          
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    Csx17                                                      
+                                                                             
+
+
+
+ TYPE III — Signature: Cas10 (cyclic oligoadenylate signaling)               
+
+                                                                             
+      
+   Type III SIGNALING CASCADE                                              
+                                                                           
+   Target RNA detected → Cas10 produces cOA → activates effectors:         
+     • Csm6/Csx1 (CARF+HEPN) → RNA degradation                            
+     • Can2/Card1 → DNA cleavage                                          
+     • CorA → membrane depolarization                                     
+     • NucC → DNA degradation                                             
+      
+                                                                             
+  III-A (Csm complex)                                                        
+    Interference: Cas10, Csm2, Csm3, Csm4, Csm5                              
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:                                                               
+      Signaling:    Csm6 (CARF+HEPN nuclease)                               
+                    CasR (CARF domain regulator)                            
+                    Csx1 (CARF+nuclease)                                    
+                    Csx21, Csx22                                            
+                    PD_DExK_NucC                                            
+      Regulation:   HTH                                                     
+                    TPR                                                     
+      Other:        PEPT_D, Unk_02                                          
+                                                                             
+  III-AM (Type III-A with RT)                                                
+    Interference: Cas10, Csm2, Csm3, Csm4, Csm5                              
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:                                                               
+      RT-related:   RT (Reverse Transcriptase — spacer from RNA)            
+                    PIWI (RNA silencing)                                    
+                    Mem_DnaJ                                                
+                                                                             
+  III-B (Cmr complex)                                                        
+    Interference: Cas10, Cmr1, Cmr3, Cmr4, Cmr5, Cmr6                        
+    Additional:   Cmr7, Cmr8                                                 
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:                                                               
+      Signaling:    CasR (CARF regulator)                                   
+                    Csx1 (CARF+nuclease)                                    
+                    Csx16                                                   
+                    CorA (membrane channel)                                 
+                    DHH_CorA                                                
+      Nucleases:    NYN                                                     
+      Regulation:   HTH                                                     
+                    TPR                                                     
+      Membrane:     Mem_01                                                  
+      Other:        htpX, Unk_03                                            
+                                                                             
+  III-C                                                                      
+    Interference: Cas10, Cmr1, Cmr3, Cmr4, Cmr5, Cmr6                        
+    Adaptation:   (none)                                                     
+    Accessory:    Toprim, AbiEii                                            
+                                                                             
+  III-D                                                                      
+    Interference: Cas10, Csm2/Cas11, Csm3, Csm5, Csx10, Csx19                
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:                                                               
+      Signaling:    CasR                                                    
+                    CorA                                                    
+                    Csx23, Csx24, Csx25, Csx26                              
+      Membrane:     Mem_02, Mem_03, Mem_04                                  
+      Other:        Unk_01, Unk_06                                          
+                                                                             
+  III-E                                                                      
+    Interference: gRAMP (single fusion protein — Cas7+Cas10+Cas5 fused)      
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  III-F                                                                      
+    Interference: SSgr11, Cas10, Cas5, Csm3                                  
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+
+
+
+ TYPE IV — Signature: Csf genes (no nuclease, function unclear)              
+
+                                                                             
+  IV-A1                                                                      
+    Interference: Csf1, Csf2, Csf3, Csf4, Cas6                               
+    Accessory:    —                                                          
+                                                                             
+  IV-A2                                                                      
+    Interference: Csf2, Csf3, Csf4, Cas6                                     
+    Accessory:    —                                                          
+                                                                             
+  IV-A3                                                                      
+    Interference: Csf1, Csf2, Csf3, Csf4, Cas6                               
+    Accessory:    —                                                          
+                                                                             
+  IV-B                                                                       
+    Interference: Cas11, Csf1, Csf2, Csf3                                    
+    Accessory:    CysH (sulfur metabolism — function unclear)                
+                                                                             
+  IV-C                                                                       
+    Interference: Csf2, Csf3, Cas10-like, Cas11, Cas6                        
+    Accessory:    —                                                          
+                                                                             
+  IV-D                                                                       
+    Interference: Csf1, Csf2, Csf3, RecD, Cas6                               
+    Accessory:    —                                                          
+                                                                             
+  IV-E                                                                       
+    Interference: Csf3-Csf1 (fusion), Csf2, Csf4, Cas6                       
+    Accessory:    —                                                          
+                                                                             
+
+
+
+
+                          CLASS 2 — Single effector
+
+One large protein performs all interference functions.
+
+
+
+ TYPE II — Signature: Cas9 (blunt DNA cuts)                                  
+
+                                                                             
+  II-A                                                                       
+    Interference: Cas9                                                       
+    Adaptation:   Cas1, Cas2, Csn2                                           
+    Accessory:    —                                                          
+                                                                             
+  II-B                                                                       
+    Interference: Cas9                                                       
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  II-C                                                                       
+    Interference: Cas9                                                       
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:    —                                                          
+                                                                             
+  II-C2 (variant)                                                            
+    Interference: Cas9                                                       
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:    —                                                          
+                                                                             
+  II-D                                                                       
+    Interference: Cas9                                                       
+    Adaptation:   Cas1, Cas2                                                 
+    Accessory:    —                                                          
+                                                                             
+
+
+
+ TYPE V — Signature: Cas12 (staggered DNA cuts)                              
+
+                                                                             
+  V-A                                                                        
+    Interference: Cas12a (Cpf1)                                             
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-B1                                                                       
+    Interference: Cas12b1                                                    
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-B2                                                                       
+    Interference: Cas12b2                                                    
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-C                                                                        
+    Interference: Cas12c                                                     
+    Adaptation:   Cas1                                                       
+    Accessory:    —                                                          
+                                                                             
+  V-D                                                                        
+    Interference: Cas12d                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  V-E                                                                        
+    Interference: Cas12e                                                     
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-F1                                                                       
+    Interference: Cas12f1                                                    
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-F2                                                                       
+    Interference: Cas12f2                                                    
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-F3                                                                       
+    Interference: Cas12f3                                                    
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-G                                                                        
+    Interference: Cas12g                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  V-H                                                                        
+    Interference: Cas12h                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  V-I                                                                        
+    Interference: Cas12i                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  V-J (cas-phi)                                                              
+    Interference: Cas12j                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  V-K (Tn7-associated transposon)                                            
+    Interference: Cas12k                                                     
+    Transposon:   TniQ, TnsB, TnsC                                           
+    Adaptation:   (none — uses transposon machinery)                         
+    Accessory:    MerR (transcriptional regulator)                           
+                                                                             
+  V-L                                                                        
+    Interference: Cas12l                                                     
+    Adaptation:   Cas1, Cas2, Cas4                                           
+    Accessory:    —                                                          
+                                                                             
+  V-M                                                                        
+    Interference: Cas12m                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+
+
+
+ TYPE VI — Signature: Cas13 (RNA targeting)                                  
+
+                                                                             
+  VI-A                                                                       
+    Interference: Cas13a                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  VI-B1                                                                      
+    Interference: Cas13b                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    Csx27, tm_4, tm_HEPN                                       
+                                                                             
+  VI-B2                                                                      
+    Interference: Cas13b                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    Csx28, tm_4, tm_HEPN                                       
+                                                                             
+  VI-C                                                                       
+    Interference: Cas13c                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+  VI-D                                                                       
+    Interference: Cas13d                                                     
+    Adaptation:   (none)                                                     
+    Accessory:    —                                                          
+                                                                             
+
+
+
+
+                           ACCESSORY GENE REFERENCE
+
+
+SIGNALING & NUCLEASES (cOA-activated, mainly Type III)
+
+Gene           Domain(s)        Function                     Found in
+
+Csm6           CARF + HEPN      RNA cleavage upon cOA        III-A
+Csx1           CARF + nuclease  RNA/DNA cleavage upon cOA    III-A, III-B
+Can2_Card1     CARF + nuclease  DNA cleavage upon cOA        III
+CasR           CARF             cOA-binding regulator        III-A,B,D
+CorA           Mg2+ channel     Membrane depolarization      III-B, III-D
+DHH_CorA       DHH + CorA       Nuclease + channel fusion    III-B
+NucC           PD_DExK          DNA cleavage                 III-A
+NYN            NYN nuclease     RNA cleavage                 III-B
+DEDDh          DEDD exonuclease 3'-5' RNA degradation        Universal
+PD_DExK        PD-(D/E)xK       DNA cleavage                 Universal, I-B
+
+TRANSCRIPTIONAL REGULATION
+
+Gene           Domain(s)        Function                     Found in
+
+HTH            Helix-Turn-Helix DNA binding, transcription   I-D, III-A,B
+WYL            WYL domain       CRISPR operon regulation     Universal
+MerR           MerR-type        Transcriptional activator    V-K
+Csa3           CARF + HTH       Transcriptional regulator    Universal
+
+PROTEIN-PROTEIN INTERACTION
+
+Gene           Domain(s)        Function                     Found in
+
+TPR            Tetratricopeptide Protein scaffold            III-A, III-B
+STAND_TPR      STAND + TPR      NTPase signaling scaffold    I-E
+HEAT_CxxC      HEAT + CxxC      Protein scaffold + Zn bind   I-C
+
+ALTERNATIVE SPACER ACQUISITION
+
+Gene           Domain(s)        Function                     Found in
+
+RT             Reverse Transcr. Acquire spacers from RNA     I-E, III-AM,B
+PIWI           PIWI (Argonaute) RNA silencing                III-AM
+PrimPol        Primase-Polym.   DNA synthesis                Universal
+
+MEMBRANE PROTEINS
+
+Gene           Domain(s)        Function                     Found in
+
+Mem_01         Transmembrane    Unknown (cell death?)        III-B
+Mem_02-04      Transmembrane    Unknown (cell death?)        III-D
+tm_4           Transmembrane    Unknown                      VI-B
+tm_HEPN        TM + HEPN        Membrane RNA nuclease        VI-B
+
+ABORTIVE INFECTION / CELL DEATH
+
+Gene           Domain(s)        Function                     Found in
+
+AbiEii         Abi toxin        Cell death upon infection    III, III-A,C
+
+OTHER ENZYMES
+
+Gene           Domain(s)        Function                     Found in
+
+2OG            Dioxygenase      Oxidative modification       Universal
+ST_Kinase      Ser/Thr kinase   Phosphorylation signaling    I-C
+Toprim         Topoisomerase    DNA topology changes         III-C
+htpX           Protease         Protein degradation          III-B
+PEPT_D         Peptidase        Protein degradation          III-A
+Mem_DnaJ       DnaJ chaperone   Protein folding              III-AM
+CysH           Sulfotransferase Sulfur metabolism (?)        IV-B
+RecD           Helicase         DNA unwinding                IV-D
+
+TRANSPOSON-ASSOCIATED (CAST systems)
+
+Gene           Domain(s)        Function                     Found in
+
+TniQ           TniQ             Target site selection        I-F_T, V-K
+TnsB           Transposase      DNA insertion                V-K
+TnsC           AAA+ ATPase      Target activation            V-K
+TnpB           Nuclease         Transposon maintenance       (ancestral)
+
+UNKNOWN FUNCTION
+
+Gene           Found in         Notes
+
+Unk_01         III-D            Uncharacterized
+Unk_02         III-A, III-B     Uncharacterized
+Unk_03         III-B            Uncharacterized
+Unk_04         I-E              Uncharacterized
+Unk_05         I-B              Uncharacterized
+Unk_06         III-D            Uncharacterized
+
+
+
+                        NAME STANDARDIZATION TABLE
+
+
+Standard Name  Old Name(s)      Subtype  Function
+
+Cas5a                           I-A      Small subunit, crRNA binding
+Cas5b                           I-B      Small subunit, crRNA binding
+Cas5c                           I-C      Small subunit, crRNA binding
+Cas5d          Csc1             I-D      Small subunit, crRNA binding
+Cas5e                           I-E      Small subunit, crRNA binding
+Cas5f          Csy2             I-F      Small subunit, crRNA binding
+Cas5u          Csb2             I-G      Small subunit, crRNA binding
+
+Cas7a                           I-A      Backbone subunit
+Cas7b                           I-B      Backbone subunit
+Cas7c                           I-C      Backbone subunit
+Cas7d          Csc2             I-D      Backbone subunit
+Cas7e                           I-E      Backbone subunit
+Cas7f          Csy3             I-F      Backbone subunit
+Cas7u          Csb1             I-G      Backbone subunit
+
+Cas8a          CsaX, Csa4       I-A      Large subunit
+Cas8b                           I-B      Large subunit
+Cas8c                           I-C      Large subunit
+Cas8e          Cse1             I-E      Large subunit
+Cas8f          Csy1             I-F      Large subunit
+Cas8u          Csb3             I-G      Large subunit
+
+Cas10d                          I-D      Large subunit (Type I-D)
+Cas10                           III-*    Large subunit, cyclase
+
+Cas11e         Cse2             I-E      Small subunit
+Cas11                           Various  Small subunit
+
+Cas12a         Cpf1             V-A      Effector nuclease
+
+
+
+                          SIGNATURE GENES (Quick Reference)
+
+
+TYPE      SIGNATURE     CLASS  TARGET  CUT TYPE
+
+Type I    Cas3          1      DNA     Processive degradation
+Type II   Cas9          2      DNA     Blunt double-strand break
+Type III  Cas10         1      RNA     RNA cleavage + cOA signaling
+Type IV   Csf1          1      ?       No nuclease activity
+Type V    Cas12         2      DNA     Staggered double-strand break
+Type VI   Cas13         2      RNA     Collateral RNA cleavage

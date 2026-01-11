@@ -1,0 +1,70 @@
+CRISPR-Cas Subtype Total HMM Lengths
+=====================================
+
+
+Class 1:
+--------
+
+  Type I:
+    I-A: Cas3, Cas3HD, Cas5a, Cas6, Cas7a, Cas8a, Csa5, Cas1, Cas2, Cas4 = 2423 AA
+    I-B: Cas3, Cas5b, Cas6, Cas7b, Cas8b, Cas11b, Cas1, Cas2, Cas4 = 2238 AA
+    I-C: Cas3, Cas5c, Cas7c, Cas8c, Cas1, Cas2, Cas4 = 2075 AA
+    I-D: Cas3, Cas5d, Cas6, Cas7d, Cas10d, Cas11d, Cas11d2, Cas1, Cas2, Cas4 = 2669 AA
+    I-E: Cas3, Cas3HD, Cas6e, Cas8e, Cas11e, Cas1, Cas2 = 1862 AA (missing: Cas5e, Cas7e)
+    I-F: Cas5f, Cas6f, Cas7f, Cas8f, Cas3-Cas2, Cas1 = 2577 AA
+    I-F_T: Cas5f, Cas6f, Cas7f, Cas8f, TniQ = 1610 AA
+    I-G: Cas3, Cas5u, Cas7u, Cas8u, Cas1, Cas2, Cas4 = 2050 AA
+
+  Type III:
+    III-A: Cas10, Csm2, Csm3, Csm4, Csm5, Cas1, Cas2 = 2090 AA
+    III-AM: Cas10, Csm2, Csm3, Csm4, Csm5, Cas1, Cas2 = 1981 AA
+    III-B: Cas10, Cmr1, Cmr3, Cmr4, Cmr5, Cmr6, Cmr7, Cmr8, Cas1, Cas2 = 2555 AA
+    III-C: Cas10, Cmr1, Cmr3, Cmr4, Cmr5, Cmr6 = 2379 AA
+    III-D: Cas10, Csm2, Csm3, Csm5, Csx10, Csx19, Cas1, Cas2 = 2208 AA
+    III-E: gRAMP = 1610 AA
+    III-F: SSgr11, Cas10, Cas5a, Csm3 = 1170 AA
+
+  Type IV:
+    IV-A1: Csf1, Csf2, Csf3, Csf4, Cas6 = 1655 AA
+    IV-A2: Csf2, Csf3, Csf4, Cas6 = 1388 AA
+    IV-A3: Csf1, Csf2, Csf3, Csf4, Cas6 = 1655 AA
+    IV-B: Cas11b, Csf1, Csf2, Csf3 = 938 AA
+    IV-C: Csf2, Csf3, Cas10, Cas11b, Cas6 = 1411 AA
+    IV-D: Csf1, Csf2, Csf3, RecD, Cas6 = 1770 AA
+    IV-E: Csf2, Csf3, Csf4, Cas6 = 1388 AA
+
+Class 2:
+--------
+
+  Type II:
+    II-A: Cas9, Cas1, Cas2, Csn2 = 1451 AA
+    II-B: Cas9, Cas1, Cas2, Cas4 = 1450 AA
+    II-C: Cas9, Cas1, Cas2 = 1369 AA
+    II-C2: Cas9, Cas1, Cas2 = 1369 AA
+    II-D: Cas9, Cas1, Cas2 = 1255 AA
+
+  Type V:
+    V-A: Cas12a, Cas1, Cas2, Cas4 = 1975 AA
+    V-B1: Cas12b1, Cas1, Cas2, Cas4 = 1816 AA
+    V-B2: Cas12b2, Cas1, Cas2, Cas4 = 1816 AA
+    V-C: Cas12c, Cas1 = 1578 AA
+    V-D: Cas12d = 1163 AA
+    V-E: Cas12e, Cas1, Cas2, Cas4 = 1541 AA
+    V-F1: Cas1, Cas2, Cas4 = 686+5 AA (missing: Cas12f1)
+    V-F2: Cas1, Cas2, Cas4 = 686 AA (missing: Cas12f2)
+    V-F3: Cas1, Cas2, Cas4 = 686 AA (missing: Cas12f3)
+    V-G: Cas12g = 771 AA
+    V-H: Cas12h = 898 AA
+    V-I: Cas12i = 1062 AA
+    V-J: Cas12j = 758 AA
+    V-K: Cas12k, TniQ = 826 AA
+    V-L: Cas12l, Cas1, Cas2, Cas4 = 1543 AA
+    V-M: Cas12m = 577 AA
+
+  Type VI:
+    VI-A: Cas13a = 165 AA
+    VI-B1: Cas13b = 1142 AA
+    VI-B2: Cas13b = 1142 AA
+    VI-C: Cas13c = 1113 AA
+    VI-D: Cas13d = 929 AA
+

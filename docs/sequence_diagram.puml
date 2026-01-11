@@ -1,0 +1,108 @@
+@startuml HMM_Beam_Search_Sequence
+
+' Paste this into: https://www.planttext.com/
+' Or: http://www.plantuml.com/plantuml/uml/
+
+title HMM-Guided Beam Search Sequence Diagram
+
+actor User
+participant "BeamSearch\n(CasGeneDetector)" as Beam
+participant "De Bruijn\nGraph (SDBG)" as Graph
+participant "Profile HMM" as HMM
+participant "Viterbi\nAlgorithm" as Viterbi
+database "Beam Priority\nQueue" as Queue
+
+User -> Beam: BeamSearchAminoAcids(start_node, width=10, depth=1200)
+activate Beam
+
+Beam -> Graph: GetNode(start_node)
+Graph --> Beam: Node data
+
+Beam -> Queue: Initialize with start_node\n{seq="", score=0, hmm_pos=0}
+activate Queue
+
+loop for depth = 0 to max_depth
+    
+    loop for each path in beam
+        
+        Beam -> Queue: Pop best path
+        Queue --> Beam: Current path
+        
+        alt HMM position >= 328
+            Beam -> Beam: Save to results\n(HMM complete!)
+            note right: Termination:\nFull HMM coverage
+        else HMM not complete
+            
+            Beam -> Graph: GetOutgoingEdges(current_node)
+            Graph --> Beam: List of edges
+            
+            loop for each edge
+                Beam -> Graph: GetNode(edge.destination)
+                Graph --> Beam: Next node
+                
+                Beam -> Beam: Append nucleotide\nto sequence
+                
+                alt len(sequence) % 3 == 0
+                    Beam -> Beam: Translate last 3 nt\nto amino acid
+                    
+                    Beam -> Viterbi: ViterbiAlign(aa_sequence)
+                    activate Viterbi
+                    
+                    Viterbi -> HMM: GetMatchEmission(pos, aa)
+                    HMM --> Viterbi: log P(aa|match)
+                    
+                    Viterbi -> HMM: GetInsertEmission(pos, aa)
+                    HMM --> Viterbi: log P(aa|insert)
+                    
+                    Viterbi -> HMM: GetTransition(from, to)
+                    HMM --> Viterbi: log P(transition)
+                    
+                    Viterbi -> Viterbi: Dynamic Programming\nM, I, D states
+                    
+                    Viterbi -> Viterbi: Find best path\n(traceback)
+                    
+                    Viterbi -> HMM: GetBackground(aa)
+                    HMM --> Viterbi: log P(aa|null)
+                    
+                    Viterbi -> Viterbi: Null model correction:\nbit_score = (score - null) / log(2)
+                    
+                    Viterbi --> Beam: {bit_score, path, hmm_pos}
+                    deactivate Viterbi
+                    
+                    Beam -> Queue: Add new path\n{nodes, aa_seq, bit_score, hmm_pos}
+                    
+                    note right of Queue
+                        New path:
+                        - total_score = 100.215 bits
+                        - hmm_position = 328
+                        - amino_acids = "AIQT..."
+                    end note
+                else nucleotide only
+                    Beam -> Queue: Add path (no scoring yet)
+                end
+                
+            end
+            
+        end
+        
+    end
+    
+    Beam -> Queue: Sort by total_score (descending)
+    Queue -> Queue: Keep top beam_width paths
+    
+    note right of Queue
+        Pruning:
+        - Sort by bit_score
+        - Keep best 10 paths
+        - Discard rest
+    end note
+    
+end
+
+Beam -> Beam: Sort results by score
+Beam --> User: Return completed paths\n[{score, aa_seq, nodes, alignment}]
+
+deactivate Queue
+deactivate Beam
+
+@enduml
