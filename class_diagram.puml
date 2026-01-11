@@ -41,20 +41,20 @@ note right of Profile
     bit_score = (viterbi - null) / log(2)
 end note
 
-class AminoAcidator {
+class CasGeneDetector {
     ' Beam search on de Bruijn graph
     
     - SDBG& sdbg_
     - Profile* profile_
     
-    + AminoAcidator(sdbg: SDBG&, profile: Profile*)
+    + CasGeneDetector(sdbg: SDBG&, profile: Profile*)
     + BeamSearchAminoAcids(start_node: uint64_t, beam_width: int, max_depth: int): vector<Path>
     
     - Translate(dna: string): string
     - GetNodeSequence(node_id: uint64_t): string
 }
 
-note right of AminoAcidator
+note right of CasGeneDetector
     **Beam Search Algorithm:**
     
     1. Initialize with start node
@@ -139,10 +139,10 @@ end note
 
 ' ==================== Relationships ====================
 
-AminoAcidator --> SDBG : uses
-AminoAcidator --> Profile : uses
-AminoAcidator ..> Path : creates
-AminoAcidator ..> SearchState : uses internally
+CasGeneDetector --> SDBG : uses
+CasGeneDetector --> Profile : uses
+CasGeneDetector ..> Path : creates
+CasGeneDetector ..> SearchState : uses internally
 
 Profile ..> ViterbiState : uses in DP
 
@@ -209,7 +209,7 @@ package "Algorithm Flow" {
     }
     
     BeamSearchLoop --> ViterbiAlgorithm : calls for each path
-    AminoAcidator ..> BeamSearchLoop : implements
+    CasGeneDetector ..> BeamSearchLoop : implements
     Profile ..> ViterbiAlgorithm : implements
 }
 
@@ -249,7 +249,7 @@ package "HMMER Compatibility" {
 
 ' ==================== Testing ====================
 
-class TestHmmAcidator {
+class TestCasGeneDetector {
     <<executable>>
     
     + main(argc: int, argv: char**): int
@@ -260,8 +260,8 @@ class TestHmmAcidator {
     - PrintResults(): void
 }
 
-TestHmmAcidator --> AminoAcidator : creates
-TestHmmAcidator --> Profile : creates
-TestHmmAcidator --> SDBG : creates
+TestCasGeneDetector --> CasGeneDetector : creates
+TestCasGeneDetector --> Profile : creates
+TestCasGeneDetector --> SDBG : creates
 
 @enduml

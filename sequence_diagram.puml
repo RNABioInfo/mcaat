@@ -6,7 +6,7 @@
 title HMM-Guided Beam Search Sequence Diagram
 
 actor User
-participant "BeamSearch\n(amino_acidator)" as Beam
+participant "BeamSearch\n(CasGeneDetector)" as Beam
 participant "De Bruijn\nGraph (SDBG)" as Graph
 participant "Profile HMM" as HMM
 participant "Viterbi\nAlgorithm" as Viterbi
