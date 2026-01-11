@@ -13,3 +13,5 @@ test
 test_ids
 /_build/
 /_deps/
+/sim_graph_output/
+/profile_datasets/

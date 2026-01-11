@@ -1,14 +1,14 @@
 #include <iostream>
 #include <cstring>
 #include "sdbg/sdbg.h"
-#include "amino_acidator.h"
+#include "cas_gene_detector.h"
 #include "profile.h"
 
 using namespace std;
 
 int main(int argc, char** argv) {
     cout << "====================================" << endl;
-    cout << "Testing AminoAcidator with HMM Profile" << endl;
+    cout << "Testing CasGeneDetector with HMM Profile" << endl;
     cout << "====================================" << endl;
     
     // Load the graph
@@ -50,35 +50,23 @@ int main(int argc, char** argv) {
     }
     cout << endl;
     
-    // Create AminoAcidator with HMM profile
-    AminoAcidator acidator(sdbg, &profile);
+    // Create CasGeneDetector with HMM profile
+    CasGeneDetector detector(sdbg, &profile);
     
-    // Find a valid starting node
-    bool found_valid_start = false;
-    
-    if (use_custom_start) {
-        if (start_node < sdbg.size() && sdbg.IsValidEdge(start_node)) {
-            found_valid_start = true;
-            cout << "Using provided start node: " << start_node << endl;
-        } else {
-            cout << "Provided node " << start_node << " is not valid!" << endl;
-            if (start_node >= sdbg.size()) {
-                cout << "  Node ID exceeds graph size (" << sdbg.size() << ")" << endl;
-            }
-        }
-    } else {
-        start_node = 100012;
-        for (uint64_t i = 100000; i < min(sdbg.size(), (uint64_t)200000); ++i) {
-            if (sdbg.IsValidEdge(i) && sdbg.EdgeOutdegree(i) >= 2) {
-                start_node = i;
-                found_valid_start = true;
-                break;
-            }
-        }
+    // Validate starting node
+    if (!use_custom_start) {
+        cerr << "ERROR: No start node provided!" << endl;
+        cerr << "Usage: " << argv[0] << " <graph_path> <hmm_path> <start_node>" << endl;
+        return 1;
     }
     
-    if (!found_valid_start) {
-        cout << "Could not find a valid start node!" << endl;
+    if (start_node >= sdbg.size() || !sdbg.IsValidEdge(start_node)) {
+        cerr << "ERROR: Invalid start node " << start_node << endl;
+        if (start_node >= sdbg.size()) {
+            cerr << "  Node ID " << start_node << " exceeds graph size (" << sdbg.size() << ")" << endl;
+        } else {
+            cerr << "  Node is not a valid edge in the graph" << endl;
+        }
         return 1;
     }
     
@@ -87,18 +75,19 @@ int main(int argc, char** argv) {
     cout << endl;
     
     // Run beam search with HMM scoring
-    // Need ~3 nodes per amino acid, HMM has 328 positions, so need ~1000 depth
+    // Each amino acid needs ~3 nucleotides (codon)
+    // In de Bruijn graph, we traverse multiple nodes per position
     int beam_width = 10;
-    int max_depth = 1200;  // Allow enough depth to reach full HMM length
+    int max_depth = profile.GetLength() * 3;  // HMM length * 3 bases per AA
     
     cout << "Running HMM-scored beam search with:" << endl;
     cout << "  Beam width: " << beam_width << endl;
-    cout << "  Max depth: " << max_depth << endl;
+    cout << "  Max depth: " << max_depth << " (HMM length " << profile.GetLength() << " * 3)" << endl;
     cout << "  HMM length: " << profile.GetLength() << " positions" << endl;
     cout << endl;
     
     auto start_time = chrono::high_resolution_clock::now();
-    vector<AminoAcidPathInfo> paths = acidator.BeamSearchAminoAcids(start_node, beam_width, max_depth);
+    vector<AminoAcidPathInfo> paths = detector.BeamSearchAminoAcids(start_node, beam_width, max_depth);
     auto end_time = chrono::high_resolution_clock::now();
     
     auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);

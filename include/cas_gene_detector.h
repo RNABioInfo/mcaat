@@ -1,5 +1,5 @@
-#ifndef AMINO_ACIDATOR_H
-#define AMINO_ACIDATOR_H
+#ifndef CAS_GENE_DETECTOR_H
+#define CAS_GENE_DETECTOR_H
 
 #include <vector>
 #include <cstdint>
@@ -16,7 +16,7 @@ struct AminoAcidPathInfo {
     int hmm_position;  // Current position in HMM profile
 };
 
-class AminoAcidator {
+class CasGeneDetector {
 private:
     SDBG& sdbg;
     Profile* profile_;  // Optional HMM profile for scoring
@@ -36,8 +36,8 @@ private:
     );
 
 public:
-    AminoAcidator(SDBG& sdbg);
-    AminoAcidator(SDBG& sdbg, Profile* profile);
+    CasGeneDetector(SDBG& sdbg);
+    CasGeneDetector(SDBG& sdbg, Profile* profile);
     
     // Main beam search that converts triplets to amino acids
     std::vector<AminoAcidPathInfo> BeamSearchAminoAcids(

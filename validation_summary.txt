@@ -1,0 +1,1 @@
+Average_Difference_Percent,2.1600,17

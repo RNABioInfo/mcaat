@@ -1,15 +1,15 @@
-#include "amino_acidator.h"
+#include "cas_gene_detector.h"
 #include <algorithm>
 #include <queue>
 #include <set>
 #include <unordered_map>
 #include <cmath>
 
-AminoAcidator::AminoAcidator(SDBG& sdbg) : sdbg(sdbg), profile_(nullptr) {}
+CasGeneDetector::CasGeneDetector(SDBG& sdbg) : sdbg(sdbg), profile_(nullptr) {}
 
-AminoAcidator::AminoAcidator(SDBG& sdbg, Profile* profile) : sdbg(sdbg), profile_(profile) {}
+CasGeneDetector::CasGeneDetector(SDBG& sdbg, Profile* profile) : sdbg(sdbg), profile_(profile) {}
 
-char AminoAcidator::CodonToAminoAcid(const std::string& codon) {
+char CasGeneDetector::CodonToAminoAcid(const std::string& codon) {
     static const std::unordered_map<std::string, char> codon_table = {
         // Standard genetic code
         {"TTT", 'F'}, {"TTC", 'F'}, {"TTA", 'L'}, {"TTG", 'L'},
@@ -44,7 +44,7 @@ char AminoAcidator::CodonToAminoAcid(const std::string& codon) {
     return 'X'; // Unknown codon
 }
 
-std::string AminoAcidator::GetNodeSequence(uint64_t node_id) {
+std::string CasGeneDetector::GetNodeSequence(uint64_t node_id) {
     const uint32_t k = sdbg.k();
     std::vector<uint8_t> seq(k);
     sdbg.GetLabel(node_id, seq.data());
@@ -64,7 +64,7 @@ std::string AminoAcidator::GetNodeSequence(uint64_t node_id) {
     return result;
 }
 
-void AminoAcidator::BeamTraverse(
+void CasGeneDetector::BeamTraverse(
     uint64_t start_node,
     int beam_width,
     int max_depth,
@@ -238,7 +238,7 @@ void AminoAcidator::BeamTraverse(
     }
 }
 
-std::vector<AminoAcidPathInfo> AminoAcidator::BeamSearchAminoAcids(
+std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     uint64_t start_node,
     int beam_width,
     int max_depth) {
