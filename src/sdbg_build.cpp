@@ -57,17 +57,30 @@ std::string SDBGBuild::WriteLibFile()
         return "";
     }
     string switch_str = "se";
-    // split input_files on whitespace to detect paired-end input
+    // split input_files on comma or whitespace to detect paired-end input
     vector<string> input_tokens;
     {
-      istringstream iss(settings.input_files);
+      string files = settings.input_files;
+      // Replace commas with spaces
+      for (char& c : files) {
+        if (c == ',') c = ' ';
+      }
+      istringstream iss(files);
       string tok;
       while (iss >> tok) input_tokens.push_back(tok);
     }
     if (input_tokens.size() > 1) switch_str = "pe";
-    lib_file << "#lib file for the SDBG from " + settings.input_files + "\n";
+    
+    // Build space-separated file list for lib file
+    string file_list = "";
+    for (size_t i = 0; i < input_tokens.size(); i++) {
+      if (i > 0) file_list += " ";
+      file_list += input_tokens[i];
+    }
+    
+    lib_file << "#lib file for the SDBG from " + file_list + "\n";
     // Ensure lib file contains whitespace-separated file paths for the CLI tool
-    lib_file << switch_str + " " + settings.input_files;
+    lib_file << switch_str + " " + file_list;
     lib_file.close();
     std::cout << "Saved lib to file " << lib_file_path << std::endl;
 
