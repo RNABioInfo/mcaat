@@ -56,47 +56,100 @@ bool ORFFinder::ContainsStopCodon(const std::string& sequence) const {
     return false;
 }
 
+// Check if sequence contains an IN-FRAME stop codon relative to start
+bool ORFFinder::ContainsInFrameStopCodon(const std::string& sequence, int frame_offset) const {
+    const size_t len = sequence.size();
+    if (len < 3) return false;
+    
+    // frame_offset tells us which reading frame we're in (0, 1, or 2)
+    for (size_t i = frame_offset; i + 2 < len; i += 3) {
+        const std::string codon = sequence.substr(i, 3);
+        if (codon == "TAA" || codon == "TAG" || codon == "TGA") {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::optional<ORFInfo> ORFFinder::ScanForStopCodon(
     uint64_t start_node,
+    int distance_from_repeat,
     int max_orf_length
 ) const {
     const uint32_t k = this->sdbg.k();
+    const int MIN_ORF_LENGTH = 300;  // Minimum 300bp = 100 codons for a real gene
+    
+    // First, find the reading frame of the start codon in the start node
+    std::string start_seq = NodeToSequence(start_node);
+    int start_codon_pos = -1;
+    for (size_t i = 0; i + 2 < start_seq.size(); ++i) {
+        std::string codon = start_seq.substr(i, 3);
+        if (codon == "ATG" || codon == "GTG" || codon == "TTG") {
+            start_codon_pos = i;
+            break;
+        }
+    }
+    
+    if (start_codon_pos == -1) {
+        return std::nullopt;  // No start codon found (shouldn't happen)
+    }
     
     // Use BFS to traverse forward from start_node
-    std::queue<std::pair<uint64_t, int>> queue;  // (node, distance)
+    // Track (node, edge_count, frame_offset)
+    std::queue<std::tuple<uint64_t, int, int>> queue;
     std::unordered_set<uint64_t> visited;
     
-    queue.push({start_node, 0});
     visited.insert(start_node);
     
+    // Get outgoing edges from start node
+    int outdegree = this->sdbg.EdgeOutdegree(start_node);
+    if (outdegree > 0) {
+        std::vector<uint64_t> outgoings(outdegree);
+        if (this->sdbg.OutgoingEdges(start_node, outgoings.data()) != -1) {
+            for (int i = 0; i < outdegree; ++i) {
+                uint64_t neighbor = outgoings[i];
+                if (this->sdbg.IsValidEdge(neighbor)) {
+                    visited.insert(neighbor);
+                    // After moving one edge, frame shifts by 1 (since we add 1 bp in de Bruijn graph)
+                    // New frame = (start_codon_pos + k + 1) % 3
+                    int new_frame = (start_codon_pos + k) % 3;
+                    queue.push({neighbor, 1, new_frame});
+                }
+            }
+        }
+    }
+    
     while (!queue.empty()) {
-        auto [current_node, distance] = queue.front();
+        auto [current_node, edge_count, frame_offset] = queue.front();
         queue.pop();
         
-        // Check if we've exceeded max ORF length
-        if (distance > max_orf_length) {
+        // Actual sequence length = k + edge_count
+        int sequence_length = k + edge_count;
+        
+        if (sequence_length > max_orf_length) {
             continue;
         }
         
         // Get sequence of current node
         std::string seq = NodeToSequence(current_node);
         
-        // Check for stop codon
-        if (ContainsStopCodon(seq)) {
-            return ORFInfo(start_node, current_node, distance);
+        // Check for IN-FRAME stop codon, and only if ORF is long enough
+        if (sequence_length >= MIN_ORF_LENGTH && ContainsInFrameStopCodon(seq, frame_offset)) {
+            return ORFInfo(start_node, current_node, distance_from_repeat, sequence_length);
         }
         
         // Get outgoing edges
-        int outdegree = this->sdbg.EdgeOutdegree(current_node);
-        if (outdegree > 0) {
-            std::vector<uint64_t> outgoings(outdegree);
-            if (this->sdbg.OutgoingEdges(current_node, outgoings.data()) != -1) {
-                for (int i = 0; i < outdegree; ++i) {
-                    uint64_t neighbor = outgoings[i];
+        int outdegree_curr = this->sdbg.EdgeOutdegree(current_node);
+        if (outdegree_curr > 0) {
+            std::vector<uint64_t> outgoings_curr(outdegree_curr);
+            if (this->sdbg.OutgoingEdges(current_node, outgoings_curr.data()) != -1) {
+                for (int i = 0; i < outdegree_curr; ++i) {
+                    uint64_t neighbor = outgoings_curr[i];
                     if (this->sdbg.IsValidEdge(neighbor) && visited.find(neighbor) == visited.end()) {
                         visited.insert(neighbor);
-                        // Distance increases by 1 (since we move by 1 bp in De Bruijn graph with k-mer overlap)
-                        queue.push({neighbor, distance + 1});
+                        // Frame shifts by 1 for each edge
+                        int new_frame = (frame_offset + 1) % 3;
+                        queue.push({neighbor, edge_count + 1, new_frame});
                     }
                 }
             }
@@ -169,10 +222,60 @@ std::optional<ORFInfo> ORFFinder::FindFirstORF(
     }
     
     // Now scan each candidate start node for the first complete ORF
-    for (uint64_t start_candidate : candidate_starts) {
-        auto orf_result = ScanForStopCodon(start_candidate, MAX_ORF_LENGTH);
+    // We need to track which distance each candidate was found at
+    std::unordered_map<uint64_t, int> candidate_distances;
+    
+    // Rebuild the BFS to get distances for candidates
+    current_layer.clear();
+    next_layer.clear();
+    visited.clear();
+    
+    current_layer.push_back({repeat_node, 0});
+    visited.insert(repeat_node);
+    
+    while (!current_layer.empty()) {
+        next_layer.clear();
+        
+        for (const auto& [current_node, edge_count] : current_layer) {
+            // Actual sequence distance = k + edge_count
+            int sequence_distance = k + edge_count;
+            
+            if (sequence_distance > max_distance) {
+                continue;
+            }
+            
+            // Store distance for candidates
+            if (sequence_distance >= min_distance && sequence_distance <= max_distance) {
+                std::string seq = NodeToSequence(current_node);
+                if (ContainsStartCodon(seq)) {
+                    candidate_distances[current_node] = sequence_distance;
+                }
+            }
+            
+            if (sequence_distance < max_distance) {
+                int outdegree = this->sdbg.EdgeOutdegree(current_node);
+                if (outdegree > 0) {
+                    std::vector<uint64_t> outgoings(outdegree);
+                    if (this->sdbg.OutgoingEdges(current_node, outgoings.data()) != -1) {
+                        for (int i = 0; i < outdegree; ++i) {
+                            uint64_t neighbor = outgoings[i];
+                            if (this->sdbg.IsValidEdge(neighbor) && visited.find(neighbor) == visited.end()) {
+                                visited.insert(neighbor);
+                                next_layer.push_back({neighbor, edge_count + 1});
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        current_layer = std::move(next_layer);
+    }
+    
+    // Now scan each candidate with its proper distance
+    for (const auto& [start_candidate, dist_from_repeat] : candidate_distances) {
+        auto orf_result = ScanForStopCodon(start_candidate, dist_from_repeat, MAX_ORF_LENGTH);
         if (orf_result.has_value()) {
-            // Return the first ORF found
             return orf_result;
         }
     }

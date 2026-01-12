@@ -23,12 +23,15 @@
  * @brief Information about a discovered ORF
  */
 struct ORFInfo {
-    uint64_t start_node;  // Node containing the start codon
-    uint64_t end_node;    // Node containing the stop codon
-    int distance;         // Distance in bp between start and end (ORF length)
+    uint64_t start_node;        // Node containing the start codon
+    uint64_t end_node;          // Node containing the stop codon
+    int distance_from_repeat;   // Distance in bp from repeat to start codon
+    int orf_length;             // Distance in bp from start to stop codon (ORF length)
     
-    ORFInfo() : start_node(SDBG::kNullID), end_node(SDBG::kNullID), distance(0) {}
-    ORFInfo(uint64_t s, uint64_t e, int d) : start_node(s), end_node(e), distance(d) {}
+    ORFInfo() : start_node(SDBG::kNullID), end_node(SDBG::kNullID), 
+                distance_from_repeat(0), orf_length(0) {}
+    ORFInfo(uint64_t s, uint64_t e, int d_repeat, int d_orf) 
+        : start_node(s), end_node(e), distance_from_repeat(d_repeat), orf_length(d_orf) {}
 };
 
 /**
@@ -65,13 +68,23 @@ private:
     bool ContainsStopCodon(const std::string& sequence) const;
 
     /**
+     * @brief Check if a sequence contains an in-frame stop codon
+     * @param sequence The DNA sequence to check  
+     * @param frame_offset The reading frame offset (0, 1, or 2)
+     * @return true if an in-frame stop codon is found
+     */
+    bool ContainsInFrameStopCodon(const std::string& sequence, int frame_offset) const;
+
+    /**
      * @brief Scan forward from start_node to find stop codon
      * @param start_node Node where ORF starts
+     * @param distance_from_repeat Distance from original repeat to this start node
      * @param max_orf_length Maximum ORF length to search
      * @return ORFInfo if stop codon found, empty optional otherwise
      */
     std::optional<ORFInfo> ScanForStopCodon(
         uint64_t start_node,
+        int distance_from_repeat,
         int max_orf_length
     ) const;
 

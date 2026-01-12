@@ -131,16 +131,15 @@ std::string node_to_sequence(const SDBG& sdbg, uint64_t node_id) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " <reads_R1.fastq> <reads_R2.fastq> <output_dir>" << std::endl;
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <reads.fastq> <output_dir>" << std::endl;
         std::cerr << "\nExample:" << std::endl;
-        std::cerr << "  " << argv[0] << " reads_R1.fastq reads_R2.fastq test_output" << std::endl;
+        std::cerr << "  " << argv[0] << " reads.fastq test_output" << std::endl;
         return 1;
     }
     
-    std::string reads_r1 = argv[1];
-    std::string reads_r2 = argv[2];
-    std::string output_dir = argv[3];
+    std::string reads_file = argv[1];
+    std::string output_dir = argv[2];
     
     // Remove trailing slash
     while (!output_dir.empty() && output_dir.back() == '/') {
@@ -148,19 +147,18 @@ int main(int argc, char* argv[]) {
     }
     
     std::cout << "========================================" << std::endl;
-    std::cout << "ORF Finder Test - Paired-End Reads" << std::endl;
+    std::cout << "ORF Finder Test - Single-End Reads" << std::endl;
     std::cout << "========================================" << std::endl;
-    std::cout << "Input R1: " << reads_r1 << std::endl;
-    std::cout << "Input R2: " << reads_r2 << std::endl;
+    std::cout << "Input reads: " << reads_file << std::endl;
     std::cout << "Output dir: " << output_dir << std::endl;
     std::cout << "Target k-mer: " << TARGET_KMER << " (" << TARGET_KMER.size() << " bp)" << std::endl;
     std::cout << std::endl;
     
     // Step 1: Build graph
-    std::cout << "[1/4] Building de Bruijn graph from paired-end reads..." << std::endl;
+    std::cout << "[1/4] Building de Bruijn graph from reads..." << std::endl;
     
     Settings settings;
-    settings.input_files = reads_r1 + "," + reads_r2;  // Paired-end format
+    settings.input_files = reads_file;  // Single-end format
     settings.output_folder = output_dir;
     settings.graph_folder = output_dir + "/graph";
     settings.cycles_folder = output_dir + "/cycles";
@@ -252,8 +250,9 @@ int main(int argc, char* argv[]) {
             std::cout << "    Start sequence: " << start_seq << std::endl;
             std::cout << "    End node: " << orf.end_node << std::endl;
             std::cout << "    End sequence: " << end_seq << std::endl;
-            std::cout << "    Distance from repeat: " << orf.distance << " bp" << std::endl;
-            std::cout << "    Protein length: ~" << (orf.distance / 3) << " amino acids" << std::endl;
+            std::cout << "    Distance from repeat to START: " << orf.distance_from_repeat << " bp" << std::endl;
+            std::cout << "    ORF length (start to stop): " << orf.orf_length << " bp" << std::endl;
+            std::cout << "    Protein length: ~" << (orf.orf_length / 3) << " amino acids" << std::endl;
             
             found_any_orf = true;
         } else {
