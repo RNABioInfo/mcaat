@@ -175,23 +175,66 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         
         if (is_first_orf) {
             // First gene: search from repeat node at 50-5000bp
+            // Find ALL ORFs (no limit)
             all_orfs = orf_finder.FindAllORFs(
                 current_search_node,
                 search_min,
                 search_max,
                 min_orf_len,
-                5000  // Max 5000 candidates
+                std::numeric_limits<int>::max()  // No limit - find ALL
             );
         } else {
-            // Subsequent genes: search from END of previous gene
-            // Simply search forward 0-100bp to catch overlaps and gaps
-            all_orfs = orf_finder.FindAllORFs(
-                current_search_node,  // This is already set to prev gene's end_node
-                search_min,  // 0
-                search_max,  // 100
-                min_orf_len,
-                5000  // Max 5000 candidates
-            );
+            // Subsequent genes: search from last ~15 tail nodes
+            const auto& prev_gene = operon_result.genes.back();
+            
+            // Get last ~15 nodes from previous gene path
+            std::vector<uint64_t> tail_nodes;
+            int num_tail_nodes = std::min(15, static_cast<int>(prev_gene.node_path.size()));
+            
+            for (int i = prev_gene.node_path.size() - num_tail_nodes; i < prev_gene.node_path.size(); ++i) {
+                if (i >= 0) {
+                    tail_nodes.push_back(prev_gene.node_path[i]);
+                }
+            }
+            
+            if (tail_nodes.empty()) {
+                tail_nodes.push_back(current_search_node);
+            }
+            
+            std::cout << "  Searching from " << tail_nodes.size() 
+                      << " tail nodes to handle overlaps..." << std::endl;
+            
+            // Search from EACH tail node and collect all unique ORFs
+            std::unordered_set<uint64_t> seen_start_nodes;
+            
+            for (size_t idx = 0; idx < tail_nodes.size(); ++idx) {
+                uint64_t search_node = tail_nodes[idx];
+                
+                // Find ALL ORFs from this tail node (0-100bp, no limit)
+                std::vector<ORFInfo> node_orfs = orf_finder.FindAllORFs(
+                    search_node,
+                    search_min,
+                    search_max,
+                    min_orf_len,
+                    std::numeric_limits<int>::max()  // No limit - find ALL
+                );
+                
+                if (!node_orfs.empty()) {
+                    std::cout << "    Found " << node_orfs.size() 
+                              << " ORF(s) from tail node " << idx << std::endl;
+                }
+                
+                // Add unique ORFs
+                for (auto orf : node_orfs) {
+                    if (seen_start_nodes.find(orf.start_node) == seen_start_nodes.end()) {
+                        all_orfs.push_back(orf);
+                        seen_start_nodes.insert(orf.start_node);
+                    }
+                }
+            }
+            
+            std::cout << "  Total unique ORFs found from all tail nodes: " 
+                      << all_orfs.size() << std::endl;
         }
         
         if (all_orfs.empty()) {
