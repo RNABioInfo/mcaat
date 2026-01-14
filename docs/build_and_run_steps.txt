@@ -1,0 +1,94 @@
+CAS WORKFLOW - BUILD AND RUN STEPS
+====================================
+
+PREREQUISITES
+-------------
+- CMake 3.10+
+- C++17 compiler (g++ or clang++)
+- SDBG graph file (.sdbg)
+- HMM profiles directory (profiles/)
+
+BUILD STEPS
+-----------
+
+1. Navigate to project directory:
+   cd /path/to/mcaat
+
+2. Create build directory:
+   mkdir -p build && cd build
+
+3. Configure with CMake:
+   cmake -DCMAKE_BUILD_TYPE=Release ..
+
+4. Build CAS workflow executable:
+   make -j$(nproc)
+
+COMPILATION COMMAND (LINUX)
+----------------------------
+
+Single-line compile command for cas_workflow.cpp:
+
+g++ -std=c++17 -O3 -I../include -I../libs/megahit/src -I../libs/kseqpp -I../libs/rapidfuzz-cpp -I../libs/progressbar/include -I../libs/spoa/include -I../libs/googletest/googletest/include -o cas_workflow_test src/cas_workflow.cpp src/orf_finder.cpp src/cas_gene_detector.cpp src/profile.cpp -L../libs/megahit/build -lsdbg -pthread
+
+RUN STEPS
+---------
+
+1. Prepare inputs:
+   - SDBG graph file: graph.sdbg
+   - HMM profiles directory: profiles/
+   - Repeat node ID: <node_id>
+
+2. Create test program (example):
+   cat > test_cas_workflow.cpp << 'EOF'
+   #include "cas_workflow.h"
+   #include <iostream>
+   
+   int main(int argc, char** argv) {
+       if (argc < 4) {
+           std::cerr << "Usage: " << argv[0] << " <sdbg_file> <profiles_dir> <repeat_node>" << std::endl;
+           return 1;
+       }
+       
+       SDBG sdbg;
+       sdbg.LoadFromFile(argv[1]);
+       
+       CasWorkflow workflow(sdbg, argv[2]);
+       workflow.SetParameters(0, 1000, 100, 41591, 10, 500);
+       
+       uint64_t repeat_node = std::stoull(argv[3]);
+       CasOperonResult result = workflow.DetectCasOperon(repeat_node);
+       
+       std::cout << "\nDetected " << result.genes.size() << " CAS genes:" << std::endl;
+       for (const auto& gene : result.genes) {
+           std::cout << gene.gene_name << " (score=" << gene.score << ")" << std::endl;
+       }
+       
+       return 0;
+   }
+   EOF
+
+3. Compile test:
+   g++ -std=c++17 -O3 -I../include -I../libs/megahit/src test_cas_workflow.cpp -o test_cas_workflow -L../libs/megahit/build -lsdbg -pthread
+
+4. Run:
+   ./test_cas_workflow graph.sdbg profiles/ 12345
+
+EXPECTED OUTPUT
+---------------
+=== Starting CAS Operon Detection ===
+Repeat node: 12345
+Max total length: 41591 bp
+
+--- Iteration 1 ---
+Step 1: Finding ORF...
+Found ORF: start_node=12400, length=300 bp
+Step 2: Selecting HMM profiles...
+Found 15 matching profiles
+Step 3-4: Scoring ORF with all candidate profiles...
+Best profile: Cas1_0_I-A.hmm (score=45.2)
+
+[... more iterations ...]
+
+=== CAS Operon Detection Complete ===
+Total genes detected: 5
+Total operon length: 8432 bp

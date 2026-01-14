@@ -13,6 +13,9 @@ HMM-guided beam search for detecting Cas genes in de Bruijn graphs using HMMER3 
 ## Compile
 
 ```bash
+# CAS workflow routine (full operon detection)
+g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o test_cas_routine src/test_cas_routine.cpp src/cas_workflow.cpp src/orf_finder.cpp src/cas_gene_detector.cpp src/profile.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
+
 # Cas gene detector
 g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o test_cas_gene_detector src/test_cas_gene_detector.cpp src/cas_gene_detector.cpp src/profile.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
 
@@ -29,10 +32,13 @@ g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./l
 # 1. Build graph from FASTQ
 ./build_graph_cli reads.fastq output_dir
 
-# 2. Find k-mer node ID
+# 2. Find k-mer node ID from repeat region
 ./find_kmer_id output_dir/graph/graph ATCGATCGATCGATCGATCGATC
 
-# 3. Run Cas gene detector
+# 3a. Run full CAS operon detection workflow
+./test_cas_routine output_dir/graph/graph profiles/ ATCGATCGATCGATCGATCGATC
+
+# 3b. OR test single gene with specific HMM profile
 ./test_cas_gene_detector output_dir/graph/graph profile.hmm <node_id>
 ```
 

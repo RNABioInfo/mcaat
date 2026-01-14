@@ -77,7 +77,7 @@ std::optional<ORFInfo> ORFFinder::ScanForStopCodon(
     int max_orf_length
 ) const {
     const uint32_t k = this->sdbg.k();
-    const int MIN_ORF_LENGTH = 300;  // Minimum 300bp = 100 codons for a real gene
+    const int MIN_ORF_LENGTH = 47;  // Minimum 141bp = 47 codons for a real gene
     
     // First, find the reading frame of the start codon in the start node
     std::string start_seq = NodeToSequence(start_node);

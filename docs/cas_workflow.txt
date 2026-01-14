@@ -1,0 +1,30 @@
+Now we need a cas_workflow. 
+It will be based on the following 
+components we have developed together. 
+---CAS SUBROUTINE---
+1. Find only the first ORF0 IN DISTANCE 
+<D> from the node R. Module is orf_finder.
+2. Then select the profile
+based on length of ORF0. Module is buckets.
+3. For profile_name in collected_profile_names:
+   - pick START node_id from ORF0 
+   - HMMProfile's name = profile_name
+   - ScoreViterbi on current_HMM_profile 
+   - in the BeamSearch FINAL result is maximum scored path
+4. At the end BEST performing/scoring profile wins
+5. We find the new NEAREST ORFs (called ORF1)
+IN DISTANCE <D1>(100 bps) and continue CAS_SUBROUTINE
+again.
+
+WE STOP THE CAS SUBROUTINE WHEN TOTAL LENGTH BETWEEN
+REPEAT R NODE AND THE END OF THE LAST DETECTED ORF 
+REACHES 41591
+
+Happy coding!
+   
+* If some parameters of the cas_gene_detector must be changed
+from hard_coded to dynamic(like the allowed length 
+of BeamSearch) do so
+
+* Overlapping genes: Many cas genes overlap by 1–4 bp (e.g., ATGA where the stop codon of one gene overlaps the start codon of the next), which is common in prokaryotic operons under translational coupling.
+Short intergenic regions: When not overlapping, gaps are typically 0–50 bp, with most falling under 20 bp. This tight spacing reflects their organization in co-transcribed operons.
