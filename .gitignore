@@ -15,3 +15,4 @@ test_ids
 /_deps/
 /sim_graph_output/
 /profile_datasets/
+/.DS_Store
