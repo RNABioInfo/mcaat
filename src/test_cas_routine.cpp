@@ -200,7 +200,7 @@ int main(int argc, char** argv) {
             cout << endl;
         }
         
-        cout << "  Node path length: " << gene.node_path.size() << " nodes" << endl;
+        cout << "  Node path length: " << gene.orf_node_path.size() << " nodes" << endl;
         cout << endl;
     }
     

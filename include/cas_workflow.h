@@ -7,6 +7,7 @@
 #include "sdbg/sdbg.h"
 #include "orf_finder.h"
 #include "profile.h"
+#include "buckets.h"
 
 struct DetectedCasGene {
     std::string gene_name;
@@ -64,8 +65,8 @@ public:
     };
 
     // Accept ProfileSize list so we can use per-profile max_bp
-    ProfileScoringResult ScoreORFWithBestProfile(const ORFInfo& orf, const std::vector<ProfileSize>& profile_sizes);
-    ProfileScoringResult ScoreORFWithProfile(const ORFInfo& orf, const ProfileSize& profile_meta);
+    ProfileScoringResult ScoreORFWithBestProfile(const ORFInfo& orf, const std::vector<HMMProfiles::ProfileSize>& profile_sizes);
+    ProfileScoringResult ScoreORFWithProfile(const ORFInfo& orf, const HMMProfiles::ProfileSize& profile_meta);
     Profile* LoadProfile(const std::string& filename);
 
 private:

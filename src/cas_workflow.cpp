@@ -124,10 +124,10 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
             // search from last ~15 tail nodes
             const auto& prev_gene = res.genes.back();
             std::vector<uint64_t> tail_nodes;
-            int num_tail = std::min(15, static_cast<int>(prev_gene.node_path.size()));
-            int start_idx = static_cast<int>(prev_gene.node_path.size()) - num_tail;
-            for (int i = start_idx; i < static_cast<int>(prev_gene.node_path.size()); ++i) {
-                if (i >= 0) tail_nodes.push_back(prev_gene.node_path[i]);
+            int num_tail = std::min(15, static_cast<int>(prev_gene.orf_node_path.size()));
+            int start_idx = static_cast<int>(prev_gene.orf_node_path.size()) - num_tail;
+            for (int i = start_idx; i < static_cast<int>(prev_gene.orf_node_path.size()); ++i) {
+                if (i >= 0) tail_nodes.push_back(prev_gene.orf_node_path[i]);
             }
             if (tail_nodes.empty()) tail_nodes.push_back(current_search_node);
 
@@ -159,8 +159,7 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
                         if (used_start_end_keys.find(key) == used_start_end_keys.end()) {
                             all_orfs.push_back(orf);
                             seen_local.insert(key);
-                            std::cout << "        Added ORF (unique)
-";
+                            std::cout << "        Added ORF (unique)" << std::endl;
                         } else {
                             std::cout << "        Skipping ORF (already used in previous iterations): " << key << std::endl;
                         }
