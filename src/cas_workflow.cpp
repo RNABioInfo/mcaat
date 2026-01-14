@@ -150,6 +150,9 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
     uint64_t current_search_node = repeat_node;
     int current_distance_from_repeat = 0;
     
+    // Track used start nodes globally to prevent detecting same gene in cycles
+    std::unordered_set<uint64_t> used_start_nodes;
+    
     // For the first ORF, use initial search parameters
     int search_min = initial_search_distance_min;
     int search_max = initial_search_distance_max;
@@ -187,54 +190,28 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
             // Subsequent genes: search from last ~15 tail nodes
             const auto& prev_gene = operon_result.genes.back();
             
-            // Get last ~15 nodes from previous gene path
             std::vector<uint64_t> tail_nodes;
-            int num_tail_nodes = std::min(15, static_cast<int>(prev_gene.node_path.size()));
+            int num_tail = std::min(15, static_cast<int>(prev_gene.node_path.size()));
             
-            for (int i = prev_gene.node_path.size() - num_tail_nodes; i < prev_gene.node_path.size(); ++i) {
-                if (i >= 0) {
-                    tail_nodes.push_back(prev_gene.node_path[i]);
-                }
+            for (int i = prev_gene.node_path.size() - num_tail; i < prev_gene.node_path.size(); ++i) {
+                tail_nodes.push_back(prev_gene.node_path[i]);
             }
             
             if (tail_nodes.empty()) {
                 tail_nodes.push_back(current_search_node);
             }
             
-            std::cout << "  Searching from " << tail_nodes.size() 
-                      << " tail nodes to handle overlaps..." << std::endl;
+            std::unordered_set<uint64_t> seen;
             
-            // Search from EACH tail node and collect all unique ORFs
-            std::unordered_set<uint64_t> seen_start_nodes;
-            
-            for (size_t idx = 0; idx < tail_nodes.size(); ++idx) {
-                uint64_t search_node = tail_nodes[idx];
-                
-                // Find ALL ORFs from this tail node (0-100bp, no limit)
-                std::vector<ORFInfo> node_orfs = orf_finder.FindAllORFs(
-                    search_node,
-                    search_min,
-                    search_max,
-                    min_orf_len,
-                    std::numeric_limits<int>::max()  // No limit - find ALL
-                );
-                
-                if (!node_orfs.empty()) {
-                    std::cout << "    Found " << node_orfs.size() 
-                              << " ORF(s) from tail node " << idx << std::endl;
-                }
-                
-                // Add unique ORFs
+            for (uint64_t tn : tail_nodes) {
+                auto node_orfs = orf_finder.FindAllORFs(tn, search_min, search_max, min_orf_len, std::numeric_limits<int>::max());
                 for (auto orf : node_orfs) {
-                    if (seen_start_nodes.find(orf.start_node) == seen_start_nodes.end()) {
+                    if (seen.find(orf.start_node) == seen.end()) {
                         all_orfs.push_back(orf);
-                        seen_start_nodes.insert(orf.start_node);
+                        seen.insert(orf.start_node);
                     }
                 }
             }
-            
-            std::cout << "  Total unique ORFs found from all tail nodes: " 
-                      << all_orfs.size() << std::endl;
         }
         
         if (all_orfs.empty()) {
@@ -253,6 +230,11 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         int best_absolute_distance = 0;
         
         for (const auto& orf : all_orfs) {
+            // Skip if we've already used this start node (prevents cycles)
+            if (used_start_nodes.find(orf.start_node) != used_start_nodes.end()) {
+                continue;
+            }
+            
             // orf.distance_from_repeat is distance from current_search_node
             // current_distance_from_repeat is distance from repeat to current_search_node
             // So absolute distance from repeat = current_distance + orf distance
@@ -298,6 +280,9 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         }
         
         std::cout << "Best ORF selected with score: " << best_overall.score << std::endl;
+        
+        // Mark this start node as used to prevent re-detection in cycles
+        used_start_nodes.insert(best_orf.start_node);
         
         // Store detected gene
         DetectedCasGene gene;
