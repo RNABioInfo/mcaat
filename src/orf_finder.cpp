@@ -318,21 +318,24 @@ std::vector<ORFInfo> ORFFinder::FindAllORFs(
     current_layer.push_back({repeat_node, 0});
     visited.insert(repeat_node);
     
-    int nodes_traversed = 0;
+    // Special case: if min_distance < k, check the starting node itself
+    if (min_distance < k) {
+        std::string start_seq = NodeToSequence(repeat_node);
+        if (ContainsStartCodon(start_seq)) {
+            candidate_distances[repeat_node] = k;
+        }
+    }
     
-    while (!current_layer.empty() && nodes_traversed < max_traverse) {
+    // BFS: continue until we've explored beyond max_distance
+    // Don't limit by nodes_traversed during exploration - only limit candidates
+    while (!current_layer.empty()) {
         next_layer.clear();
         
         for (const auto& [current_node, edge_count] : current_layer) {
-            nodes_traversed++;
-            
-            if (nodes_traversed >= max_traverse) {
-                break;
-            }
-            
             // Actual sequence distance = k + edge_count
             int sequence_distance = k + edge_count;
             
+            // Stop expanding beyond max_distance
             if (sequence_distance > max_distance) {
                 continue;
             }
@@ -342,6 +345,11 @@ std::vector<ORFInfo> ORFFinder::FindAllORFs(
                 std::string seq = NodeToSequence(current_node);
                 if (ContainsStartCodon(seq)) {
                     candidate_distances[current_node] = sequence_distance;
+                    
+                    // Limit number of candidates to max_traverse
+                    if (candidate_distances.size() >= (size_t)max_traverse) {
+                        goto done_searching;  // Exit both loops
+                    }
                 }
             }
             
@@ -365,6 +373,8 @@ std::vector<ORFInfo> ORFFinder::FindAllORFs(
         
         current_layer = std::move(next_layer);
     }
+    
+done_searching:
     
     // Scan ALL candidates for ORFs
     for (const auto& [start_candidate, dist_from_repeat] : candidate_distances) {

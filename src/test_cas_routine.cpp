@@ -144,10 +144,11 @@ int main(int argc, char** argv) {
     );
     
     cout << "Workflow initialized with parameters:" << endl;
-    cout << "  Subsequent search: 0-50 bp (handles 1-4bp overlaps)" << endl;
+    cout << "  Subsequent search: 0-100 bp (handles 1-4bp overlaps and gaps)" << endl;
     cout << "  Max operon length: 41591 bp" << endl;
     cout << "  Beam width: 10" << endl;
     cout << "  Max search depth: 500" << endl;
+    cout << "  Max nodes traversed: 5000" << endl;
     cout << endl;
     
     // Run CAS operon detection
