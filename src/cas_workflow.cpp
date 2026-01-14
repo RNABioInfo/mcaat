@@ -8,6 +8,7 @@
 #include <limits>
 #include <iostream>
 #include <string>
+#include <unordered_set>
 
 CasWorkflow::CasWorkflow(SDBG& sdbg, const std::string& profile_dir)
     : sdbg(sdbg), 
