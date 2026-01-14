@@ -277,6 +277,11 @@ std::optional<ORFInfo> ORFFinder::FindFirstORF(
     for (const auto& [start_candidate, dist_from_repeat] : candidate_distances) {
         auto orf_result = ScanForStopCodon(start_candidate, dist_from_repeat, MAX_ORF_LENGTH);
         if (orf_result.has_value()) {
+            // Check if ORF meets minimum length requirement
+            if (min_orf_length > 0 && orf_result->orf_length < min_orf_length) {
+                // Skip this ORF, it's too short - continue searching
+                continue;
+            }
             return orf_result;
         }
     }
