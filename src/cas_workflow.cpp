@@ -174,77 +174,24 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         std::vector<ORFInfo> all_orfs;
         
         if (is_first_orf) {
-            // First gene: simple search from repeat node
+            // First gene: search from repeat node at 50-5000bp
             all_orfs = orf_finder.FindAllORFs(
                 current_search_node,
                 search_min,
                 search_max,
                 min_orf_len,
-                5000  // Max 5000 nodes
+                5000  // Max 5000 candidates
             );
         } else {
-            // Subsequent genes: search from TAIL NODES to find overlaps
-            // Get last gene's info
-            const auto& prev_gene = operon_result.genes.back();
-            uint32_t k = sdbg.k();
-            
-            // Get last ~15 nodes from previous gene path
-            std::vector<uint64_t> tail_nodes;
-            int num_tail_nodes = std::min(15, static_cast<int>(prev_gene.node_path.size()));
-            
-            for (int i = prev_gene.node_path.size() - num_tail_nodes; i < prev_gene.node_path.size(); ++i) {
-                if (i >= 0) {
-                    tail_nodes.push_back(prev_gene.node_path[i]);
-                }
-            }
-            
-            if (tail_nodes.empty()) {
-                tail_nodes.push_back(current_search_node);
-            }
-            
-            std::cout << "  Searching from " << tail_nodes.size() 
-                      << " tail nodes to handle overlaps..." << std::endl;
-            
-            // Search from EACH tail node and collect all unique ORFs
-            std::unordered_set<uint64_t> seen_start_nodes;
-            
-            for (size_t idx = 0; idx < tail_nodes.size(); ++idx) {
-                uint64_t search_node = tail_nodes[idx];
-                
-                // Calculate this node's position from original repeat
-                // Each node step in the path is ~1bp (nodes overlap by k-1)
-                int node_index_in_path = prev_gene.node_path.size() - num_tail_nodes + idx;
-                int node_position_from_gene_start = node_index_in_path;  // Each step = 1bp
-                int node_dist_from_repeat = prev_gene.distance_from_repeat + node_position_from_gene_start;
-                
-                // Find ORFs from this tail node
-                std::vector<ORFInfo> node_orfs = orf_finder.FindAllORFs(
-                    search_node,
-                    search_min,
-                    search_max,
-                    min_orf_len,
-                    5000  // Max 5000 nodes
-                );
-                
-                if (!node_orfs.empty()) {
-                    std::cout << "    Found " << node_orfs.size() 
-                              << " ORF(s) from tail node " << idx << std::endl;
-                }
-                
-                // Add unique ORFs with corrected distances
-                for (auto orf : node_orfs) {
-                    if (seen_start_nodes.find(orf.start_node) == seen_start_nodes.end()) {
-                        // orf.distance_from_repeat is actually distance FROM THE SEARCH NODE
-                        // Adjust to be distance from original repeat
-                        orf.distance_from_repeat = node_dist_from_repeat + orf.distance_from_repeat;
-                        all_orfs.push_back(orf);
-                        seen_start_nodes.insert(orf.start_node);
-                    }
-                }
-            }
-            
-            std::cout << "  Total unique ORFs found from all tail nodes: " 
-                      << all_orfs.size() << std::endl;
+            // Subsequent genes: search from END of previous gene
+            // Simply search forward 0-100bp to catch overlaps and gaps
+            all_orfs = orf_finder.FindAllORFs(
+                current_search_node,  // This is already set to prev gene's end_node
+                search_min,  // 0
+                search_max,  // 100
+                min_orf_len,
+                5000  // Max 5000 candidates
+            );
         }
         
         if (all_orfs.empty()) {
@@ -263,10 +210,13 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         int best_absolute_distance = 0;
         
         for (const auto& orf : all_orfs) {
-            int absolute_distance = current_distance_from_repeat + orf.distance_from_repeat;
+            // orf.distance_from_repeat is distance from current_search_node
+            // current_distance_from_repeat is distance from repeat to current_search_node
+            // So absolute distance from repeat = current_distance + orf distance
+            int absolute_distance_to_orf_start = current_distance_from_repeat + orf.distance_from_repeat;
             
             std::cout << "  Evaluating ORF: length=" << orf.orf_length 
-                      << "bp, distance=" << orf.distance_from_repeat << "bp" << std::endl;
+                      << "bp, start at " << absolute_distance_to_orf_start << "bp from repeat" << std::endl;
             
             // Select profiles based on ORF length
             std::vector<HMMProfiles::ProfileSize> matching_profiles = 
@@ -293,7 +243,7 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
             if (scoring_result.score > best_overall.score) {
                 best_overall = scoring_result;
                 best_orf = orf;
-                best_absolute_distance = absolute_distance;
+                best_absolute_distance = absolute_distance_to_orf_start;
                 std::cout << "    *** New best score: " << scoring_result.score 
                           << " (profile: " << scoring_result.profile_name << ")" << std::endl;
             }
@@ -344,7 +294,8 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         search_min = 0;
         search_max = subsequent_search_distance;  // 100bp max
         
-        // Update position (for distance tracking)
+        // Update position: next search starts from END of current gene
+        // current_distance_from_repeat should be distance to END of current gene
         current_search_node = best_orf.end_node;
         current_distance_from_repeat = best_absolute_distance + best_orf.orf_length;
     }
