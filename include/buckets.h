@@ -775,6 +775,23 @@ struct HMMPicker {
         
         return result;
     }
+    
+    /**
+     * @brief Get the minimum ORF length across all profiles
+     * @return Minimum min_bp value from all profiles
+     */
+    static int getMinimumORFLength() {
+        if (ALL_PROFILES.empty()) return 0;
+        
+        int min_length = ALL_PROFILES[0].min_bp;
+        for (const auto& profile : ALL_PROFILES) {
+            if (profile.min_bp < min_length) {
+                min_length = profile.min_bp;
+            }
+        }
+        
+        return min_length;
+    }
 };
 
 }  // namespace HMMProfiles

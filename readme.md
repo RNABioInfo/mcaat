@@ -14,17 +14,19 @@ HMM-guided beam search for detecting Cas genes in de Bruijn graphs using HMMER3 
 
 ```bash
 # CAS workflow routine (full operon detection)
-g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o test_cas_routine src/test_cas_routine.cpp src/cas_workflow.cpp src/orf_finder.cpp src/cas_gene_detector.cpp src/profile.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
+g++ -std=c++17 -O3 -march=native -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o test_cas_routine src/test_cas_routine.cpp src/cas_workflow.cpp src/orf_finder.cpp src/cas_gene_detector.cpp src/profile.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
 
 # Cas gene detector
-g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o test_cas_gene_detector src/test_cas_gene_detector.cpp src/cas_gene_detector.cpp src/profile.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
+g++ -std=c++17 -O3 -march=native -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o test_cas_gene_detector src/test_cas_gene_detector.cpp src/cas_gene_detector.cpp src/profile.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
 
 # Graph builder
-g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o build_graph_cli src/build_graph_cli.cpp src/sdbg_build.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/sorting/kmer_counter.cpp libs/megahit/src/sorting/read_to_sdbg_s1.cpp libs/megahit/src/sorting/read_to_sdbg_s2.cpp libs/megahit/src/sorting/seq_to_sdbg.cpp libs/megahit/src/utils/options_description.cpp libs/megahit/src/sorting/base_engine.cpp libs/megahit/src/sorting/kmsort_selector.cpp libs/megahit/src/sequence/io/fastx_reader.cpp libs/megahit/src/sequence/io/sequence_lib.cpp libs/megahit/src/sequence/io/paired_fastx_reader.cpp -lz
+g++ -std=c++17 -O3 -march=native -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o build_graph_cli src/build_graph_cli.cpp src/sdbg_build.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/sorting/kmer_counter.cpp libs/megahit/src/sorting/read_to_sdbg_s1.cpp libs/megahit/src/sorting/read_to_sdbg_s2.cpp libs/megahit/src/sorting/seq_to_sdbg.cpp libs/megahit/src/utils/options_description.cpp libs/megahit/src/sorting/base_engine.cpp libs/megahit/src/sorting/kmsort_selector.cpp libs/megahit/src/sequence/io/fastx_reader.cpp libs/megahit/src/sequence/io/sequence_lib.cpp libs/megahit/src/sequence/io/paired_fastx_reader.cpp -lz
 
 # K-mer finder
-g++ -std=c++17 -O3 -march=native -fopenmp -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o find_kmer_id src/find_kmer_id.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
+g++ -std=c++17 -O3 -march=native -I./include -I./libs/megahit/src -I./libs/kseqpp/include -o find_kmer_id src/find_kmer_id.cpp libs/megahit/src/sdbg/sdbg_meta.cpp libs/megahit/src/sdbg/sdbg_raw_content.cpp libs/megahit/src/sdbg/sdbg_writer.cpp libs/megahit/src/utils/options_description.cpp
 ```
+
+**Note:** On Linux, add `-fopenmp` after `-march=native` for OpenMP support.
 
 ## Usage
 

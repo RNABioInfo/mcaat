@@ -162,7 +162,8 @@ std::optional<ORFInfo> ORFFinder::ScanForStopCodon(
 std::optional<ORFInfo> ORFFinder::FindFirstORF(
     uint64_t repeat_node,
     int min_distance,
-    int max_distance
+    int max_distance,
+    int min_orf_length
 ) const {
     if (!this->sdbg.IsValidEdge(repeat_node)) {
         return std::nullopt;

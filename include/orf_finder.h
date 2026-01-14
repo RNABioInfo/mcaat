@@ -103,18 +103,23 @@ public:
      * For each start codon found, it scans forward to find the first stop codon
      * (TAA, TAG, TGA) and returns information about the first complete ORF.
      * 
+     * If min_orf_length is specified, only ORFs with length >= min_orf_length
+     * are returned. Shorter ORFs are skipped and search continues.
+     * 
      * The BFS stores only the last layer of neighbors to minimize memory usage.
      * 
      * @param repeat_node The starting repeat node
      * @param min_distance Minimum distance in bp from repeat to start codon
      * @param max_distance Maximum distance in bp from repeat to start codon
+     * @param min_orf_length Minimum ORF length in bp (default 0, no filter)
      * @return ORFInfo containing start_node, end_node, and distance if found,
      *         or empty optional if no ORF found
      */
     std::optional<ORFInfo> FindFirstORF(
         uint64_t repeat_node,
         int min_distance,
-        int max_distance
+        int max_distance,
+        int min_orf_length = 0
     ) const;
 };
 

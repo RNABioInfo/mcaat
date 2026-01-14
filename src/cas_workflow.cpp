@@ -167,10 +167,14 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
                   << search_min << ", " << search_max << "] from current position..." 
                   << std::endl;
         
+        // Get minimum ORF length from HMM profiles (shortest profile is 108bp)
+        int min_orf_len = HMMProfiles::HMMPicker::getMinimumORFLength();
+        
         std::optional<ORFInfo> orf_opt = orf_finder.FindFirstORF(
             current_search_node,
             search_min,
-            search_max
+            search_max,
+            min_orf_len  // Skip ORFs shorter than shortest HMM profile
         );
         
         if (!orf_opt.has_value()) {
@@ -285,10 +289,12 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
             int approx_distance_to_candidate = absolute_distance + orf.orf_length - (nodes_from_here_to_end * static_cast<int>(k));
             
             // Search for ORF from this candidate with range [0, subsequent_search_distance]
+            int min_orf_len = HMMProfiles::HMMPicker::getMinimumORFLength();
             std::optional<ORFInfo> candidate_orf = orf_finder.FindFirstORF(
                 candidate_node,
                 0,
-                subsequent_search_distance
+                subsequent_search_distance,
+                min_orf_len  // Skip ORFs shorter than shortest HMM profile
             );
             
             if (candidate_orf.has_value()) {
