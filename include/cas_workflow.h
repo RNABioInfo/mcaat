@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include "sdbg/sdbg.h"
 #include "orf_finder.h"
+#include "profile.h"
 
 struct DetectedCasGene {
     std::string gene_name;
@@ -51,6 +52,7 @@ private:
     int search_depth;
 
     // Helpers
+public:
     struct ProfileScoringResult {
         double score;
         std::string profile_name;
@@ -62,6 +64,8 @@ private:
     ProfileScoringResult ScoreORFWithBestProfile(const ORFInfo& orf, const std::vector<std::string>& profile_filenames);
     ProfileScoringResult ScoreORFWithProfile(const ORFInfo& orf, Profile* profile);
     Profile* LoadProfile(const std::string& filename);
+
+private:
 };
 
 #endif // CAS_WORKFLOW_H
