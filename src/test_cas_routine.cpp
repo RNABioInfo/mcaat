@@ -79,8 +79,8 @@ int main(int argc, char** argv) {
     string graph_path = argv[1];
     string profiles_dir = argv[2];
     string repeat_kmer = argv[3];
-    int init_min = (argc > 4) ? stoi(argv[4]) : 100;
-    int init_max = (argc > 5) ? stoi(argv[5]) : 500;
+    int init_min = (argc > 4) ? stoi(argv[4]) : 50;
+    int init_max = (argc > 5) ? stoi(argv[5]) : 5000;
     
     cout << "Configuration:" << endl;
     cout << "  Graph path:      " << graph_path << endl;

@@ -2,8 +2,8 @@ Now we need a cas_workflow.
 It will be based on the following 
 components we have developed together. 
 ---CAS SUBROUTINE---
-0. Find ALL possible ORFs in DISTANCE from 100-500bp from node R
-   (for first gene). Max nodes to traverse: 5000.
+0. Find ALL possible ORFs in DISTANCE from 50-5000bp from node R
+   (for first gene). Max candidates: 5000.
    Only consider ORFs with length >= 108bp (shortest HMM profile).
    
 1. For EACH possible ORF in the collection:

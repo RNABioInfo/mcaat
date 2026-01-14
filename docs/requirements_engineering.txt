@@ -8,10 +8,10 @@ FR1: ORF Detection
 - System shall find ALL Open Reading Frames (ORFs) in SDBG at specified distances
 - Start codons: ATG, GTG, TTG
 - Stop codons: TAA, TAG, TGA
-- First gene: search distance 100-500bp from repeat node
+- First gene: search distance 50-5000bp from repeat node
 - Subsequent genes: search 0-100bp from tail nodes of previous gene
 - Min ORF length: 108bp (shortest HMM profile)
-- Max nodes traversed: 5000 for all searches
+- Max candidates: 5000 per search
 
 FR2: HMM Profile Selection
 - System shall filter HMM profiles based on ORF length (bp)
@@ -42,12 +42,12 @@ FR5: Output
 
 PARAMETERS
 ----------
-- Initial search distance: 100-500 bp from repeat (default)
+- Initial search distance: 50-5000 bp from repeat (default)
 - Subsequent search distance: 0-100 bp from tail nodes (default)
   * Searches from last ~15 nodes of previous gene to find overlaps
   * Allows detection of 1-4bp overlapping genes (common in prokaryotes)
 - Max total operon length: 41,591 bp (default)
-- Max nodes traversed: 5000 for all searches
+- Max candidates per search: 5000
 - Beam width: 10 (default)
 - Max search depth: 500 nodes (default)
 - Min ORF length: 108 bp (shortest HMM profile)
