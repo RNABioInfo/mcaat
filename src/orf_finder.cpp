@@ -101,6 +101,9 @@ std::optional<ORFInfo> ORFFinder::ScanForStopCodon(
     
     visited.insert(start_node);
     
+    // We'll maintain a parent map to reconstruct the ORF node path when we find the stop codon
+    std::unordered_map<uint64_t, uint64_t> parent; // child -> parent
+
     // Get outgoing edges from start node
     int outdegree = this->sdbg.EdgeOutdegree(start_node);
     if (outdegree > 0) {
@@ -110,34 +113,44 @@ std::optional<ORFInfo> ORFFinder::ScanForStopCodon(
                 uint64_t neighbor = outgoings[i];
                 if (this->sdbg.IsValidEdge(neighbor)) {
                     visited.insert(neighbor);
+                    parent[neighbor] = start_node;
                     // After moving one edge, frame shifts by 1 (since we add 1 bp in de Bruijn graph)
-                    // New frame = (start_codon_pos + k + 1) % 3
                     int new_frame = (start_codon_pos + k) % 3;
                     queue.push({neighbor, 1, new_frame});
                 }
             }
         }
     }
-    
+
     while (!queue.empty()) {
         auto [current_node, edge_count, frame_offset] = queue.front();
         queue.pop();
-        
+
         // Actual sequence length = k + edge_count
         int sequence_length = k + edge_count;
-        
+
         if (sequence_length > max_orf_length) {
             continue;
         }
-        
+
         // Get sequence of current node
         std::string seq = NodeToSequence(current_node);
-        
+
         // Check for IN-FRAME stop codon, and only if ORF is long enough
         if (sequence_length >= MIN_ORF_LENGTH && ContainsInFrameStopCodon(seq, frame_offset)) {
-            return ORFInfo(start_node, current_node, distance_from_repeat, sequence_length);
+            // Reconstruct node path from start_node -> current_node
+            std::vector<uint64_t> path;
+            uint64_t n = current_node;
+            path.push_back(n);
+            while (n != start_node) {
+                if (parent.find(n) == parent.end()) break; // safety
+                n = parent[n];
+                path.push_back(n);
+            }
+            std::reverse(path.begin(), path.end());
+            return ORFInfo(start_node, current_node, distance_from_repeat, sequence_length, path);
         }
-        
+
         // Get outgoing edges
         int outdegree_curr = this->sdbg.EdgeOutdegree(current_node);
         if (outdegree_curr > 0) {
@@ -147,6 +160,7 @@ std::optional<ORFInfo> ORFFinder::ScanForStopCodon(
                     uint64_t neighbor = outgoings_curr[i];
                     if (this->sdbg.IsValidEdge(neighbor) && visited.find(neighbor) == visited.end()) {
                         visited.insert(neighbor);
+                        parent[neighbor] = current_node;
                         // Frame shifts by 1 for each edge
                         int new_frame = (frame_offset + 1) % 3;
                         queue.push({neighbor, edge_count + 1, new_frame});
@@ -155,7 +169,7 @@ std::optional<ORFInfo> ORFFinder::ScanForStopCodon(
             }
         }
     }
-    
+
     return std::nullopt;  // No stop codon found
 }
 
@@ -385,6 +399,7 @@ done_searching:
                 // Skip this ORF, it's too short
                 continue;
             }
+            // Ensure node_path exists; ScanForStopCodon now provides it
             all_orfs.push_back(orf_result.value());
         }
     }

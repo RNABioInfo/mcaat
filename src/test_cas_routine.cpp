@@ -135,12 +135,12 @@ int main(int argc, char** argv) {
     
     // Set parameters
     workflow.SetParameters(
-        init_min,        // initial_min (default 100bp)
-        init_max,        // initial_max (default 500bp)
+        init_min,        // initial_min (default 50bp)
+        init_max,        // initial_max (default 5000bp)
         100,             // subsequent_search_distance (max 100bp between genes)
         41591,           // max_total_length
-        10,              // beam_width
-        500              // max_search_depth
+        100,             // beam_width (per spec)
+        500              // max_search_depth (node depth fallback)
     );
     
     cout << "Workflow initialized with parameters:" << endl;

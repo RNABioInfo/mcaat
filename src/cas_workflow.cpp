@@ -13,7 +13,7 @@ CasWorkflow::CasWorkflow(SDBG& sdbg_, const std::string& profiles_dir_)
     : sdbg(sdbg_), orf_finder(sdbg_), profiles_dir(profiles_dir_),
       initial_search_distance_min(50), initial_search_distance_max(5000),
       subsequent_search_distance(100), max_total_length(41591),
-      beam_width(10), search_depth(500) {}
+      beam_width(100), search_depth(500) {}
 
 void CasWorkflow::SetParameters(int init_min, int init_max, int subsequent_dist, int max_len, int beam, int depth) {
     initial_search_distance_min = init_min;
@@ -34,49 +34,55 @@ Profile* CasWorkflow::LoadProfile(const std::string& filename) {
     return p;
 }
 
-CasWorkflow::ProfileScoringResult CasWorkflow::ScoreORFWithProfile(const ORFInfo& orf, Profile* profile) {
+CasWorkflow::ProfileScoringResult CasWorkflow::ScoreORFWithProfile(const ORFInfo& orf, const ProfileSize& profile_meta) {
     ProfileScoringResult res;
     res.score = -std::numeric_limits<double>::infinity();
-    res.profile_name = profile->GetName();
+    res.profile_name = profile_meta.filename;
 
-    if (!profile) return res;
+    // Load profile file
+    Profile* profile = LoadProfile(profile_meta.filename);
+    if (!profile) {
+        std::cerr << "    Failed to load profile: " << profile_meta.filename << std::endl;
+        return res;
+    }
 
     // Use CasGeneDetector with this profile to perform beam search and score
+    int max_depth = profile_meta.max_bp; // use profile's max_bp as dynamic depth (in bp)
+    // Convert max_depth (bp) to node depth estimate and cap by workflow search_depth
+    int depth_nodes = std::min(std::max(1, max_depth), search_depth);
+
     CasGeneDetector detector(sdbg, profile);
-    auto paths = detector.BeamSearchAminoAcids(orf.start_node, beam_width, search_depth);
+    auto paths = detector.BeamSearchAminoAcids(orf.start_node, beam_width, depth_nodes);
     if (paths.empty()) {
+        delete profile;
         return res;
     }
 
     // pick best path by total_score
     auto best_it = std::max_element(paths.begin(), paths.end(), [](const AminoAcidPathInfo&a, const AminoAcidPathInfo&b){ return a.total_score < b.total_score; });
     res.score = best_it->total_score;
-    res.node_path = best_it->node_path;
+    res.hmm_node_path = best_it->node_path; // HMM alignment path (for reporting)
+    res.node_path = best_it->node_path; // keep for compatibility (but ORF biological path is stored in ORFInfo)
     res.amino_acids = best_it->amino_acids;
     res.hmm_end_position = best_it->hmm_position;
 
+    delete profile;
     return res;
 }
 
-CasWorkflow::ProfileScoringResult CasWorkflow::ScoreORFWithBestProfile(const ORFInfo& orf, const std::vector<std::string>& profile_filenames) {
+CasWorkflow::ProfileScoringResult CasWorkflow::ScoreORFWithBestProfile(const ORFInfo& orf, const std::vector<ProfileSize>& profile_sizes) {
     ProfileScoringResult best;
     best.score = -std::numeric_limits<double>::infinity();
     best.profile_name = "";
 
-    std::cout << "Scoring ORF (length=" << orf.orf_length << "bp) with " << profile_filenames.size() << " candidate profiles..." << std::endl;
+    std::cout << "Scoring ORF (length=" << orf.orf_length << "bp) with " << profile_sizes.size() << " candidate profiles..." << std::endl;
 
-    for (const auto& pf : profile_filenames) {
-        std::cout << "  Loading profile: " << pf << std::endl;
-        Profile* p = LoadProfile(pf);
-        if (!p) {
-            std::cerr << "    Failed to load profile: " << pf << std::endl;
-            continue;
-        }
-        auto r = ScoreORFWithProfile(orf, p);
-        r.profile_name = pf;
-        std::cout << "    Profile " << pf << " score: " << r.score << std::endl;
-        if (r.score > best.score) best = r;
-        delete p;
+    for (const auto& ps : profile_sizes) {
+        std::cout << "  Candidate profile: " << ps.filename << " (min_bp=" << ps.min_bp << " max_bp=" << ps.max_bp << ")" << std::endl;
+        auto r = ScoreORFWithProfile(orf, ps);
+        r.profile_name = ps.filename;
+        std::cout << "    Profile " << ps.filename << " score: " << r.score << std::endl;
+        if (r.score > best.score) best = r; // r.node_path is HMM alignment path; ORF path is in 'orf' variable when selecting best ORF
     }
     if (best.score > -std::numeric_limits<double>::infinity()) {
         std::cout << "Best profile: " << best.profile_name << " (score=" << best.score << ")" << std::endl;
@@ -98,8 +104,8 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
     int search_max = initial_search_distance_max;
     bool is_first_orf = true;
 
-    // track used start nodes to prevent cycles
-    std::unordered_set<uint64_t> used_start_nodes;
+    // track used start+end keys to prevent cycles and duplicates
+    std::unordered_set<std::string> used_start_end_keys; // key = start:end
 
     while (current_distance_from_repeat < max_total_length) {
         std::cout << "\n--- Iteration " << (res.genes.size() + 1) << " ---" << std::endl;
@@ -111,8 +117,9 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         std::vector<ORFInfo> all_orfs;
 
         if (is_first_orf) {
-            // find all ORFs in big window
-            all_orfs = orf_finder.FindAllORFs(current_search_node, search_min, search_max, min_orf_len, std::numeric_limits<int>::max());
+            // find all ORFs in big window (cap candidates to MAX_CANDIDATES)
+            const int MAX_CANDIDATES = 5000;
+            all_orfs = orf_finder.FindAllORFs(current_search_node, search_min, search_max, min_orf_len, MAX_CANDIDATES);
         } else {
             // search from last ~15 tail nodes
             const auto& prev_gene = res.genes.back();
@@ -124,7 +131,7 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
             }
             if (tail_nodes.empty()) tail_nodes.push_back(current_search_node);
 
-            std::unordered_set<uint64_t> seen_local;
+            std::unordered_set<std::string> seen_local;
             for (size_t idx = 0; idx < tail_nodes.size(); ++idx) {
                 uint64_t tn = tail_nodes[idx];
                 int node_index_in_path = start_idx + static_cast<int>(idx);
@@ -132,15 +139,33 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
                 int node_dist_from_repeat = prev_gene.distance_from_repeat + node_index_in_path;
                 std::cout << "  Tail node " << idx << ": id=" << tn << ", dist_from_repeat=" << node_dist_from_repeat << std::endl;
 
-                auto node_orfs = orf_finder.FindAllORFs(tn, search_min, search_max, min_orf_len, std::numeric_limits<int>::max());
+                const int MAX_CANDIDATES = 5000;
+                auto node_orfs = orf_finder.FindAllORFs(tn, search_min, search_max, min_orf_len, MAX_CANDIDATES);
                 if (!node_orfs.empty()) std::cout << "    Found " << node_orfs.size() << " ORF(s) from tail node " << idx << std::endl;
 
                 for (auto orf : node_orfs) {
-                    int absolute_start = node_dist_from_repeat + orf.distance_from_repeat; // debug: see logs
+                    int absolute_start = node_dist_from_repeat + orf.distance_from_repeat; // relative->absolute
+                    // store absolute distance in ORFInfo
                     orf.distance_from_repeat = absolute_start;
-                    if (seen_local.find(orf.start_node) == seen_local.end() && used_start_nodes.find(orf.start_node) == used_start_nodes.end()) {
-                        all_orfs.push_back(orf);
-                        seen_local.insert(orf.start_node);
+
+                    // build uniqueness key using start:end
+                    std::string key = std::to_string(orf.start_node) + ":" + std::to_string(orf.end_node);
+
+                    // debug print for each ORF found from tail node
+                    std::cout << "      ORF found: start=" << orf.start_node << " end=" << orf.end_node
+                              << " dist=" << orf.distance_from_repeat << " len=" << orf.orf_length << std::endl;
+
+                    if (seen_local.find(key) == seen_local.end()) {
+                        if (used_start_end_keys.find(key) == used_start_end_keys.end()) {
+                            all_orfs.push_back(orf);
+                            seen_local.insert(key);
+                            std::cout << "        Added ORF (unique)
+";
+                        } else {
+                            std::cout << "        Skipping ORF (already used in previous iterations): " << key << std::endl;
+                        }
+                    } else {
+                        std::cout << "        Duplicate ORF within tail nodes, skipping: " << key << std::endl;
                     }
                 }
             }
@@ -161,22 +186,21 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         int best_absolute_distance = 0;
 
         for (const auto& orf : all_orfs) {
-            // compute absolute start distance
-            int absolute_start = current_distance_from_repeat + orf.distance_from_repeat; // for first gene current_distance_from_repeat=0
+            // ORF distances in all_orfs are stored as ABSOLUTE distances from repeat
+            int absolute_start = orf.distance_from_repeat;
             std::cout << "  Evaluating ORF: length=" << orf.orf_length << "bp, start at " << absolute_start << "bp from repeat" << std::endl;
 
-            // get matching profiles
+            // get matching profiles (ProfileSize includes max_bp for dynamic depth)
             auto matching_profiles = HMMPicker::filterByLength(orf.orf_length);
             std::cout << "    Matching profiles count: " << matching_profiles.size() << std::endl;
-            std::vector<std::string> filenames;
-            for (auto &ps : matching_profiles) filenames.push_back(ps.filename);
 
-            if (filenames.empty()) {
+            if (matching_profiles.empty()) {
                 std::cout << "    No matching profiles, skipping." << std::endl;
                 continue;
             }
 
-            auto scoring_result = ScoreORFWithBestProfile(orf, filenames);
+            // Score ORF with all matching profiles (use their max_bp for beam depth)
+            auto scoring_result = ScoreORFWithBestProfile(orf, matching_profiles);
             if (scoring_result.score > best_overall.score) {
                 best_overall = scoring_result;
                 best_orf = orf;
@@ -192,8 +216,11 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
 
         std::cout << "Best ORF selected with score: " << best_overall.score << std::endl;
 
-        // mark used start node
-        used_start_nodes.insert(best_orf.start_node);
+        // mark used start+end key to prevent future duplicate detection
+        {
+            std::string used_key = std::to_string(best_orf.start_node) + ":" + std::to_string(best_orf.end_node);
+            used_start_end_keys.insert(used_key);
+        }
 
         // store detected gene
         DetectedCasGene gene;
@@ -204,7 +231,10 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         gene.gene_length = best_orf.orf_length;
         gene.score = best_overall.score;
         gene.amino_acids = best_overall.amino_acids;
-        gene.node_path = best_overall.node_path;
+        // Biological ORF path (start->stop) must come from ORFInfo
+        gene.orf_node_path = best_orf.node_path;
+        // HMM alignment node path from scoring
+        gene.hmm_node_path = best_overall.hmm_node_path;
 
         res.genes.push_back(gene);
 

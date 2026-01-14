@@ -16,7 +16,8 @@ struct DetectedCasGene {
     int gene_length;  // bp
     double score;
     std::vector<std::string> amino_acids;
-    std::vector<uint64_t> node_path;
+    std::vector<uint64_t> orf_node_path; // biological ORF path (start->stop)
+    std::vector<uint64_t> hmm_node_path; // HMM alignment path (for scoring)
 };
 
 struct CasOperonResult {
@@ -57,12 +58,14 @@ public:
         double score;
         std::string profile_name;
         std::vector<std::string> amino_acids;
-        std::vector<uint64_t> node_path;
+        std::vector<uint64_t> node_path;     // HMM alignment path
+        std::vector<uint64_t> hmm_node_path; // HMM alignment path (alias)
         int hmm_end_position;
     };
 
-    ProfileScoringResult ScoreORFWithBestProfile(const ORFInfo& orf, const std::vector<std::string>& profile_filenames);
-    ProfileScoringResult ScoreORFWithProfile(const ORFInfo& orf, Profile* profile);
+    // Accept ProfileSize list so we can use per-profile max_bp
+    ProfileScoringResult ScoreORFWithBestProfile(const ORFInfo& orf, const std::vector<ProfileSize>& profile_sizes);
+    ProfileScoringResult ScoreORFWithProfile(const ORFInfo& orf, const ProfileSize& profile_meta);
     Profile* LoadProfile(const std::string& filename);
 
 private:

@@ -27,11 +27,12 @@ struct ORFInfo {
     uint64_t end_node;          // Node containing the stop codon
     int distance_from_repeat;   // Distance in bp from repeat to start codon
     int orf_length;             // Distance in bp from start to stop codon (ORF length)
+    std::vector<uint64_t> node_path; // Nodes from start (inclusive) to end (inclusive)
     
     ORFInfo() : start_node(SDBG::kNullID), end_node(SDBG::kNullID), 
-                distance_from_repeat(0), orf_length(0) {}
-    ORFInfo(uint64_t s, uint64_t e, int d_repeat, int d_orf) 
-        : start_node(s), end_node(e), distance_from_repeat(d_repeat), orf_length(d_orf) {}
+                distance_from_repeat(0), orf_length(0), node_path() {}
+    ORFInfo(uint64_t s, uint64_t e, int d_repeat, int d_orf, std::vector<uint64_t> path = {})
+        : start_node(s), end_node(e), distance_from_repeat(d_repeat), orf_length(d_orf), node_path(std::move(path)) {}
 };
 
 /**

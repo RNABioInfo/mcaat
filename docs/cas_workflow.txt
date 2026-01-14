@@ -1,46 +1,159 @@
-Now we need a cas_workflow. 
-It will be based on the following 
-components we have developed together. 
----CAS SUBROUTINE---
-0. Find ALL possible ORFs in DISTANCE from 50-5000bp from node R
-   (for first gene). Max candidates: 5000.
-   Only consider ORFs with length >= 108bp (shortest HMM profile).
-   
-1. For EACH possible ORF in the collection:
-    - Select matching HMM profiles based on ORF length. Module: buckets.
-    - For EACH profile_name in collected_profile_names:
-        - Pick START node_id from ORF
-        - Load HMMProfile with name = profile_name
-        - Run Viterbi beam search with current_HMM_profile
-        - Record maximum scored path from BeamSearch
-    - Best performing/scoring profile wins for this ORF
-    
-2. Pick the BEST ORF+profile combination across ALL candidates
-   based on the highest score.
+CAS GENE DETECTION WORKFLOW
+Context
+We have a de Bruijn graph (SDBG) and a repeat node R from CRISPR array detection. Cas genes are located in the direction of OutgoingEdges from R. We want to find and classify all cas genes in the locus.
+Definitions
 
-3. For subsequent genes:
-   - Search from last ~15 nodes of previous gene's path (tail nodes)
-   - This handles 1-4bp overlaps where start codon appears in tail region
-   - Search distance: 0-100bp from each tail node
-   - Max nodes to traverse: 5000
-   - Collect all unique ORFs from all tail node searches
-   - Score all ORFs with all matching profiles
-   - Select BEST ORF+profile combination
+R: Repeat node from CRISPR detection
+Traverse direction: sdbg.OutgoingEdges()
+Node distance: Number of nodes traversed, where 1 node ≈ 1bp
+ORF: A graph path from start codon (ATG/GTG/TTG) to stop codon (TAA/TAG/TGA)
+ORF length: k + (node_count - 1) base pairs
+ORF path: The actual sequence of nodes from start codon to stop codon
+Tail nodes: Last 15 nodes of a detected gene's ORF path
+ProfileSize: HMM profile metadata containing filename, leng, min_aa, max_aa, min_bp, max_bp
 
-WE STOP THE CAS SUBROUTINE WHEN TOTAL LENGTH BETWEEN
-REPEAT R NODE AND THE END OF THE LAST DETECTED ORF 
-REACHES 41591
+Parameters
 
-Happy coding!
-   
-* If some parameters of the cas_gene_detector must be changed
-from hard_coded to dynamic(like the allowed length 
-of BeamSearch) do so
+FIRST_GENE_MIN_DIST = 50, minimum nodes from R to first gene start
+FIRST_GENE_MAX_DIST = 5000, maximum nodes from R to first gene start
+MIN_ORF_BP = 108, minimum ORF length (shortest HMM leng × 3)
+MAX_CANDIDATES = 5000, cap on ORF candidates per search
+MAX_LOCUS_BP = 41591, stop when cumulative length reaches this
+TAIL_SEARCH_NODES = 15, number of tail nodes to search from
+INTERGENIC_MAX = 100, max node distance between genes
+BEAM_WIDTH = 100, beam search width
 
-** Overlapping genes: Many cas genes overlap by 1–4 bp (e.g., ATGA where the stop codon of one gene overlaps the start codon of the next), which is common in prokaryotic operons under translational coupling.
-Short intergenic regions: When not overlapping, gaps are typically 0–100 bp, with most falling under 20 bp. This tight spacing reflects their organization in co-transcribed operons.
+Algorithm
+STEP 0: Collect first gene candidates
 
-CONS/LIMITATIONS:
-- Distance tracking is approximate (each node ≈ 1bp)
-- Searches last 15 tail nodes (trade-off: coverage vs efficiency)
-- Relies on HMM profile quality for accurate gene detection
+Traverse from R using OutgoingEdges
+At each node N with distance D in range 50 to 5000, check if N contains start codon
+If yes, add N to candidates
+Stop when candidates reach 5000
+Filter: keep only candidates where ORF length >= 108bp
+
+STEP 1: Score candidates
+
+For each candidate ORF with start_node S and length L:
+
+Query ProfileBucket for all profiles where min_bp <= L <= max_bp
+For each matching ProfileSize P:
+
+max_depth = P.max_bp (dynamic, derived from profile)
+Load HMM profile from P.filename
+Run BeamSearchAminoAcids(S, BEAM_WIDTH, max_depth)
+Record bit_score
+
+
+Keep best-scoring profile for this ORF
+
+
+
+STEP 2: Select best gene
+
+Pick ORF + profile combination with highest bit_score across all candidates
+Record: orf_path (from ORF traversal, not from BeamSearch), profile_name, score, end_position
+Set cumulative_length = distance_to_gene_end
+
+STEP 3: Find subsequent genes (loop)
+
+While cumulative_length < 41591:
+
+Get last 15 nodes from previous gene's orf_path (not the HMM alignment path)
+From each tail node, traverse via OutgoingEdges for 0 to 100 nodes
+Collect all ORF candidates, deduplicate by start_node:end_node key
+Score all candidates same as Step 1
+Select best same as Step 2
+If no valid gene found, stop
+Update cumulative_length = cumulative_length + intergenic_gap + gene_length
+
+
+
+Critical Implementation Notes
+Tail nodes must come from ORF path: The ORF path is the biological gene path from start codon to stop codon. This is different from the BeamSearch/HMM alignment path. ORFInfo must store the complete orf_path, and tail nodes must be extracted from this path, not from the scoring result.
+Search depth must be dynamic: For each profile being tested, max_depth should equal that profile's max_bp value, not a hardcoded constant.
+Two distinct paths exist: The ORF path (start codon → stop codon, used for locating next gene) and the HMM alignment path (used only for scoring). These must not be confused.
+Output
+
+List of DetectedCasGene, each containing: profile_name, orf_path (the biological gene path), dna_sequence, protein_sequence, bit_score, start_pos (nodes from R), end_pos (nodes from R), length_bp
+orf_finder.cppcppcas_workflow.cpp261 Zeilencpptest_cas_routine.cpp211 Zeilencppsee again the attached files and write a nice comprehensive request18:05CAS GENE DETECTION WORKFLOW
+Context
+We have a de Bruijn graph (SDBG) and a repeat node R from CRISPR array detection. Cas genes are located in the direction of OutgoingEdges from R. We want to find and classify all cas genes in the locus.
+Definitions
+
+R: Repeat node from CRISPR detection
+Traverse direction: sdbg.OutgoingEdges()
+Node distance: Number of nodes traversed, approximately 1bp per node
+ORF: A graph path from start codon (ATG/GTG/TTG) to stop codon (TAA/TAG/TGA)
+ORF length: k + (node_count - 1) base pairs
+ORF path: The actual sequence of nodes traversed from start codon node to stop codon node, this is the biological gene path
+HMM alignment path: The path returned by BeamSearchAminoAcids, used only for scoring, not for gene location
+Tail nodes: Last 15 nodes of a detected gene's ORF path
+ProfileSize: HMM profile metadata containing filename, leng, min_aa, max_aa, min_bp, max_bp
+
+Parameters
+
+FIRST_GENE_MIN_DIST = 50, minimum nodes from R to first gene start
+FIRST_GENE_MAX_DIST = 5000, maximum nodes from R to first gene start
+MIN_ORF_BP = 108, minimum ORF length derived from shortest HMM profile
+MAX_CANDIDATES = 5000, cap on ORF candidates per search
+MAX_LOCUS_BP = 41591, stop when cumulative distance from R to end of last gene reaches this
+TAIL_SEARCH_NODES = 15, number of tail nodes to search from for subsequent genes
+INTERGENIC_MAX = 100, max node distance between genes, allows 0-100bp gaps and 1-4bp overlaps
+BEAM_WIDTH = 100, beam search width for HMM scoring
+
+Data Structures
+ORFInfo must contain: start_node, end_node, orf_path (vector of node IDs from start to stop codon), distance_from_origin (nodes from search start point), orf_length (in base pairs)
+ProfileSize contains: filename, leng, min_aa, max_aa, min_bp, max_bp
+DetectedCasGene must contain: profile_name, start_node, end_node, orf_path (the biological gene path, NOT the HMM alignment path), distance_from_repeat, gene_length, score, amino_acids
+Algorithm
+STEP 0: Collect first gene candidates
+Starting from R, traverse graph using OutgoingEdges. At each node N with distance D in range 50 to 5000, check if N's k-mer contains a start codon. If yes, continue traversing to find stop codon and record complete ORF path. Filter candidates to keep only those where orf_length >= MIN_ORF_BP. Stop collecting when candidates reach MAX_CANDIDATES.
+STEP 1: Score candidates
+For each candidate ORF:
+
+Query ProfileBucket using orf_length to get all ProfileSize entries where min_bp <= orf_length <= max_bp
+For each matching ProfileSize P:
+
+Load HMM profile from P.filename
+Set max_depth = P.max_bp, this is dynamic per profile
+Run BeamSearchAminoAcids(orf.start_node, BEAM_WIDTH, max_depth)
+Record bit_score from best scoring path
+
+
+Keep the ProfileSize that produced highest bit_score for this ORF
+
+STEP 2: Select best gene
+Compare all ORF candidates by their best bit_score. Select the ORF with highest score. Record: orf_path (from ORFInfo, the biological path), profile_name, score, start_node, end_node, gene_length. Update cumulative_length = distance_from_repeat + gene_length.
+STEP 3: Find subsequent genes (loop)
+While cumulative_length < MAX_LOCUS_BP:
+
+Extract tail_nodes = last 15 nodes from previous gene's orf_path (NOT from HMM alignment path)
+For each tail_node at index i within the orf_path:
+
+Calculate tail_node_distance_from_repeat = previous_gene.distance_from_repeat + i
+Traverse from tail_node using OutgoingEdges for 0 to INTERGENIC_MAX nodes
+Collect ORF candidates, recording distance relative to tail_node
+Convert to absolute distance: absolute_distance = tail_node_distance_from_repeat + relative_distance
+
+
+Deduplicate collected ORFs using start_node:end_node as unique key
+Skip any ORF already used in previous iterations
+Score all candidates using Step 1 logic
+Select best using Step 2 logic
+If no valid gene found or all scores are negative infinity, stop loop
+Update cumulative_length
+
+Critical Implementation Requirements
+Requirement 1: ORFInfo must store orf_path
+The ORFInfo struct must include the complete path of nodes from start codon to stop codon. This path is discovered during ORF finding when traversing from start codon to stop codon. This is the biological gene location.
+Requirement 2: DetectedCasGene.orf_path must come from ORFInfo.orf_path
+When storing a detected gene, set gene.orf_path = best_orf.orf_path. Do NOT set gene.orf_path = scoring_result.node_path. The scoring result path is the HMM alignment path, which is different from the biological gene path.
+Requirement 3: Tail nodes must come from orf_path
+When searching for subsequent genes, extract tail nodes from previous_gene.orf_path. Currently the code uses previous_gene.node_path which is incorrectly set to the HMM alignment path.
+Requirement 4: max_depth must be dynamic per profile
+When calling BeamSearchAminoAcids, set max_depth = profile_size.max_bp for each profile being tested. Do not use a hardcoded search_depth value.
+Requirement 5: Distance tracking
+For first gene: distance_from_repeat = distance from R to orf.start_node. For subsequent genes: distance_from_repeat = tail_node_distance_from_repeat + orf.distance_from_origin. Cumulative length for termination check = distance_from_repeat + gene_length.
+Output
+List of DetectedCasGene entries, each containing: profile_name (the HMM that matched), orf_path (biological gene path through graph), start_node, end_node, distance_from_repeat (nodes from R), gene_length (base pairs), score (HMM bit score), amino_acids (translated sequence)
