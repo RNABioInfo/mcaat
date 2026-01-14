@@ -766,9 +766,8 @@ struct HMMPicker {
     static std::vector<ProfileSize> filterByLength(int L) {
         std::vector<ProfileSize> result;
         result.reserve(100);  // Reserve space to avoid reallocations
-        bool max_reached = false;
         for (const auto& profile : ALL_PROFILES) {
-            if (profile.min_bp < L && L < profile.max_bp) {
+            if (profile.min_bp <= L && L <= profile.max_bp) {
                 result.push_back(profile);
             }
         }

@@ -22,7 +22,7 @@ components we have developed together.
    - Search from last ~15 nodes of previous gene's path (tail nodes)
    - This handles 1-4bp overlaps where start codon appears in tail region
    - Search distance: 0-100bp from each tail node
-   - Max nodes to traverse: 500
+   - Max nodes to traverse: 5000
    - Collect all unique ORFs from all tail node searches
    - Score all ORFs with all matching profiles
    - Select BEST ORF+profile combination
