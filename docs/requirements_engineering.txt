@@ -11,7 +11,7 @@ FR1: ORF Detection
 - First gene: search distance 100-500bp from repeat node
 - Subsequent genes: search 0-100bp from tail nodes of previous gene
 - Min ORF length: 108bp (shortest HMM profile)
-- Max nodes traversed: 5000 for first gene, 500 for subsequent
+- Max nodes traversed: 5000 for all searches
 
 FR2: HMM Profile Selection
 - System shall filter HMM profiles based on ORF length (bp)
@@ -47,7 +47,7 @@ PARAMETERS
   * Searches from last ~15 nodes of previous gene to find overlaps
   * Allows detection of 1-4bp overlapping genes (common in prokaryotes)
 - Max total operon length: 41,591 bp (default)
-- Max nodes traversed: 5000 for first gene, 500 for subsequent
+- Max nodes traversed: 5000 for all searches
 - Beam width: 10 (default)
 - Max search depth: 500 nodes (default)
 - Min ORF length: 108 bp (shortest HMM profile)
@@ -66,7 +66,7 @@ CONSTRAINTS
 - Memory: ORF length capped at 5000bp
 - Performance: Beam search limits candidates to beam_width
 - Data: Requires pre-built SDBG and HMM profile directory
-- Traversal: Limited to 5000 nodes for first gene, 500 for subsequent
+- Traversal: Limited to 5000 nodes per search
 
 BIOLOGICAL CONSTRAINTS
 ----------------------

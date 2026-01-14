@@ -234,6 +234,15 @@ std::optional<ORFInfo> ORFFinder::FindFirstORF(
     current_layer.push_back({repeat_node, 0});
     visited.insert(repeat_node);
     
+    // Special case: if min_distance < k, check the starting node itself
+    // This handles overlaps where the next gene starts within k bp
+    if (min_distance < k) {
+        std::string start_seq = NodeToSequence(repeat_node);
+        if (ContainsStartCodon(start_seq)) {
+            candidate_distances[repeat_node] = k;  // Treat as distance k for consistency
+        }
+    }
+    
     while (!current_layer.empty()) {
         next_layer.clear();
         

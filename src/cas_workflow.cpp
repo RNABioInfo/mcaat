@@ -180,7 +180,7 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
                 search_min,
                 search_max,
                 min_orf_len,
-                5000  // Max 5000 nodes for first gene
+                5000  // Max 5000 nodes
             );
         } else {
             // Subsequent genes: search from TAIL NODES to find overlaps
@@ -223,8 +223,13 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
                     search_min,
                     search_max,
                     min_orf_len,
-                    500  // Max 500 nodes for subsequent genes
+                    5000  // Max 5000 nodes
                 );
+                
+                if (!node_orfs.empty()) {
+                    std::cout << "    Found " << node_orfs.size() 
+                              << " ORF(s) from tail node " << idx << std::endl;
+                }
                 
                 // Add unique ORFs with corrected distances
                 for (auto orf : node_orfs) {
@@ -237,6 +242,9 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
                     }
                 }
             }
+            
+            std::cout << "  Total unique ORFs found from all tail nodes: " 
+                      << all_orfs.size() << std::endl;
         }
         
         if (all_orfs.empty()) {
