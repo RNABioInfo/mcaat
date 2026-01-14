@@ -122,17 +122,17 @@ public:
     
     /**
      * @brief Set workflow parameters
-     * @param init_min Minimum initial search distance
-     * @param init_max Maximum initial search distance  
-     * @param subsequent_dist Max distance for subsequent ORF searches (default 50bp, searches from 0 to this value)
+     * @param init_min Minimum initial search distance (default 100bp)
+     * @param init_max Maximum initial search distance (default 500bp) 
+     * @param subsequent_dist Max distance for subsequent ORF searches (default 100bp)
      * @param max_len Maximum total operon length (default 41591)
      * @param beam Beam width for search (default 10)
      * @param depth Maximum search depth (default 500)
      */
     void SetParameters(
-        int init_min,
-        int init_max,
-        int subsequent_dist = 50,
+        int init_min = 100,
+        int init_max = 500,
+        int subsequent_dist = 100,
         int max_len = 41591,
         int beam = 10,
         int depth = 500

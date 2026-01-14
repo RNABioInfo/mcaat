@@ -79,8 +79,8 @@ int main(int argc, char** argv) {
     string graph_path = argv[1];
     string profiles_dir = argv[2];
     string repeat_kmer = argv[3];
-    int init_min = (argc > 4) ? stoi(argv[4]) : 0;
-    int init_max = (argc > 5) ? stoi(argv[5]) : 1000;
+    int init_min = (argc > 4) ? stoi(argv[4]) : 100;
+    int init_max = (argc > 5) ? stoi(argv[5]) : 500;
     
     cout << "Configuration:" << endl;
     cout << "  Graph path:      " << graph_path << endl;
@@ -135,9 +135,9 @@ int main(int argc, char** argv) {
     
     // Set parameters
     workflow.SetParameters(
-        init_min,        // initial_min
-        init_max,        // initial_max
-        50,              // subsequent_search_distance (0-50bp for overlaps/gaps)
+        init_min,        // initial_min (default 100bp)
+        init_max,        // initial_max (default 500bp)
+        100,             // subsequent_search_distance (max 100bp between genes)
         41591,           // max_total_length
         10,              // beam_width
         500              // max_search_depth

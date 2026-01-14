@@ -2,19 +2,30 @@ Now we need a cas_workflow.
 It will be based on the following 
 components we have developed together. 
 ---CAS SUBROUTINE---
-1. Find only the first ORF0 IN DISTANCE 
-<D> from the node R. Module is orf_finder.
-2. Then select the profile
-based on length of ORF0. Module is buckets.
-3. For profile_name in collected_profile_names:
-   - pick START node_id from ORF0 
-   - HMMProfile's name = profile_name
-   - ScoreViterbi on current_HMM_profile 
-   - in the BeamSearch FINAL result is maximum scored path
-4. At the end BEST performing/scoring profile wins
-5. We find the new NEAREST ORFs (called ORF1)
-IN DISTANCE <D1>(100 bps) and continue CAS_SUBROUTINE
-again.
+0. Find ALL possible ORFs in DISTANCE from 100-500bp from node R
+   (for first gene). Max nodes to traverse: 5000.
+   Only consider ORFs with length >= 108bp (shortest HMM profile).
+   
+1. For EACH possible ORF in the collection:
+    - Select matching HMM profiles based on ORF length. Module: buckets.
+    - For EACH profile_name in collected_profile_names:
+        - Pick START node_id from ORF
+        - Load HMMProfile with name = profile_name
+        - Run Viterbi beam search with current_HMM_profile
+        - Record maximum scored path from BeamSearch
+    - Best performing/scoring profile wins for this ORF
+    
+2. Pick the BEST ORF+profile combination across ALL candidates
+   based on the highest score.
+
+3. For subsequent genes:
+   - Search from last ~15 nodes of previous gene's path (tail nodes)
+   - This handles 1-4bp overlaps where start codon appears in tail region
+   - Search distance: 0-100bp from each tail node
+   - Max nodes to traverse: 500
+   - Collect all unique ORFs from all tail node searches
+   - Score all ORFs with all matching profiles
+   - Select BEST ORF+profile combination
 
 WE STOP THE CAS SUBROUTINE WHEN TOTAL LENGTH BETWEEN
 REPEAT R NODE AND THE END OF THE LAST DETECTED ORF 
@@ -26,5 +37,10 @@ Happy coding!
 from hard_coded to dynamic(like the allowed length 
 of BeamSearch) do so
 
-* Overlapping genes: Many cas genes overlap by 1–4 bp (e.g., ATGA where the stop codon of one gene overlaps the start codon of the next), which is common in prokaryotic operons under translational coupling.
-Short intergenic regions: When not overlapping, gaps are typically 0–50 bp, with most falling under 20 bp. This tight spacing reflects their organization in co-transcribed operons.
+** Overlapping genes: Many cas genes overlap by 1–4 bp (e.g., ATGA where the stop codon of one gene overlaps the start codon of the next), which is common in prokaryotic operons under translational coupling.
+Short intergenic regions: When not overlapping, gaps are typically 0–100 bp, with most falling under 20 bp. This tight spacing reflects their organization in co-transcribed operons.
+
+CONS/LIMITATIONS:
+- Distance tracking is approximate (each node ≈ 1bp)
+- Searches last 15 tail nodes (trade-off: coverage vs efficiency)
+- Relies on HMM profile quality for accurate gene detection

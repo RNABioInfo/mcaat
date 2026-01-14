@@ -288,3 +288,93 @@ std::optional<ORFInfo> ORFFinder::FindFirstORF(
     
     return std::nullopt;  // No complete ORF found
 }
+
+std::vector<ORFInfo> ORFFinder::FindAllORFs(
+    uint64_t repeat_node,
+    int min_distance,
+    int max_distance,
+    int min_orf_length,
+    int max_traverse
+) const {
+    std::vector<ORFInfo> all_orfs;
+    
+    uint32_t k = this->sdbg.k();
+    
+    // BFS to find all nodes at distance [min_distance, max_distance]
+    std::vector<std::pair<uint64_t, int>> current_layer;
+    std::vector<std::pair<uint64_t, int>> next_layer;
+    std::unordered_set<uint64_t> visited;
+    std::unordered_map<uint64_t, int> candidate_distances;
+    
+    current_layer.push_back({repeat_node, 0});
+    visited.insert(repeat_node);
+    
+    int nodes_traversed = 0;
+    
+    while (!current_layer.empty() && nodes_traversed < max_traverse) {
+        next_layer.clear();
+        
+        for (const auto& [current_node, edge_count] : current_layer) {
+            nodes_traversed++;
+            
+            if (nodes_traversed >= max_traverse) {
+                break;
+            }
+            
+            // Actual sequence distance = k + edge_count
+            int sequence_distance = k + edge_count;
+            
+            if (sequence_distance > max_distance) {
+                continue;
+            }
+            
+            // Store distance for candidates with start codons
+            if (sequence_distance >= min_distance && sequence_distance <= max_distance) {
+                std::string seq = NodeToSequence(current_node);
+                if (ContainsStartCodon(seq)) {
+                    candidate_distances[current_node] = sequence_distance;
+                }
+            }
+            
+            // Expand to neighbors
+            if (sequence_distance < max_distance) {
+                int outdegree = this->sdbg.EdgeOutdegree(current_node);
+                if (outdegree > 0) {
+                    std::vector<uint64_t> outgoings(outdegree);
+                    if (this->sdbg.OutgoingEdges(current_node, outgoings.data()) != -1) {
+                        for (int i = 0; i < outdegree; ++i) {
+                            uint64_t neighbor = outgoings[i];
+                            if (this->sdbg.IsValidEdge(neighbor) && visited.find(neighbor) == visited.end()) {
+                                visited.insert(neighbor);
+                                next_layer.push_back({neighbor, edge_count + 1});
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        current_layer = std::move(next_layer);
+    }
+    
+    // Scan ALL candidates for ORFs
+    for (const auto& [start_candidate, dist_from_repeat] : candidate_distances) {
+        auto orf_result = ScanForStopCodon(start_candidate, dist_from_repeat, MAX_ORF_LENGTH);
+        if (orf_result.has_value()) {
+            // Check if ORF meets minimum length requirement
+            if (min_orf_length > 0 && orf_result->orf_length < min_orf_length) {
+                // Skip this ORF, it's too short
+                continue;
+            }
+            all_orfs.push_back(orf_result.value());
+        }
+    }
+    
+    // Sort by distance from repeat (closest first)
+    std::sort(all_orfs.begin(), all_orfs.end(), 
+        [](const ORFInfo& a, const ORFInfo& b) {
+            return a.distance_from_repeat < b.distance_from_repeat;
+        });
+    
+    return all_orfs;
+}

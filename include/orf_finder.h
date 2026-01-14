@@ -121,6 +121,32 @@ public:
         int max_distance,
         int min_orf_length = 0
     ) const;
+    
+    /**
+     * @brief Find ALL ORFs starting at distance D from a repeat node
+     * 
+     * This function performs a BFS from the repeat node to find ALL nodes at distance
+     * [min_distance, max_distance] that contain start codons (ATG, GTG, TTG).
+     * For each start codon found, it scans forward to find the stop codon
+     * and returns ALL complete ORFs found.
+     * 
+     * If min_orf_length is specified, only ORFs with length >= min_orf_length
+     * are included. Shorter ORFs are filtered out.
+     * 
+     * @param repeat_node The starting repeat node
+     * @param min_distance Minimum distance in bp from repeat to start codon
+     * @param max_distance Maximum distance in bp from repeat to start codon
+     * @param min_orf_length Minimum ORF length in bp (default 0, no filter)
+     * @param max_traverse Maximum nodes to traverse (default 5000)
+     * @return Vector of all ORFInfo found (sorted by distance from repeat)
+     */
+    std::vector<ORFInfo> FindAllORFs(
+        uint64_t repeat_node,
+        int min_distance,
+        int max_distance,
+        int min_orf_length = 0,
+        int max_traverse = 5000
+    ) const;
 };
 
 #endif  // INCLUDE_ORF_FINDER_H_

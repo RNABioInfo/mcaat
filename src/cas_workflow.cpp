@@ -162,79 +162,151 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         std::cout << "Current distance from repeat: " 
                   << current_distance_from_repeat << " bp" << std::endl;
         
-        // Step 1: Find ORF
-        std::cout << "Step 1: Finding ORF at distance [" 
+        // Step 1: Find ALL possible ORFs in the search range
+        std::cout << "Step 1: Finding ALL ORFs at distance [" 
                   << search_min << ", " << search_max << "] from current position..." 
                   << std::endl;
         
         // Get minimum ORF length from HMM profiles (shortest profile is 108bp)
         int min_orf_len = HMMProfiles::HMMPicker::getMinimumORFLength();
         
-        std::optional<ORFInfo> orf_opt = orf_finder.FindFirstORF(
-            current_search_node,
-            search_min,
-            search_max,
-            min_orf_len  // Skip ORFs shorter than shortest HMM profile
-        );
+        std::vector<ORFInfo> all_orfs;
         
-        if (!orf_opt.has_value()) {
-            std::cout << "No ORF found. Stopping." << std::endl;
+        if (is_first_orf) {
+            // First gene: simple search from repeat node
+            all_orfs = orf_finder.FindAllORFs(
+                current_search_node,
+                search_min,
+                search_max,
+                min_orf_len,
+                5000  // Max 5000 nodes for first gene
+            );
+        } else {
+            // Subsequent genes: search from TAIL NODES to find overlaps
+            // Get last gene's info
+            const auto& prev_gene = operon_result.genes.back();
+            uint32_t k = sdbg.k();
+            
+            // Get last ~15 nodes from previous gene path
+            std::vector<uint64_t> tail_nodes;
+            int num_tail_nodes = std::min(15, static_cast<int>(prev_gene.node_path.size()));
+            
+            for (int i = prev_gene.node_path.size() - num_tail_nodes; i < prev_gene.node_path.size(); ++i) {
+                if (i >= 0) {
+                    tail_nodes.push_back(prev_gene.node_path[i]);
+                }
+            }
+            
+            if (tail_nodes.empty()) {
+                tail_nodes.push_back(current_search_node);
+            }
+            
+            std::cout << "  Searching from " << tail_nodes.size() 
+                      << " tail nodes to handle overlaps..." << std::endl;
+            
+            // Search from EACH tail node and collect all unique ORFs
+            std::unordered_set<uint64_t> seen_start_nodes;
+            
+            for (size_t idx = 0; idx < tail_nodes.size(); ++idx) {
+                uint64_t search_node = tail_nodes[idx];
+                
+                // Calculate this node's position from original repeat
+                // Each node step in the path is ~1bp (nodes overlap by k-1)
+                int node_index_in_path = prev_gene.node_path.size() - num_tail_nodes + idx;
+                int node_position_from_gene_start = node_index_in_path;  // Each step = 1bp
+                int node_dist_from_repeat = prev_gene.distance_from_repeat + node_position_from_gene_start;
+                
+                // Find ORFs from this tail node
+                std::vector<ORFInfo> node_orfs = orf_finder.FindAllORFs(
+                    search_node,
+                    search_min,
+                    search_max,
+                    min_orf_len,
+                    500  // Max 500 nodes for subsequent genes
+                );
+                
+                // Add unique ORFs with corrected distances
+                for (auto orf : node_orfs) {
+                    if (seen_start_nodes.find(orf.start_node) == seen_start_nodes.end()) {
+                        // orf.distance_from_repeat is actually distance FROM THE SEARCH NODE
+                        // Adjust to be distance from original repeat
+                        orf.distance_from_repeat = node_dist_from_repeat + orf.distance_from_repeat;
+                        all_orfs.push_back(orf);
+                        seen_start_nodes.insert(orf.start_node);
+                    }
+                }
+            }
+        }
+        
+        if (all_orfs.empty()) {
+            std::cout << "No ORFs found. Stopping." << std::endl;
             break;
         }
         
-        ORFInfo orf = orf_opt.value();
-        std::cout << "Found ORF: start_node=" << orf.start_node 
-                  << ", length=" << orf.orf_length << " bp"
-                  << ", distance_from_search_node=" << orf.distance_from_repeat << " bp" 
-                  << std::endl;
+        std::cout << "Found " << all_orfs.size() << " candidate ORF(s)" << std::endl;
         
-        // Update absolute distance from original repeat
-        int absolute_distance = current_distance_from_repeat + orf.distance_from_repeat;
+        // Step 2-4: Score ALL ORFs with their matching profiles and select the best
+        std::cout << "Step 2-4: Scoring all candidate ORFs..." << std::endl;
         
-        // Step 2: Select profiles based on ORF length
-        std::cout << "Step 2: Selecting HMM profiles for ORF length " 
-                  << orf.orf_length << " bp..." << std::endl;
+        ProfileScoringResult best_overall;
+        best_overall.score = -std::numeric_limits<double>::infinity();
+        ORFInfo best_orf;
+        int best_absolute_distance = 0;
         
-        std::vector<HMMProfiles::ProfileSize> matching_profiles = 
-            HMMProfiles::HMMPicker::filterByLength(orf.orf_length);
+        for (const auto& orf : all_orfs) {
+            int absolute_distance = current_distance_from_repeat + orf.distance_from_repeat;
+            
+            std::cout << "  Evaluating ORF: length=" << orf.orf_length 
+                      << "bp, distance=" << orf.distance_from_repeat << "bp" << std::endl;
+            
+            // Select profiles based on ORF length
+            std::vector<HMMProfiles::ProfileSize> matching_profiles = 
+                HMMProfiles::HMMPicker::filterByLength(orf.orf_length);
+            
+            if (matching_profiles.empty()) {
+                std::cout << "    No matching profiles, skipping." << std::endl;
+                continue;
+            }
+            
+            // Extract profile filenames
+            std::vector<std::string> profile_filenames;
+            for (const auto& ps : matching_profiles) {
+                profile_filenames.push_back(ps.filename);
+            }
+            
+            // Score with all matching profiles
+            ProfileScoringResult scoring_result = ScoreORFWithBestProfile(
+                orf,
+                profile_filenames
+            );
+            
+            // Update best if this is better
+            if (scoring_result.score > best_overall.score) {
+                best_overall = scoring_result;
+                best_orf = orf;
+                best_absolute_distance = absolute_distance;
+                std::cout << "    *** New best score: " << scoring_result.score 
+                          << " (profile: " << scoring_result.profile_name << ")" << std::endl;
+            }
+        }
         
-        if (matching_profiles.empty()) {
-            std::cout << "No matching profiles for this ORF length. Stopping." << std::endl;
+        if (best_overall.score <= -std::numeric_limits<double>::infinity()) {
+            std::cout << "All ORF candidates failed to score. Stopping." << std::endl;
             break;
         }
         
-        std::cout << "Found " << matching_profiles.size() 
-                  << " matching profiles" << std::endl;
-        
-        // Extract profile filenames
-        std::vector<std::string> profile_filenames;
-        for (const auto& ps : matching_profiles) {
-            profile_filenames.push_back(ps.filename);
-        }
-        
-        // Step 3 & 4: Score with all profiles and select best
-        std::cout << "Step 3-4: Scoring ORF with all candidate profiles..." << std::endl;
-        
-        ProfileScoringResult best_scoring = ScoreORFWithBestProfile(
-            orf,
-            profile_filenames
-        );
-        
-        if (best_scoring.score <= -std::numeric_limits<double>::infinity()) {
-            std::cout << "All profiles failed to score. Stopping." << std::endl;
-            break;
-        }
+        std::cout << "Best ORF selected with score: " << best_overall.score << std::endl;
         
         // Store detected gene
         DetectedCasGene gene;
-        gene.gene_name = best_scoring.profile_name;
-        gene.start_node = orf.start_node;
-        gene.end_node = orf.end_node;
-        gene.distance_from_repeat = absolute_distance;
-        gene.gene_length = orf.orf_length;
-        gene.score = best_scoring.score;
-        gene.amino_acids = best_scoring.amino_acids;
-        gene.node_path = best_scoring.node_path;
+        gene.gene_name = best_overall.profile_name;
+        gene.start_node = best_orf.start_node;
+        gene.end_node = best_orf.end_node;
+        gene.distance_from_repeat = best_absolute_distance;
+        gene.gene_length = best_orf.orf_length;
+        gene.score = best_overall.score;
+        gene.amino_acids = best_overall.amino_acids;
+        gene.node_path = best_overall.node_path;
         
         operon_result.genes.push_back(gene);
         
@@ -242,7 +314,7 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
                   << ": " << gene.gene_name << std::endl;
         
         // Update total length (distance to end of this ORF)
-        operon_result.total_length = absolute_distance + orf.orf_length;
+        operon_result.total_length = best_absolute_distance + best_orf.orf_length;
         
         std::cout << "Total operon length so far: " 
                   << operon_result.total_length << " bp" << std::endl;
@@ -255,77 +327,17 @@ CasOperonResult CasWorkflow::DetectCasOperon(uint64_t repeat_node) {
         }
         
         // Step 5: Prepare for next iteration
-        // To handle 1-4bp overlaps where gene2 start codon appears in tail of gene1:
-        // Search from the LAST FEW NODES of the current gene's path, not just end_node
-        // This allows finding start codons that overlap with the stop codon region
-        
-        // Get candidate search nodes from the tail of the gene path
-        std::vector<uint64_t> search_candidate_nodes;
-        uint32_t k = sdbg.k();
-        int overlap_region_nodes = std::min(10, static_cast<int>(gene.node_path.size()));  // Last ~10 nodes to cover overlap region
-        
-        for (int i = gene.node_path.size() - overlap_region_nodes; i < gene.node_path.size(); ++i) {
-            if (i >= 0) {
-                search_candidate_nodes.push_back(gene.node_path[i]);
-            }
-        }
-        
-        // Find the FIRST ORF from any of these candidate positions
-        std::optional<ORFInfo> next_orf_candidate;
-        int min_distance_found = std::numeric_limits<int>::max();
-        uint64_t best_search_node = orf.end_node;
-        int best_node_distance = 0;  // Distance from original repeat to the search node we used
-        
         if (is_first_orf) {
             is_first_orf = false;
         }
         
-        // Calculate distance from original repeat to each candidate node in the path
-        for (size_t idx = 0; idx < search_candidate_nodes.size(); ++idx) {
-            uint64_t candidate_node = search_candidate_nodes[idx];
-            
-            // Approximate distance: absolute_distance + remaining length from this node to end
-            int nodes_from_here_to_end = search_candidate_nodes.size() - idx - 1;
-            int approx_distance_to_candidate = absolute_distance + orf.orf_length - (nodes_from_here_to_end * static_cast<int>(k));
-            
-            // Search for ORF from this candidate with range [0, subsequent_search_distance]
-            int min_orf_len = HMMProfiles::HMMPicker::getMinimumORFLength();
-            std::optional<ORFInfo> candidate_orf = orf_finder.FindFirstORF(
-                candidate_node,
-                0,
-                subsequent_search_distance,
-                min_orf_len  // Skip ORFs shorter than shortest HMM profile
-            );
-            
-            if (candidate_orf.has_value()) {
-                // Calculate actual distance from original repeat to this new ORF start
-                int total_distance = approx_distance_to_candidate + candidate_orf->distance_from_repeat;
-                
-                if (total_distance < min_distance_found) {
-                    min_distance_found = total_distance;
-                    next_orf_candidate = candidate_orf;
-                    best_search_node = candidate_node;
-                    best_node_distance = approx_distance_to_candidate;
-                }
-            }
-        }
-        
-        // If we found an ORF from the tail region, use it for next iteration
-        if (next_orf_candidate.has_value()) {
-            current_search_node = best_search_node;
-            current_distance_from_repeat = best_node_distance;
-            std::cout << "Next search will start from node in tail region (distance=" 
-                      << current_distance_from_repeat << "bp from repeat)" << std::endl;
-        } else {
-            // No ORF found in overlap region, just continue from end_node
-            current_search_node = orf.end_node;
-            current_distance_from_repeat = absolute_distance + orf.orf_length;
-            std::cout << "Next search will start from end_node (distance=" 
-                      << current_distance_from_repeat << "bp from repeat)" << std::endl;
-        }
-        
+        // Update search parameters for subsequent genes
         search_min = 0;
-        search_max = subsequent_search_distance;
+        search_max = subsequent_search_distance;  // 100bp max
+        
+        // Update position (for distance tracking)
+        current_search_node = best_orf.end_node;
+        current_distance_from_repeat = best_absolute_distance + best_orf.orf_length;
     }
     
     std::cout << "\n=== CAS Operon Detection Complete ===" << std::endl;
