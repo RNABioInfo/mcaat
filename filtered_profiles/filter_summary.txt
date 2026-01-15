@@ -2,11 +2,11 @@ HMM Profile Filter Summary
 ============================================================
 Input directory:  profiles/
 Output directory: filtered_profiles/
-Minimum NSEQ:     50
+Minimum NSEQ:     100
 
 Total profiles:   705
-Kept:             55
-Removed:          650
+Kept:             29
+Removed:          676
 No NSEQ:          0
 
 Removed profiles:
@@ -660,3 +660,29 @@ Removed profiles:
   tm_HEPN_0_CAS-VI-B.hmm (NSEQ=48)
   Cas10_0_III.hmm (NSEQ=49)
   Cas12f2_2_CAS-V-F.hmm (NSEQ=49)
+  Cas6e_1_CAS-I-II-III-IV-V-VI.hmm (NSEQ=50)
+  Cas6f_2_CAS-I-II-III-IV-V-VI.hmm (NSEQ=50)
+  Cas5_0_I.hmm (NSEQ=51)
+  Cas5_2_CAS-I.hmm (NSEQ=51)
+  Cas8e_1_CAS-I-E.hmm (NSEQ=55)
+  Cmr5gr11_14_CAS-III-B.hmm (NSEQ=56)
+  RT_0_CAS-III-AM-III-B.hmm (NSEQ=57)
+  Cse2gr11_1_CAS-I-E.hmm (NSEQ=58)
+  Cas10_1_CAS-III-B.hmm (NSEQ=59)
+  Cas6_0_CAS-I-II-III-IV-V-VI.hmm (NSEQ=60)
+  Csx1_12_CAS-III.hmm (NSEQ=61)
+  Csf3_0_IV.hmm (NSEQ=62)
+  Cas6_0_I-III.hmm (NSEQ=64)
+  Csf2_0_IV.hmm (NSEQ=65)
+  Cas7_1_CAS-I-E.hmm (NSEQ=66)
+  RT_0_CAS-I-II-III-IV-V-VI.hmm (NSEQ=69)
+  Cas5_0_CAS-I-E.hmm (NSEQ=70)
+  Cas5_1_CAS-I-E.hmm (NSEQ=70)
+  Csx1_18_CAS-III.hmm (NSEQ=70)
+  Cas12a_0_CAS-V-A.hmm (NSEQ=72)
+  Cas9_0_II-D.hmm (NSEQ=72)
+  PrimPol_1_CAS-I-II-III-IV-V-VI.hmm (NSEQ=73)
+  Cas2_10_CAS-I-II-III-IV-V-VI.hmm (NSEQ=79)
+  Cas10_1_IIIB.hmm (NSEQ=87)
+  Cmr6gr7_0_CAS-III-B-III-C.hmm (NSEQ=96)
+  TniQ_0_CAS-I-F.hmm (NSEQ=99)
