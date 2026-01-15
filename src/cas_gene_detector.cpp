@@ -194,6 +194,27 @@ void CasGeneDetector::BeamTraverse(
                     
                     // Update HMM position to the ending position from Viterbi
                     new_state.hmm_position = hmm_end_pos;
+                    
+                    // Early stopping criteria: check insertion/deletion ratios
+                    // Count insertions and deletions from alignment path
+                    int insertion_count = 0;
+                    int deletion_count = 0;
+                    for (char state_char : alignment_path) {
+                        if (state_char == 'I') insertion_count++;
+                        if (state_char == 'D') deletion_count++;
+                    }
+                    
+                    // Get HMM length for threshold calculation
+                    int hmm_length = profile_->GetLength();
+                    
+                    // Skip this path if insertions > 25% or deletions > 15% of HMM length
+                    double insertion_ratio = static_cast<double>(insertion_count) / hmm_length;
+                    double deletion_ratio = static_cast<double>(deletion_count) / hmm_length;
+                    
+                    if (insertion_ratio > 0.25 || deletion_ratio > 0.15) {
+                        // Skip this path - too many indels
+                        continue;
+                    }
                 } else {
                     // Fallback to simple node degree scoring
                     viterbi_score = static_cast<double>(sdbg.EdgeOutdegree(next_node));
