@@ -4,7 +4,6 @@
 #include <algorithm>
 #include "sdbg/sdbg.h"
 #include "cas_workflow.h"
-#include "orf_finder.h"
 
 using namespace std;
 
@@ -134,14 +133,14 @@ int main(int argc, char** argv) {
     CasWorkflow workflow(sdbg, profiles_dir);
     
     // Set parameters
-    workflow.SetParameters(
-        init_min,        // initial_min (default 50bp)
-        init_max,        // initial_max (default 5000bp)
-        100,             // subsequent_search_distance (max 100bp between genes)
-        41591,           // max_total_length
-        100,             // beam_width (per spec)
-        500              // max_search_depth (node depth fallback)
-    );
+    CasWorkflowParams params;
+    params.FIRST_GENE_MIN_DIST = init_min;
+    params.FIRST_GENE_MAX_DIST = init_max;
+    params.INTERGENIC_MAX = 100;
+    params.MAX_LOCUS_BP = 41591;
+    params.BEAM_WIDTH = 10;
+    params.MAX_START_CANDIDATES = 5000;
+    workflow.SetParams(params);
     
     cout << "Workflow initialized with parameters:" << endl;
     cout << "  Subsequent search: 0-100 bp (handles 1-4bp overlaps and gaps)" << endl;
@@ -155,7 +154,7 @@ int main(int argc, char** argv) {
     cout << "Starting CAS operon detection..." << endl;
     cout << "============================================" << endl;
     
-    CasOperonResult result = workflow.DetectCasOperon(repeat_node);
+    std::vector<DetectedCasGene> genes = workflow.DetectCasGenes(repeat_node);
     
     cout << "============================================" << endl;
     cout << endl;
@@ -163,11 +162,10 @@ int main(int argc, char** argv) {
     // Display results
     cout << "RESULTS:" << endl;
     cout << "--------" << endl;
-    cout << "Genes detected: " << result.genes.size() << endl;
-    cout << "Total operon length: " << result.total_length << " bp" << endl;
+    cout << "Genes detected: " << genes.size() << endl;
     cout << endl;
     
-    if (result.genes.empty()) {
+    if (genes.empty()) {
         cout << "No CAS genes detected." << endl;
         return 0;
     }
@@ -175,16 +173,17 @@ int main(int argc, char** argv) {
     cout << "Detected CAS Genes:" << endl;
     cout << "-------------------" << endl;
     
-    for (size_t i = 0; i < result.genes.size(); i++) {
-        const auto& gene = result.genes[i];
+    for (size_t i = 0; i < genes.size(); i++) {
+        const auto& gene = genes[i];
         
         cout << "Gene #" << (i + 1) << ":" << endl;
-        cout << "  Name:             " << gene.gene_name << endl;
+        cout << "  Profile:          " << gene.profile_name << endl;
         cout << "  Start node:       " << gene.start_node << endl;
         cout << "  End node:         " << gene.end_node << endl;
         cout << "  Distance from R:  " << gene.distance_from_repeat << " bp" << endl;
         cout << "  Gene length:      " << gene.gene_length << " bp" << endl;
-        cout << "  Score:            " << gene.score << endl;
+        cout << "  Bit score:        " << gene.bit_score << endl;
+        cout << "  Normalized score: " << gene.normalized_score << endl;
         cout << "  Amino acids:      " << gene.amino_acids.size() << " AA" << endl;
         
         // Show first few amino acids
@@ -200,7 +199,7 @@ int main(int argc, char** argv) {
             cout << endl;
         }
         
-        cout << "  Node path length: " << gene.orf_node_path.size() << " nodes" << endl;
+        cout << "  Node path length: " << gene.node_path.size() << " nodes" << endl;
         cout << endl;
     }
     
