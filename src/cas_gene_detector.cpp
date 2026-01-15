@@ -79,6 +79,8 @@ void CasGeneDetector::BeamTraverse(
         uint64_t current_node;
         int depth;
         int hmm_position;  // Current position in HMM profile
+        std::string viterbi_alignment_path;  // Cache alignment path for incremental updates
+        size_t last_aa_count;  // Track when new amino acids are added
     };
     
     auto comp = [](const BeamState& a, const BeamState& b) {
@@ -96,7 +98,7 @@ void CasGeneDetector::BeamTraverse(
     initial.accumulated_sequence = GetNodeSequence(start_node);
     initial.depth = 0;
     initial.hmm_position = 0;  // Start at beginning of HMM
-    initial.depth = 0;
+    initial.last_aa_count = 0;  // No amino acids yet
     
     current_layer.push_back(initial);
     
@@ -175,6 +177,9 @@ void CasGeneDetector::BeamTraverse(
                 // Process triplets into amino acids
                 new_state.amino_acids = state.amino_acids;
                 new_state.hmm_position = state.hmm_position;
+                new_state.viterbi_alignment_path = state.viterbi_alignment_path;
+                new_state.last_aa_count = state.last_aa_count;
+                
                 size_t seq_len = extended_seq.length();
                 size_t num_complete_codons = seq_len / 3;
                 
@@ -185,15 +190,20 @@ void CasGeneDetector::BeamTraverse(
                     new_state.amino_acids.push_back(std::string(1, aa));
                 }
                 
+                // OPTIMIZATION: Only run Viterbi if new amino acids were added
+                bool new_aa_added = (new_state.amino_acids.size() > new_state.last_aa_count);
+                
                 // Score entire amino acid sequence with Viterbi alignment
                 double viterbi_score = 0.0;
-                if (profile_ != nullptr && !new_state.amino_acids.empty()) {
+                if (profile_ != nullptr && !new_state.amino_acids.empty() && new_aa_added) {
                     // Run Viterbi on complete sequence to get optimal alignment score
                     auto [bit_score, alignment_path, hmm_end_pos] = profile_->ViterbiAlign(new_state.amino_acids);
                     viterbi_score = bit_score;
                     
                     // Update HMM position to the ending position from Viterbi
                     new_state.hmm_position = hmm_end_pos;
+                    new_state.viterbi_alignment_path = alignment_path;
+                    new_state.last_aa_count = new_state.amino_acids.size();
                     
                     // Early stopping criteria: check insertion/deletion ratios
                     // Count insertions and deletions from alignment path
@@ -215,6 +225,9 @@ void CasGeneDetector::BeamTraverse(
                         // Skip this path - too many indels
                         continue;
                     }
+                } else if (profile_ != nullptr && !new_state.amino_acids.empty() && !new_aa_added) {
+                    // No new AA added - reuse previous score
+                    viterbi_score = state.total_score;
                 } else {
                     // Fallback to simple node degree scoring
                     viterbi_score = static_cast<double>(sdbg.EdgeOutdegree(next_node));
