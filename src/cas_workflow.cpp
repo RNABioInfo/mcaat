@@ -5,6 +5,7 @@
 #include <queue>
 #include <iostream>
 #include <numeric>
+#include <omp.h>
 
 CasWorkflow::CasWorkflow(SDBG& sdbg, const std::string& profiles_dir)
     : sdbg_(sdbg), profiles_dir_(profiles_dir) {}
@@ -157,14 +158,21 @@ DetectedCasGene CasWorkflow::ScoreStartNodeWithAllProfiles(
     DetectedCasGene best_gene;
     best_gene.normalized_score = -1e9;
     
-    // Try all profiles
-    for (const auto& profile_size : HMMProfiles::ALL_PROFILES) {
-        DetectedCasGene gene = ScoreStartNodeWithProfile(
+    const int num_profiles = HMMProfiles::ALL_PROFILES.size();
+    std::vector<DetectedCasGene> thread_results(num_profiles);
+    
+    // Parallelize profile scoring - each profile independently
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < num_profiles; ++i) {
+        thread_results[i] = ScoreStartNodeWithProfile(
             start_node,
             distance_from_repeat,
-            profile_size
+            HMMProfiles::ALL_PROFILES[i]
         );
-        
+    }
+    
+    // Find best from all thread results
+    for (const auto& gene : thread_results) {
         if (gene.normalized_score > best_gene.normalized_score) {
             best_gene = gene;
         }
@@ -195,13 +203,24 @@ std::vector<DetectedCasGene> CasWorkflow::DetectCasGenes(uint64_t repeat_node) {
     
     std::cout << "Found " << start_candidates.size() << " start codon candidates for first gene" << std::endl;
     
-    // Score each candidate with all profiles
+    // Score each candidate with all profiles (parallelized)
     DetectedCasGene best_first_gene;
     best_first_gene.normalized_score = params_.MIN_NORMALIZED_SCORE - 1.0;
     
-    for (const auto& [start_node, distance] : start_candidates) {
-        DetectedCasGene gene = ScoreStartNodeWithAllProfiles(start_node, distance);
-        
+    // Convert map to vector for OpenMP indexing
+    std::vector<std::pair<uint64_t, int>> candidates_vec(start_candidates.begin(), start_candidates.end());
+    std::vector<DetectedCasGene> candidate_results(candidates_vec.size());
+    
+    #pragma omp parallel for schedule(dynamic)
+    for (size_t i = 0; i < candidates_vec.size(); ++i) {
+        candidate_results[i] = ScoreStartNodeWithAllProfiles(
+            candidates_vec[i].first,
+            candidates_vec[i].second
+        );
+    }
+    
+    // Find best candidate
+    for (const auto& gene : candidate_results) {
         if (gene.normalized_score > best_first_gene.normalized_score) {
             best_first_gene = gene;
         }
@@ -242,13 +261,24 @@ std::vector<DetectedCasGene> CasWorkflow::DetectCasGenes(uint64_t repeat_node) {
             break;
         }
         
-        // Score each candidate
+        // Score each candidate (parallelized)
         DetectedCasGene best_next_gene;
         best_next_gene.normalized_score = params_.MIN_NORMALIZED_SCORE - 1.0;
         
-        for (const auto& [start_node, distance] : next_candidates) {
-            DetectedCasGene gene = ScoreStartNodeWithAllProfiles(start_node, distance);
-            
+        // Convert map to vector for OpenMP indexing
+        std::vector<std::pair<uint64_t, int>> next_candidates_vec(next_candidates.begin(), next_candidates.end());
+        std::vector<DetectedCasGene> next_candidate_results(next_candidates_vec.size());
+        
+        #pragma omp parallel for schedule(dynamic)
+        for (size_t i = 0; i < next_candidates_vec.size(); ++i) {
+            next_candidate_results[i] = ScoreStartNodeWithAllProfiles(
+                next_candidates_vec[i].first,
+                next_candidates_vec[i].second
+            );
+        }
+        
+        // Find best candidate
+        for (const auto& gene : next_candidate_results) {
             if (gene.normalized_score > best_next_gene.normalized_score) {
                 best_next_gene = gene;
             }
