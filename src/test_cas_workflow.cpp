@@ -44,7 +44,8 @@ struct StartCodon {
     int offset;
 };
 
-StartCodon FindFirstStartCodon(SDBG& sdbg, uint64_t repeat_node, int min_dist, int max_dist) {
+std::vector<StartCodon> FindAllStartCodons(SDBG& sdbg, uint64_t repeat_node, int min_dist, int max_dist) {
+    std::vector<StartCodon> results;
     std::set<uint64_t> visited;
     std::queue<std::pair<uint64_t, int>> q;
     q.push({repeat_node, 0});
@@ -56,11 +57,14 @@ StartCodon FindFirstStartCodon(SDBG& sdbg, uint64_t repeat_node, int min_dist, i
         
         if (dist <= max_dist) {
             std::string seq = GetNodeSeq(sdbg, node);
-            int offset = GetStartCodonOffset(seq);
-            if (offset >= 0) {
-                int bp_dist = dist + offset;
-                if (bp_dist >= min_dist && bp_dist <= max_dist) {
-                    return {node, bp_dist, offset};
+            // Check all positions in the k-mer for start codons
+            for (size_t i = 0; i + 2 < seq.length(); ++i) {
+                std::string codon = seq.substr(i, 3);
+                if (codon == "ATG" || codon == "GTG" || codon == "TTG") {
+                    int bp_dist = dist + static_cast<int>(i);
+                    if (bp_dist >= min_dist && bp_dist <= max_dist) {
+                        results.push_back({node, bp_dist, static_cast<int>(i)});
+                    }
                 }
             }
         }
@@ -76,7 +80,7 @@ StartCodon FindFirstStartCodon(SDBG& sdbg, uint64_t repeat_node, int min_dist, i
             }
         }
     }
-    return {0, -1, -1};
+    return results;
 }
 
 int main(int argc, char* argv[]) {
@@ -119,112 +123,119 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "Repeat node: " << repeat_node << std::endl;
     
-    // Find first start codon in valid range
-    StartCodon start = FindFirstStartCodon(sdbg, repeat_node, 250, 1000);
-    if (start.distance < 0) {
-        std::cerr << "ERROR: No start codon found in range [600, 1000] bp from repeat" << std::endl;
+    // Find ALL start codons in range 150-400
+    auto all_starts = FindAllStartCodons(sdbg, repeat_node, 150, 400);
+    std::cout << "Found " << all_starts.size() << " start codons in range [150, 400] bp" << std::endl;
+    
+    if (all_starts.empty()) {
+        std::cerr << "ERROR: No start codons found in range" << std::endl;
         return 1;
     }
     
-    std::cout << "Start codon found:" << std::endl;
-    std::cout << "  Node: " << start.node << std::endl;
-    std::cout << "  Distance from repeat: " << start.distance << " bp" << std::endl;
-    std::cout << "  Offset in k-mer: " << start.offset << std::endl;
+    // Show all start codons found
+    std::cout << "\nStart codons:" << std::endl;
+    for (size_t i = 0; i < all_starts.size(); ++i) {
+        std::cout << "  [" << i << "] Node: " << all_starts[i].node 
+                  << ", Distance: " << all_starts[i].distance << " bp"
+                  << ", Offset: " << all_starts[i].offset << std::endl;
+    }
     std::cout << std::endl;
     
-    // Test with each profile using beam search
-    std::cout << std::left << std::setw(40) << "PROFILE" 
+    // For each start codon, run all profiles and find best hit
+    std::cout << std::left << std::setw(8) << "START"
+              << std::setw(8) << "DIST"
+              << std::setw(40) << "BEST_PROFILE" 
               << std::right << std::setw(12) << "BIT_SCORE"
               << std::setw(10) << "HMM_POS"
-              << std::setw(10) << "AA_LEN"
-              << std::setw(10) << "DNA_LEN"
-              << std::setw(10) << "PATHS"
-              << std::setw(12) << "COMPLETE"
+              << std::setw(8) << "AA_LEN"
+              << std::setw(10) << "COMPLETE"
               << std::endl;
-    std::cout << std::string(104, '-') << std::endl;
+    std::cout << std::string(96, '-') << std::endl;
     
-    for (const auto& ps : HMMProfiles::ALL_PROFILES) {
-        Profile hmm;
-        std::string profile_path = profiles_dir + "/" + ps.filename;
+    // Track global best
+    double global_best_score = -1e9;
+    int global_best_start_idx = -1;
+    std::string global_best_profile;
+    AminoAcidPathInfo global_best_path;
+    
+    for (size_t si = 0; si < all_starts.size(); ++si) {
+        const auto& start = all_starts[si];
         
-        if (!hmm.LoadFromFile(profile_path)) {
-            std::cout << std::left << std::setw(40) << ps.filename 
-                      << "  LOAD_FAILED" << std::endl;
-            continue;
+        double best_score = -1e9;
+        std::string best_profile_name;
+        AminoAcidPathInfo best_path_info;
+        
+        for (const auto& ps : HMMProfiles::ALL_PROFILES) {
+            Profile hmm;
+            std::string profile_path = profiles_dir + "/" + ps.filename;
+            
+            if (!hmm.LoadFromFile(profile_path)) continue;
+            
+            CasGeneDetector detector(sdbg, &hmm);
+            auto paths = detector.BeamSearchAminoAcids(
+                start.node, 
+                beam_width, 
+                max_depth, 
+                start.offset
+            );
+            
+            if (!paths.empty() && paths[0].total_score > best_score) {
+                best_score = paths[0].total_score;
+                best_profile_name = ps.filename;
+                best_path_info = paths[0];
+            }
         }
         
-        // Create detector with this profile
-        CasGeneDetector detector(sdbg, &hmm);
-        
-        // Run beam search
-        auto paths = detector.BeamSearchAminoAcids(
-            start.node, 
-            beam_width, 
-            max_depth, 
-            start.offset
-        );
-        
-        if (paths.empty()) {
-            std::cout << std::left << std::setw(40) << ps.filename 
-                      << "  NO_PATHS" << std::endl;
-            continue;
+        if (best_score > -1e9) {
+            std::cout << std::left << std::setw(8) << si
+                      << std::setw(8) << start.distance
+                      << std::setw(40) << best_profile_name
+                      << std::right << std::fixed << std::setprecision(2)
+                      << std::setw(12) << best_score
+                      << std::setw(10) << best_path_info.hmm_position
+                      << std::setw(8) << best_path_info.amino_acids.size()
+                      << std::setw(10) << (best_path_info.is_complete ? "YES" : "NO")
+                      << std::endl;
+            
+            if (best_score > global_best_score) {
+                global_best_score = best_score;
+                global_best_start_idx = static_cast<int>(si);
+                global_best_profile = best_profile_name;
+                global_best_path = best_path_info;
+            }
         }
-        
-        // Best path is first (sorted by score)
-        const auto& best = paths[0];
-        
-        std::cout << std::left << std::setw(40) << ps.filename
-                  << std::right << std::fixed << std::setprecision(2)
-                  << std::setw(12) << best.total_score
-                  << std::setw(10) << best.hmm_position
-                  << std::setw(10) << best.amino_acids.size()
-                  << std::setw(10) << best.dna_sequence.length()
-                  << std::setw(10) << paths.size()
-                  << std::setw(12) << (best.is_complete ? "YES" : "NO")
-                  << std::endl;
     }
     
     std::cout << std::endl;
+    std::cout << "=== Global Best Result ===" << std::endl;
     
-    // Detailed output for best overall profile
-    std::cout << "=== Detailed Analysis of Best Profile ===" << std::endl;
-    
-    double best_score = -1e9;
-    std::string best_profile;
-    AminoAcidPathInfo best_path;
-    
-    for (const auto& ps : HMMProfiles::ALL_PROFILES) {
-        Profile hmm;
-        if (!hmm.LoadFromFile(profiles_dir + "/" + ps.filename)) continue;
-        
-        CasGeneDetector detector(sdbg, &hmm);
-        auto paths = detector.BeamSearchAminoAcids(start.node, beam_width, max_depth, start.offset);
-        
-        if (!paths.empty() && paths[0].total_score > best_score) {
-            best_score = paths[0].total_score;
-            best_profile = ps.filename;
-            best_path = paths[0];
-        }
-    }
-    
-    if (best_score > -1e9) {
-        std::cout << "Best profile: " << best_profile << std::endl;
-        std::cout << "Bit score: " << best_score << std::endl;
-        std::cout << "HMM position reached: " << best_path.hmm_position << std::endl;
-        std::cout << "Complete alignment: " << (best_path.is_complete ? "YES" : "NO") << std::endl;
-        std::cout << "DNA length: " << best_path.dna_sequence.length() << " bp" << std::endl;
-        std::cout << "AA length: " << best_path.amino_acids.size() << std::endl;
+    if (global_best_score > -1e9) {
+        std::cout << "Start codon index: " << global_best_start_idx << std::endl;
+        std::cout << "Start codon distance: " << all_starts[global_best_start_idx].distance << " bp" << std::endl;
+        std::cout << "Best profile: " << global_best_profile << std::endl;
+        std::cout << "Bit score: " << std::fixed << std::setprecision(2) << global_best_score << std::endl;
+        std::cout << "HMM position reached: " << global_best_path.hmm_position << std::endl;
+        std::cout << "Complete alignment: " << (global_best_path.is_complete ? "YES" : "NO") << std::endl;
+        std::cout << "DNA length: " << global_best_path.dna_sequence.length() << " bp" << std::endl;
+        std::cout << "AA length: " << global_best_path.amino_acids.size() << std::endl;
         
         // Show first 100 amino acids
         std::cout << "\nFirst 100 AA: ";
-        for (size_t i = 0; i < std::min((size_t)100, best_path.amino_acids.size()); ++i) {
-            std::cout << best_path.amino_acids[i];
+        for (size_t i = 0; i < std::min((size_t)100, global_best_path.amino_acids.size()); ++i) {
+            std::cout << global_best_path.amino_acids[i];
         }
         std::cout << std::endl;
         
         // Show first 300 bp of DNA
         std::cout << "\nFirst 300 bp DNA: ";
-        std::cout << best_path.dna_sequence.substr(0, std::min((size_t)300, best_path.dna_sequence.length())) << std::endl;
+        std::cout << global_best_path.dna_sequence.substr(0, std::min((size_t)300, global_best_path.dna_sequence.length())) << std::endl;
+        
+        // Also show full AA for HMMER validation
+        std::cout << "\nFull AA sequence:" << std::endl;
+        for (size_t i = 0; i < global_best_path.amino_acids.size(); ++i) {
+            std::cout << global_best_path.amino_acids[i];
+        }
+        std::cout << std::endl;
     } else {
         std::cout << "No valid paths found with any profile" << std::endl;
     }
