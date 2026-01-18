@@ -113,11 +113,9 @@ ViterbiColumn CasGeneDetector::ExtendViterbi(const ViterbiColumn& prev, char aa)
         curr.D[j] = std::max(from_m, from_d);
     }
     
-    // Keep best score if current is worse (monotonic in local alignment)
-    if (prev.best_score > curr.best_score) {
-        curr.best_score = prev.best_score;
-        curr.best_hmm_pos = prev.best_hmm_pos;
-    }
+    // For beam search guidance: use max score in current column (not all-time best)
+    // This represents "how well aligned is this path at this point in the sequence"
+    // best_score/best_hmm_pos are already set during the M-state loop above
     
     return curr;
 }
