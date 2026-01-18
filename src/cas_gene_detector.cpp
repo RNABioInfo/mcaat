@@ -1,55 +1,39 @@
 #include "cas_gene_detector.h"
 #include <algorithm>
-#include <queue>
-#include <set>
 #include <unordered_map>
 #include <cmath>
 
 CasGeneDetector::CasGeneDetector(SDBG& sdbg) : sdbg(sdbg), profile_(nullptr) {}
-
 CasGeneDetector::CasGeneDetector(SDBG& sdbg, Profile* profile) : sdbg(sdbg), profile_(profile) {}
 
 char CasGeneDetector::CodonToAminoAcid(const std::string& codon) {
-    static const std::unordered_map<std::string, char> codon_table = {
-        // Standard genetic code
-        {"TTT", 'F'}, {"TTC", 'F'}, {"TTA", 'L'}, {"TTG", 'L'},
-        {"TCT", 'S'}, {"TCC", 'S'}, {"TCA", 'S'}, {"TCG", 'S'},
-        {"TAT", 'Y'}, {"TAC", 'Y'}, {"TAA", '*'}, {"TAG", '*'},
-        {"TGT", 'C'}, {"TGC", 'C'}, {"TGA", '*'}, {"TGG", 'W'},
-        
-        {"CTT", 'L'}, {"CTC", 'L'}, {"CTA", 'L'}, {"CTG", 'L'},
-        {"CCT", 'P'}, {"CCC", 'P'}, {"CCA", 'P'}, {"CCG", 'P'},
-        {"CAT", 'H'}, {"CAC", 'H'}, {"CAA", 'Q'}, {"CAG", 'Q'},
-        {"CGT", 'R'}, {"CGC", 'R'}, {"CGA", 'R'}, {"CGG", 'R'},
-        
-        {"ATT", 'I'}, {"ATC", 'I'}, {"ATA", 'I'}, {"ATG", 'M'},
-        {"ACT", 'T'}, {"ACC", 'T'}, {"ACA", 'T'}, {"ACG", 'T'},
-        {"AAT", 'N'}, {"AAC", 'N'}, {"AAA", 'K'}, {"AAG", 'K'},
-        {"AGT", 'S'}, {"AGC", 'S'}, {"AGA", 'R'}, {"AGG", 'R'},
-        
-        {"GTT", 'V'}, {"GTC", 'V'}, {"GTA", 'V'}, {"GTG", 'V'},
-        {"GCT", 'A'}, {"GCC", 'A'}, {"GCA", 'A'}, {"GCG", 'A'},
-        {"GAT", 'D'}, {"GAC", 'D'}, {"GAA", 'E'}, {"GAG", 'E'},
-        {"GGT", 'G'}, {"GGC", 'G'}, {"GGA", 'G'}, {"GGG", 'G'}
+    static const std::unordered_map<std::string, char> table = {
+        {"TTT",'F'},{"TTC",'F'},{"TTA",'L'},{"TTG",'L'},
+        {"TCT",'S'},{"TCC",'S'},{"TCA",'S'},{"TCG",'S'},
+        {"TAT",'Y'},{"TAC",'Y'},{"TAA",'*'},{"TAG",'*'},
+        {"TGT",'C'},{"TGC",'C'},{"TGA",'*'},{"TGG",'W'},
+        {"CTT",'L'},{"CTC",'L'},{"CTA",'L'},{"CTG",'L'},
+        {"CCT",'P'},{"CCC",'P'},{"CCA",'P'},{"CCG",'P'},
+        {"CAT",'H'},{"CAC",'H'},{"CAA",'Q'},{"CAG",'Q'},
+        {"CGT",'R'},{"CGC",'R'},{"CGA",'R'},{"CGG",'R'},
+        {"ATT",'I'},{"ATC",'I'},{"ATA",'I'},{"ATG",'M'},
+        {"ACT",'T'},{"ACC",'T'},{"ACA",'T'},{"ACG",'T'},
+        {"AAT",'N'},{"AAC",'N'},{"AAA",'K'},{"AAG",'K'},
+        {"AGT",'S'},{"AGC",'S'},{"AGA",'R'},{"AGG",'R'},
+        {"GTT",'V'},{"GTC",'V'},{"GTA",'V'},{"GTG",'V'},
+        {"GCT",'A'},{"GCC",'A'},{"GCA",'A'},{"GCG",'A'},
+        {"GAT",'D'},{"GAC",'D'},{"GAA",'E'},{"GAG",'E'},
+        {"GGT",'G'},{"GGC",'G'},{"GGA",'G'},{"GGG",'G'}
     };
-    
-    if (codon.length() != 3) {
-        return 'X'; // Unknown
-    }
-    
-    auto it = codon_table.find(codon);
-    if (it != codon_table.end()) {
-        return it->second;
-    }
-    return 'X'; // Unknown codon
+    if (codon.length() != 3) return 'X';
+    auto it = table.find(codon);
+    return (it != table.end()) ? it->second : 'X';
 }
 
 std::string CasGeneDetector::GetNodeSequence(uint64_t node_id) {
     const uint32_t k = sdbg.k();
     std::vector<uint8_t> seq(k);
     sdbg.GetLabel(node_id, seq.data());
-    
-    // Convert numeric encoding to nucleotides
     std::string result;
     result.reserve(k);
     for (uint32_t i = 0; i < k; ++i) {
@@ -64,226 +48,158 @@ std::string CasGeneDetector::GetNodeSequence(uint64_t node_id) {
     return result;
 }
 
-void CasGeneDetector::BeamTraverse(
-    uint64_t start_node,
-    int beam_width,
-    int max_depth,
-    std::vector<AminoAcidPathInfo>& result_paths) {
+ViterbiColumn CasGeneDetector::InitializeViterbi() {
+    ViterbiColumn col;
+    if (!profile_) return col;
+    int L = profile_->GetLength();
+    col.Initialize(L);
+    return col;
+}
+
+ViterbiColumn CasGeneDetector::ExtendViterbi(const ViterbiColumn& prev, char aa) {
+    ViterbiColumn curr;
+    if (!profile_) return curr;
     
-    struct BeamState {
-        std::vector<uint64_t> node_path;
-        std::vector<std::string> amino_acids;
-        std::vector<double> scores;
-        double total_score;
-        std::string accumulated_sequence;
-        uint64_t current_node;
-        int depth;
-        int hmm_position;  // Current position in HMM profile
-        std::string viterbi_alignment_path;  // Cache alignment path for incremental updates
-        size_t last_aa_count;  // Track when new amino acids are added
-    };
+    int L = profile_->GetLength();
+    if (L <= 0) return curr;
     
-    auto comp = [](const BeamState& a, const BeamState& b) {
-        return a.total_score < b.total_score;
-    };
+    curr.M.assign(L + 1, -1e9);
+    curr.I.assign(L + 1, -1e9);
+    curr.D.assign(L + 1, -1e9);
+    curr.seq_length = prev.seq_length + 1;
+    curr.best_score = prev.best_score;
+    curr.best_hmm_pos = prev.best_hmm_pos;
     
-    std::vector<BeamState> current_layer;
-    
-    // Initialize with start node
-    BeamState initial;
-    initial.node_path.push_back(start_node);
-    initial.current_node = start_node;
-    initial.total_score = 0.0;  // Start with zero score
-    initial.scores.push_back(0.0);
-    initial.accumulated_sequence = GetNodeSequence(start_node);
-    initial.depth = 0;
-    initial.hmm_position = 0;  // Start at beginning of HMM
-    initial.last_aa_count = 0;  // No amino acids yet
-    
-    current_layer.push_back(initial);
-    
-    // Breadth-first expansion with beam pruning
-    for (int depth = 0; depth < max_depth; ++depth) {
-        std::vector<BeamState> next_layer;
+    for (int j = 1; j <= L; ++j) {
+        double emit_m = profile_->GetMatchEmission(j, aa);
         
-        for (const auto& state : current_layer) {
-            // Get outgoing edges
-            uint64_t outgoings[4];
-            int outdegree = sdbg.OutgoingEdges(state.current_node, outgoings);
-            
-            if (outdegree <= 0) {
-                // Dead end - save current path
-                AminoAcidPathInfo path_info;
-                path_info.amino_acids = state.amino_acids;
-                path_info.node_path = state.node_path;
-                path_info.scores = state.scores;
-                path_info.total_score = state.total_score;
-                path_info.dna_sequence = state.accumulated_sequence;
-                path_info.hmm_position = state.hmm_position;
-                result_paths.push_back(path_info);
-                continue;
-            }
-            
-            // Check if HMM is complete
-            if (profile_ != nullptr && state.hmm_position >= profile_->GetLength()) {
-                // HMM fully aligned, save this path and don't expand further
-                AminoAcidPathInfo path_info;
-                path_info.amino_acids = state.amino_acids;
-                path_info.node_path = state.node_path;
-                path_info.scores = state.scores;
-                path_info.total_score = state.total_score;
-                path_info.dna_sequence = state.accumulated_sequence;
-                path_info.hmm_position = state.hmm_position;
-                result_paths.push_back(path_info);
-                continue;
-            }
-            
-            // Expand to ALL outgoing edges
-            for (int i = 0; i < outdegree; ++i) {
-                uint64_t next_node = outgoings[i];
-                
-                if (!sdbg.IsValidEdge(next_node)) {
-                    continue;
-                }
-                
-                // Skip if we've already visited this node (avoid loops)
-                bool already_visited = false;
-                for (const auto& visited : state.node_path) {
-                    if (visited == next_node) {
-                        already_visited = true;
-                        break;
-                    }
-                }
-                if (already_visited) {
-                    continue;
-                }
-                
-                BeamState new_state;
-                new_state.node_path = state.node_path;
-                new_state.node_path.push_back(next_node);
-                new_state.current_node = next_node;
-                new_state.depth = depth + 1;
-                
-                // Get sequence and extend
-                std::string node_seq = GetNodeSequence(next_node);
-                
-                // For de Bruijn graph, only the last character is new
-                std::string extended_seq = state.accumulated_sequence;
-                if (!node_seq.empty()) {
-                    extended_seq += node_seq.back();
-                }
-                new_state.accumulated_sequence = extended_seq;
-                
-                // Process triplets into amino acids
-                new_state.amino_acids = state.amino_acids;
-                new_state.hmm_position = state.hmm_position;
-                new_state.viterbi_alignment_path = state.viterbi_alignment_path;
-                new_state.last_aa_count = state.last_aa_count;
-                
-                size_t seq_len = extended_seq.length();
-                size_t num_complete_codons = seq_len / 3;
-                
-                // Convert complete triplets to amino acids
-                for (size_t j = state.amino_acids.size(); j < num_complete_codons; ++j) {
-                    std::string codon = extended_seq.substr(j * 3, 3);
-                    char aa = CodonToAminoAcid(codon);
-                    new_state.amino_acids.push_back(std::string(1, aa));
-                }
-                
-                // OPTIMIZATION: Only run Viterbi if new amino acids were added
-                bool new_aa_added = (new_state.amino_acids.size() > new_state.last_aa_count);
-                
-                // Score entire amino acid sequence with Viterbi alignment
-                double viterbi_score = 0.0;
-                if (profile_ != nullptr && !new_state.amino_acids.empty() && new_aa_added) {
-                    // Run Viterbi on complete sequence to get optimal alignment score
-                    auto [bit_score, alignment_path, hmm_end_pos] = profile_->ViterbiAlign(new_state.amino_acids);
-                    viterbi_score = bit_score;
-                    
-                    // Update HMM position to the ending position from Viterbi
-                    new_state.hmm_position = hmm_end_pos;
-                    new_state.viterbi_alignment_path = alignment_path;
-                    new_state.last_aa_count = new_state.amino_acids.size();
-                    
-                    // Early stopping criteria: check insertion/deletion ratios
-                    // Count insertions and deletions from alignment path
-                    int insertion_count = 0;
-                    int deletion_count = 0;
-                    for (char state_char : alignment_path) {
-                        if (state_char == 'I') insertion_count++;
-                        if (state_char == 'D') deletion_count++;
-                    }
-                    
-                    // Get HMM length for threshold calculation
-                    int hmm_length = profile_->GetLength();
-                    
-                    // Skip this path if insertions > 25% or deletions > 15% of HMM length
-                    double insertion_ratio = static_cast<double>(insertion_count) / hmm_length;
-                    double deletion_ratio = static_cast<double>(deletion_count) / hmm_length;
-                    
-                    if (insertion_ratio > 0.25 || deletion_ratio > 0.15) {
-                        // Skip this path - too many indels
-                        continue;
-                    }
-                } else if (profile_ != nullptr && !new_state.amino_acids.empty() && !new_aa_added) {
-                    // No new AA added - reuse previous score
-                    viterbi_score = state.total_score;
-                } else {
-                    // Fallback to simple node degree scoring
-                    viterbi_score = static_cast<double>(sdbg.EdgeOutdegree(next_node));
-                }
-                
-                // Use Viterbi score directly as total score (not incremental)
-                new_state.scores = state.scores;
-                new_state.scores.push_back(viterbi_score);
-                new_state.total_score = viterbi_score;  // Total score IS the Viterbi score
-                
-                next_layer.push_back(new_state);
-            }
+        double from_m = (j == 1) ? prev.M[0] : prev.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'M');
+        double from_i = (j == 1) ? -1e9 : prev.I[j-1] + profile_->GetTransition(j-1, j, 'I', 'M');
+        double from_d = (j == 1) ? -1e9 : prev.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'M');
+        
+        curr.M[j] = emit_m + std::max({from_m, from_i, from_d});
+        
+        double emit_i = profile_->GetInsertEmission(j, aa);
+        curr.I[j] = emit_i + std::max(
+            prev.M[j] + profile_->GetTransition(j, j, 'M', 'I'),
+            prev.I[j] + profile_->GetTransition(j, j, 'I', 'I')
+        );
+        
+        if (curr.M[j] > curr.best_score) {
+            curr.best_score = curr.M[j];
+            curr.best_hmm_pos = j;
         }
-        
-        if (next_layer.empty()) {
-            break; // No more paths to explore
-        }
-        
-        // Sort by score and keep top beam_width
-        std::sort(next_layer.begin(), next_layer.end(), 
-                  [](const BeamState& a, const BeamState& b) {
-                      return a.total_score > b.total_score;
-                  });
-        
-        if (next_layer.size() > static_cast<size_t>(beam_width)) {
-            next_layer.resize(beam_width);
-        }
-        
-        current_layer = std::move(next_layer);
     }
     
-    // Add remaining paths
-    for (const auto& state : current_layer) {
-        AminoAcidPathInfo path_info;
-        path_info.amino_acids = state.amino_acids;
-        path_info.node_path = state.node_path;
-        path_info.scores = state.scores;
-        path_info.total_score = state.total_score;
-        path_info.dna_sequence = state.accumulated_sequence;
-        path_info.hmm_position = state.hmm_position;
-        result_paths.push_back(path_info);
+    for (int j = 2; j <= L; ++j) {
+        curr.D[j] = std::max(
+            curr.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'D'),
+            curr.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'D')
+        );
     }
+    
+    return curr;
 }
 
 std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
-    uint64_t start_node,
-    int beam_width,
-    int max_depth) {
+    uint64_t start_node, int beam_width, int max_depth, int start_codon_offset) {
     
-    std::vector<AminoAcidPathInfo> result_paths;
+    std::vector<AminoAcidPathInfo> results;
+    if (!sdbg.IsValidEdge(start_node)) return results;
     
-    if (!sdbg.IsValidEdge(start_node)) {
-        return result_paths;
+    struct State {
+        uint64_t node;
+        std::string dna;
+        std::string aa;
+        ViterbiColumn vit;
+        std::unordered_set<uint64_t> visited;
+        double score() const { return vit.best_score; }
+    };
+    
+    std::vector<State> beam;
+    
+    // Initialize
+    State init;
+    init.node = start_node;
+    init.dna = GetNodeSequence(start_node).substr(start_codon_offset);
+    init.vit = InitializeViterbi();
+    init.visited.insert(start_node);
+    
+    // Score initial codons
+    size_t init_codons = init.dna.length() / 3;
+    for (size_t i = 0; i < init_codons; ++i) {
+        char aa = CodonToAminoAcid(init.dna.substr(i * 3, 3));
+        init.aa += aa;
+        if (profile_) init.vit = ExtendViterbi(init.vit, aa);
     }
     
-    BeamTraverse(start_node, beam_width, max_depth, result_paths);
+    beam.push_back(std::move(init));
     
-    return result_paths;
+    // Traverse
+    for (int depth = 0; depth < max_depth && !beam.empty(); ++depth) {
+        std::vector<State> next_beam;
+        
+        for (auto& s : beam) {
+            uint64_t out[4];
+            int outdeg = sdbg.OutgoingEdges(s.node, out);
+            
+            if (outdeg == 0 || (profile_ && s.vit.best_hmm_pos >= profile_->GetLength())) {
+                // Terminal - save result
+                AminoAcidPathInfo r;
+                r.dna_sequence = s.dna;
+                r.total_score = s.vit.best_score;
+                r.hmm_position = s.vit.best_hmm_pos;
+                r.is_complete = true;
+                for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
+                r.node_path = {start_node, s.node};
+                results.push_back(std::move(r));
+                continue;
+            }
+            
+            for (int i = 0; i < outdeg; ++i) {
+                if (!sdbg.IsValidEdge(out[i])) continue;
+                if (s.visited.count(out[i])) continue;
+                
+                State ns;
+                ns.node = out[i];
+                ns.dna = s.dna + GetNodeSequence(out[i]).back();
+                ns.aa = s.aa;
+                ns.vit = s.vit;
+                ns.visited = s.visited;
+                ns.visited.insert(out[i]);
+                
+                // New codon?
+                if (ns.dna.length() / 3 > ns.aa.length()) {
+                    char aa = CodonToAminoAcid(ns.dna.substr(ns.aa.length() * 3, 3));
+                    ns.aa += aa;
+                    if (profile_) ns.vit = ExtendViterbi(ns.vit, aa);
+                }
+                
+                next_beam.push_back(std::move(ns));
+            }
+        }
+        
+        // Prune beam
+        if (next_beam.size() > static_cast<size_t>(beam_width)) {
+            std::partial_sort(next_beam.begin(), next_beam.begin() + beam_width, next_beam.end(),
+                [](const State& a, const State& b) { return a.score() > b.score(); });
+            next_beam.resize(beam_width);
+        }
+        
+        beam = std::move(next_beam);
+    }
+    
+    // Save remaining
+    for (auto& s : beam) {
+        AminoAcidPathInfo r;
+        r.dna_sequence = s.dna;
+        r.total_score = s.vit.best_score;
+        r.hmm_position = s.vit.best_hmm_pos;
+        r.is_complete = true;
+        for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
+        r.node_path = {start_node, s.node};
+        results.push_back(std::move(r));
+    }
+    
+    return results;
 }

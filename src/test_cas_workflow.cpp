@@ -1,247 +1,237 @@
 #include <iostream>
-#include <cstring>
 #include <string>
-#include <algorithm>
-#include <iomanip>
+#include <queue>
+#include <set>
+#include <vector>
+#include <cstdint>
+#include <climits>
+#include <unordered_map>
 #include "sdbg/sdbg.h"
-#include "cas_workflow.h"
+#include "profile.h"
+#include "buckets.h"
 
-using namespace std;
-
-/**
- * Find node ID for a given k-mer sequence in the SDBG
- */
-uint64_t FindKmerNodeID(SDBG& sdbg, const string& kmer) {
-    if (kmer.length() != (size_t)sdbg.k()) {
-        cerr << "Error: K-mer length (" << kmer.length() 
-             << ") doesn't match graph k (" << sdbg.k() << ")" << endl;
-        return SDBG::kNullID;
-    }
-
-    // Convert DNA sequence to encoded format (A=1, C=2, G=3, T=4)
-    uint8_t* encoded = new uint8_t[sdbg.k()];
-    for (uint32_t i = 0; i < sdbg.k(); i++) {
-        switch(kmer[i]) {
-            case 'A': case 'a': encoded[i] = 1; break;
-            case 'C': case 'c': encoded[i] = 2; break;
-            case 'G': case 'g': encoded[i] = 3; break;
-            case 'T': case 't': encoded[i] = 4; break;
-            default: 
-                cerr << "Invalid base: " << kmer[i] << endl;
-                delete[] encoded;
-                return SDBG::kNullID;
+std::string GetNodeSeq(SDBG& sdbg, uint64_t node_id) {
+    const uint32_t k = sdbg.k();
+    std::vector<uint8_t> seq(k);
+    sdbg.GetLabel(node_id, seq.data());
+    std::string result;
+    for (uint32_t i = 0; i < k; ++i) {
+        switch (seq[i]) {
+            case 1: result += 'A'; break;
+            case 2: result += 'C'; break;
+            case 3: result += 'G'; break;
+            case 4: result += 'T'; break;
+            default: result += 'N'; break;
         }
     }
-    
-    uint64_t node_id = sdbg.IndexBinarySearch(encoded);
-    delete[] encoded;
-    
-    return node_id;
+    return result;
 }
 
-/**
- * Get reverse complement of DNA sequence
- */
-string ReverseComplement(const string& seq) {
-    string rc = seq;
-    for (size_t i = 0; i < rc.length(); i++) {
-        switch(rc[i]) {
-            case 'A': case 'a': rc[i] = 'T'; break;
-            case 'T': case 't': rc[i] = 'A'; break;
-            case 'C': case 'c': rc[i] = 'G'; break;
-            case 'G': case 'g': rc[i] = 'C'; break;
+char CodonToAA(const std::string& codon) {
+    static const std::unordered_map<std::string, char> t = {
+        {"TTT",'F'},{"TTC",'F'},{"TTA",'L'},{"TTG",'L'},
+        {"TCT",'S'},{"TCC",'S'},{"TCA",'S'},{"TCG",'S'},
+        {"TAT",'Y'},{"TAC",'Y'},{"TAA",'*'},{"TAG",'*'},
+        {"TGT",'C'},{"TGC",'C'},{"TGA",'*'},{"TGG",'W'},
+        {"CTT",'L'},{"CTC",'L'},{"CTA",'L'},{"CTG",'L'},
+        {"CCT",'P'},{"CCC",'P'},{"CCA",'P'},{"CCG",'P'},
+        {"CAT",'H'},{"CAC",'H'},{"CAA",'Q'},{"CAG",'Q'},
+        {"CGT",'R'},{"CGC",'R'},{"CGA",'R'},{"CGG",'R'},
+        {"ATT",'I'},{"ATC",'I'},{"ATA",'I'},{"ATG",'M'},
+        {"ACT",'T'},{"ACC",'T'},{"ACA",'T'},{"ACG",'T'},
+        {"AAT",'N'},{"AAC",'N'},{"AAA",'K'},{"AAG",'K'},
+        {"AGT",'S'},{"AGC",'S'},{"AGA",'R'},{"AGG",'R'},
+        {"GTT",'V'},{"GTC",'V'},{"GTA",'V'},{"GTG",'V'},
+        {"GCT",'A'},{"GCC",'A'},{"GCA",'A'},{"GCG",'A'},
+        {"GAT",'D'},{"GAC",'D'},{"GAA",'E'},{"GAG",'E'},
+        {"GGT",'G'},{"GGC",'G'},{"GGA",'G'},{"GGG",'G'}
+    };
+    if (codon.length() != 3) return 'X';
+    auto it = t.find(codon);
+    return (it != t.end()) ? it->second : 'X';
+}
+
+int GetStartCodonOffset(const std::string& seq) {
+    for (size_t i = 0; i + 2 < seq.length(); ++i) {
+        std::string codon = seq.substr(i, 3);
+        if (codon == "ATG" || codon == "GTG" || codon == "TTG") {
+            return static_cast<int>(i);
         }
     }
-    reverse(rc.begin(), rc.end());
-    return rc;
+    return -1;
 }
 
-int main(int argc, char** argv) {
-    cout << "============================================" << endl;
-    cout << "   CAS WORKFLOW TEST - Gene Detection" << endl;
-    cout << "============================================" << endl;
-    cout << endl;
+struct StartCodon {
+    uint64_t node;
+    int distance;
+    int offset;
+};
+
+StartCodon FindFirstStartCodon(SDBG& sdbg, uint64_t repeat_node, int min_dist, int max_dist) {
+    std::set<uint64_t> visited;
+    std::queue<std::pair<uint64_t, int>> q;
+    q.push({repeat_node, 0});
+    visited.insert(repeat_node);
     
-    // Parse command line arguments
+    while (!q.empty()) {
+        auto [node, dist] = q.front();
+        q.pop();
+        
+        if (dist <= max_dist) {
+            std::string seq = GetNodeSeq(sdbg, node);
+            int offset = GetStartCodonOffset(seq);
+            if (offset >= 0) {
+                int bp_dist = dist + offset;
+                if (bp_dist >= min_dist && bp_dist <= max_dist) {
+                    return {node, bp_dist, offset};
+                }
+            }
+        }
+        
+        if (dist < max_dist) {
+            uint64_t out[4];
+            int outdeg = sdbg.OutgoingEdges(node, out);
+            for (int i = 0; i < outdeg; ++i) {
+                if (sdbg.IsValidEdge(out[i]) && !visited.count(out[i])) {
+                    q.push({out[i], dist + 1});
+                    visited.insert(out[i]);
+                }
+            }
+        }
+    }
+    return {0, -1, -1};
+}
+
+// Greedy traversal with backtracking via IncomingEdges
+std::string GreedyTraverse(SDBG& sdbg, uint64_t start_node, int offset, int max_bp) {
+    std::string dna = GetNodeSeq(sdbg, start_node).substr(offset);
+    std::set<uint64_t> visited;
+    visited.insert(start_node);
+    
+    uint64_t current = start_node;
+    
+    for (int i = 0; i < max_bp; ++i) {
+        uint64_t out[4];
+        int outdeg = sdbg.OutgoingEdges(current, out);
+        
+        // Find first unvisited outgoing edge
+        uint64_t next = UINT64_MAX;
+        for (int j = 0; j < outdeg; ++j) {
+            if (sdbg.IsValidEdge(out[j]) && !visited.count(out[j])) {
+                next = out[j];
+                break;
+            }
+        }
+        
+        // If stuck, backtrack
+        while (next == UINT64_MAX && current != start_node) {
+            // Go back via incoming edges
+            uint64_t inc[4];
+            int indeg = sdbg.IncomingEdges(current, inc);
+            
+            uint64_t prev = UINT64_MAX;
+            for (int j = 0; j < indeg; ++j) {
+                if (sdbg.IsValidEdge(inc[j]) && visited.count(inc[j])) {
+                    prev = inc[j];
+                    break;
+                }
+            }
+            
+            if (prev == UINT64_MAX) break;  // Can't backtrack
+            
+            // Remove last char from dna
+            if (!dna.empty()) dna.pop_back();
+            
+            current = prev;
+            
+            // Try outgoing edges from this node
+            outdeg = sdbg.OutgoingEdges(current, out);
+            for (int j = 0; j < outdeg; ++j) {
+                if (sdbg.IsValidEdge(out[j]) && !visited.count(out[j])) {
+                    next = out[j];
+                    break;
+                }
+            }
+        }
+        
+        if (next == UINT64_MAX) break;  // Truly stuck
+        
+        visited.insert(next);
+        dna += GetNodeSeq(sdbg, next).back();
+        current = next;
+    }
+    
+    return dna;
+}
+
+int main(int argc, char* argv[]) {
     if (argc < 4) {
-        cerr << "Usage: " << argv[0] << " <graph_path> <profiles_dir> <repeat_kmer>" << endl;
-        cerr << endl;
-        cerr << "Arguments:" << endl;
-        cerr << "  graph_path    - Path to SDBG graph file (e.g., output/graph/graph)" << endl;
-        cerr << "  profiles_dir  - Directory containing HMM profile files (e.g., profiles/)" << endl;
-        cerr << "  repeat_kmer   - K-mer sequence from CRISPR repeat region" << endl;
-        cerr << endl;
-        cerr << "Example:" << endl;
-        cerr << "  " << argv[0] << " output/graph/graph profiles ATCGATCGATCGATCG" << endl;
-        cerr << endl;
+        std::cerr << "Usage: " << argv[0] << " <graph_prefix> <profiles_dir> <repeat_sequence>" << std::endl;
         return 1;
     }
     
-    string graph_path = argv[1];
-    string profiles_dir = argv[2];
-    string repeat_kmer = argv[3];
+    std::string graph_prefix = argv[1];
+    std::string profiles_dir = argv[2];
+    std::string repeat_seq = argv[3];
     
-    cout << "Configuration:" << endl;
-    cout << "  Graph path:    " << graph_path << endl;
-    cout << "  Profiles dir:  " << profiles_dir << endl;
-    cout << "  Repeat k-mer:  " << repeat_kmer << endl;
-    cout << endl;
-    
-    // Load SDBG graph
-    cout << "Loading SDBG graph..." << endl;
     SDBG sdbg;
-    char* graph_cstr = new char[graph_path.length() + 1];
-    strcpy(graph_cstr, graph_path.c_str());
-    sdbg.LoadFromFile(graph_cstr);
-    delete[] graph_cstr;
+    sdbg.LoadFromFile(graph_prefix.c_str());
     
-    cout << "✓ Graph loaded successfully!" << endl;
-    cout << "  Graph size:    " << sdbg.size() << " nodes" << endl;
-    cout << "  K-mer size:    " << sdbg.k() << endl;
-    cout << endl;
-    
-    // Find repeat node ID from k-mer sequence
-    cout << "Finding repeat node from k-mer sequence..." << endl;
-    uint64_t repeat_node = FindKmerNodeID(sdbg, repeat_kmer);
-    
-    if (repeat_node == SDBG::kNullID) {
-        cout << "K-mer not found in graph. Trying reverse complement..." << endl;
-        string rc_kmer = ReverseComplement(repeat_kmer);
-        cout << "  RC k-mer: " << rc_kmer << endl;
-        repeat_node = FindKmerNodeID(sdbg, rc_kmer);
-        
-        if (repeat_node == SDBG::kNullID) {
-            cerr << "ERROR: Repeat k-mer not found in graph (tried both strands)!" << endl;
-            return 1;
+    std::vector<uint8_t> repeat_encoded(repeat_seq.length());
+    for (size_t i = 0; i < repeat_seq.length(); ++i) {
+        switch (repeat_seq[i]) {
+            case 'A': case 'a': repeat_encoded[i] = 1; break;
+            case 'C': case 'c': repeat_encoded[i] = 2; break;
+            case 'G': case 'g': repeat_encoded[i] = 3; break;
+            case 'T': case 't': repeat_encoded[i] = 4; break;
+            default: repeat_encoded[i] = 0; break;
         }
     }
+    uint64_t repeat_node = sdbg.IndexBinarySearch(repeat_encoded.data());
     
-    cout << "✓ Found repeat node: " << repeat_node << endl;
-    
-    // Verify the node
-    if (!sdbg.IsValidEdge(repeat_node)) {
-        cerr << "ERROR: Node " << repeat_node << " is not a valid edge!" << endl;
+    if (repeat_node == UINT64_MAX) {
+        std::cerr << "Repeat not found" << std::endl;
         return 1;
     }
     
-    cout << "  Node multiplicity: " << sdbg.EdgeMultiplicity(repeat_node) << endl;
-    cout << "  Node outdegree:    " << sdbg.EdgeOutdegree(repeat_node) << endl;
-    cout << endl;
-    
-    // Create CAS workflow
-    cout << "Initializing CAS workflow..." << endl;
-    CasWorkflow workflow(sdbg, profiles_dir);
-    
-    cout << "✓ Workflow initialized with default parameters:" << endl;
-    cout << "  FIRST_GENE_MIN_DIST:    50 bp" << endl;
-    cout << "  FIRST_GENE_MAX_DIST:    1000 bp" << endl;
-    cout << "  MAX_START_CANDIDATES:   5000" << endl;
-    cout << "  MAX_LOCUS_BP:           41591 bp" << endl;
-    cout << "  OVERLAP_ALLOWANCE:      15 bp" << endl;
-    cout << "  INTERGENIC_MAX:         100 bp" << endl;
-    cout << "  BEAM_WIDTH:             10" << endl;
-    cout << "  MIN_NORMALIZED_SCORE:   0.0" << endl;
-    cout << endl;
-    
-    // Run CAS gene detection
-    cout << "============================================" << endl;
-    cout << "Starting CAS gene detection..." << endl;
-    cout << "============================================" << endl;
-    cout << endl;
-    
-    auto detected_genes = workflow.DetectCasGenes(repeat_node);
-    
-    cout << endl;
-    cout << "============================================" << endl;
-    cout << "RESULTS" << endl;
-    cout << "============================================" << endl;
-    cout << endl;
-    
-    cout << "Total genes detected: " << detected_genes.size() << endl;
-    
-    if (detected_genes.empty()) {
-        cout << endl;
-        cout << "No CAS genes detected." << endl;
-        cout << "This could mean:" << endl;
-        cout << "  - No start codons found in search range" << endl;
-        cout << "  - No genes scored above threshold" << endl;
-        cout << "  - Wrong repeat node or direction" << endl;
-        return 0;
+    StartCodon start = FindFirstStartCodon(sdbg, repeat_node, 600, 1000);
+    if (start.distance < 0) {
+        std::cerr << "No start codon" << std::endl;
+        return 1;
     }
     
-    // Calculate total operon length
-    int total_operon_length = 0;
-    if (!detected_genes.empty()) {
-        const auto& last_gene = detected_genes.back();
-        total_operon_length = last_gene.distance_from_repeat + last_gene.gene_length;
+    std::cout << "Start codon: node=" << start.node << " dist=" << start.distance << " offset=" << start.offset << std::endl;
+    
+    // Greedy traversal
+    std::string dna = GreedyTraverse(sdbg, start.node, start.offset, 3000);
+    std::cout << "DNA length: " << dna.length() << " bp" << std::endl;
+    
+    // Translate - skip stop codons (HMMER style)
+    std::string aa;
+    for (size_t i = 0; i + 2 < dna.length(); i += 3) {
+        char c = CodonToAA(dna.substr(i, 3));
+        if (c == '*') continue;  // Skip stop codon
+        aa += c;
     }
+    std::cout << "AA length: " << aa.length() << std::endl;
+    std::cout << "First 100 AA: " << aa.substr(0, 100) << std::endl;
     
-    cout << "Total operon length: " << total_operon_length << " bp" << endl;
-    cout << endl;
+    // Score with ViterbiAlign directly
+    std::cout << "\nPROFILE\tBIT_SCORE\tHMM_POS" << std::endl;
     
-    cout << "Detected CAS Genes:" << endl;
-    cout << "-------------------" << endl;
-    cout << endl;
+    std::vector<std::string> aa_vec;
+    for (char c : aa) aa_vec.push_back(std::string(1, c));
     
-    for (size_t i = 0; i < detected_genes.size(); i++) {
-        const auto& gene = detected_genes[i];
-        
-        cout << "Gene #" << (i + 1) << ":" << endl;
-        cout << "  Profile:           " << gene.profile_name << endl;
-        cout << "  Start node:        " << gene.start_node << endl;
-        cout << "  End node:          " << gene.end_node << endl;
-        cout << "  Distance from R:   " << gene.distance_from_repeat << " bp" << endl;
-        cout << "  Gene length:       " << gene.gene_length << " bp" << endl;
-        cout << "  Bit score:         " << fixed << setprecision(2) << gene.bit_score << endl;
-        cout << "  Normalized score:  " << fixed << setprecision(4) << gene.normalized_score << endl;
-        cout << "  Amino acids:       " << gene.amino_acids.length() << " AA" << endl;
-        
-        // Show amino acid sequence (first 30 AA)
-        if (!gene.amino_acids.empty()) {
-            cout << "  AA sequence:       ";
-            int num_to_show = min(30, (int)gene.amino_acids.length());
-            for (int j = 0; j < num_to_show; j++) {
-                cout << gene.amino_acids[j];
-            }
-            if (gene.amino_acids.length() > 30) {
-                cout << "... (" << gene.amino_acids.length() << " total)";
-            }
-            cout << endl;
+    for (const auto& ps : HMMProfiles::ALL_PROFILES) {
+        Profile hmm;
+        if (!hmm.LoadFromFile(profiles_dir + "/" + ps.filename)) {
+            std::cout << ps.filename << "\tLOAD_FAILED" << std::endl;
+            continue;
         }
         
-        cout << "  Node path length:  " << gene.node_path.size() << " nodes" << endl;
-        cout << endl;
+        auto [bit_score, path, hmm_pos] = hmm.ViterbiAlign(aa_vec);
+        std::cout << ps.filename << "\t" << bit_score << "\t" << hmm_pos << std::endl;
     }
-    
-    // Summary statistics
-    cout << "============================================" << endl;
-    cout << "SUMMARY" << endl;
-    cout << "============================================" << endl;
-    cout << endl;
-    
-    double avg_gene_length = 0.0;
-    double avg_normalized_score = 0.0;
-    int total_aa = 0;
-    
-    for (const auto& gene : detected_genes) {
-        avg_gene_length += gene.gene_length;
-        avg_normalized_score += gene.normalized_score;
-        total_aa += gene.amino_acids.length();
-    }
-    
-    if (!detected_genes.empty()) {
-        avg_gene_length /= detected_genes.size();
-        avg_normalized_score /= detected_genes.size();
-    }
-    
-    cout << "Average gene length:      " << fixed << setprecision(1) << avg_gene_length << " bp" << endl;
-    cout << "Average normalized score: " << fixed << setprecision(4) << avg_normalized_score << endl;
-    cout << "Total amino acids:        " << total_aa << " AA" << endl;
-    cout << "Average AA per gene:      " << fixed << setprecision(1) 
-         << (detected_genes.empty() ? 0.0 : (double)total_aa / detected_genes.size()) << " AA" << endl;
-    cout << endl;
-    
-    cout << "Test completed successfully!" << endl;
     
     return 0;
 }

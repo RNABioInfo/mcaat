@@ -221,11 +221,6 @@ bool Profile::LoadFromFile(const std::string& filename) {
         }
     }
     
-    std::cout << "Loaded profile: " << name_ << std::endl;
-    std::cout << "Length: " << length_ << " states" << std::endl;
-    std::cout << "Parsed: " << states_.size() << " states" << std::endl;
-    std::cout << "Alphabet: " << alphabet_ << std::endl;
-    
     return !states_.empty();
 }
 
@@ -568,7 +563,7 @@ void Profile::PrintSummary() const {
     std::cout << "States loaded: " << states_.size() << std::endl;
     
     if (!states_.empty()) {
-        std::cout << "\nFirst state:" << std::endl;
+     
         const auto& first = states_[0];
         std::cout << "  Position: " << first.position << std::endl;
         std::cout << "  Consensus: " << first.consensus << std::endl;
