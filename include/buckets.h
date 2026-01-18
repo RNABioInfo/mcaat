@@ -1,6 +1,9 @@
 /**
  * @file buckets.h
- * @brief HMM profile size buckets - dynamically loaded from HMM files
+ * @brief HMM profile size buckets
+ * 
+ * Contains size ranges for all HMM profiles based on LENG values.
+ * Size range: -15% to +25% of LENG value
  */
 
 #ifndef INCLUDE_BUCKETS_H_
@@ -8,11 +11,7 @@
 
 #include <string>
 #include <vector>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
-#include <iostream>
-#include <algorithm>
+#include <cstdint>
 
 namespace HMMProfiles {
 
@@ -25,83 +24,42 @@ struct ProfileSize {
     int max_bp;     // Maximum base pairs (max_aa * 3)
 };
 
-// Parse LENG from an HMM file
-inline int ParseLengFromHMM(const std::string& filepath) {
-    std::ifstream file(filepath);
-    if (!file.is_open()) {
-        std::cerr << "DEBUG: Cannot open file: " << filepath << std::endl;
-        return 0;
-    }
-    
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.length() >= 4 && line.substr(0, 4) == "LENG") {
-            std::istringstream iss(line);
-            std::string key;
-            int leng;
-            iss >> key >> leng;
-            return leng;
-        }
-        // Stop at HMM line (header section ends)
-        if (line.length() >= 3 && line.substr(0, 3) == "HMM") break;
-    }
-    std::cerr << "DEBUG: LENG not found in: " << filepath << std::endl;
-    return 0;
-}
+// Sorted by LENG
+static const std::vector<ProfileSize> ALL_PROFILES = {
+    {"MerR_1_V-K.hmm", 69, 58, 86, 174, 258},
+    {"Cas2_11_CAS-I-II-III-IV-V-VI.hmm", 71, 60, 88, 180, 264},
+    {"Cas2_2_CAS-I-II-III-IV-V-VI.hmm", 79, 67, 98, 201, 294},
+    {"Cas2_0_I-II-III-V.hmm", 83, 70, 103, 210, 309},
+    {"2OG_1_CAS-I-II-III-IV-V-VI.hmm", 94, 79, 117, 237, 351},
+    {"Cas6_15_CAS-I-II-III-IV-V-VI.hmm", 112, 95, 140, 285, 420},
+    {"Csa3_1_CAS-I-II-III-IV-V-VI.hmm", 118, 100, 147, 300, 441},
+    {"Cse2gr11_7_CAS-I-E.hmm", 144, 122, 180, 366, 540},
+    {"Cas6_13_CAS-I-II-III-IV-V-VI.hmm", 151, 128, 188, 384, 564},
+    {"DEDDh_0_CAS-I-II-III-IV-V-VI.hmm", 160, 136, 200, 408, 600},
+    {"WYL_3_CAS-I-II-III-IV-V-VI.hmm", 172, 146, 215, 438, 645},
+    {"Cas3_1_I.hmm", 178, 151, 222, 453, 666},
+    {"Csm3_0_IIID.hmm", 178, 151, 222, 453, 666},
+    {"Csm3gr7_2_CAS-III-A-III-D.hmm", 180, 153, 225, 459, 675},
+    {"Csm3_1_IIIAD.hmm", 189, 160, 236, 480, 708},
+    {"Csm3gr7_12_CAS-III-A-III-D.hmm", 199, 169, 248, 507, 744},
+    {"Cas5_0_CAS-I.hmm", 201, 170, 251, 510, 753},
+    {"Cas6e_2_CAS-I-II-III-IV-V-VI.hmm", 202, 171, 252, 513, 756},
+    {"Cas3HD_0_CAS-I.hmm", 203, 172, 253, 516, 759},
+    {"Cas7b_0_CAS-I-B-I-C.hmm", 254, 215, 317, 645, 951},
+    {"Cas1_8_CAS-I-II-III-IV-V-VI.hmm", 283, 240, 353, 720, 1059},
+    {"Cas1_0_I-II-III-V.hmm", 315, 267, 393, 801, 1179},
+    {"Cas1_0_CAS-I-II-III-IV-V-VI.hmm", 317, 269, 396, 807, 1188},
+    {"Cas6_10_CAS-I-II-III-IV-V-VI.hmm", 322, 273, 402, 819, 1206},
+    {"TnpB_0_Competitive.hmm", 400, 340, 500, 1020, 1500},
+    {"TnpB_1_Competitive.hmm", 409, 347, 511, 1041, 1533},
+    {"Cas12f1_2_CAS-V-F.hmm", 429, 364, 536, 1092, 1608},
+    {"Cas8e_4_CAS-I-E.hmm", 465, 395, 581, 1185, 1743},
+    {"Cas8c_3_CAS-I-C.hmm", 559, 475, 698, 1425, 2094},
+};
 
-// Load all profiles from a directory
-inline std::vector<ProfileSize> LoadProfiles(const std::string& profiles_dir) {
-    std::vector<ProfileSize> profiles;
-    
-    // Check if directory exists
-    if (!std::filesystem::exists(profiles_dir)) {
-        std::cerr << "ERROR: Profiles directory does not exist: " << profiles_dir << std::endl;
-        return profiles;
-    }
-    
-    if (!std::filesystem::is_directory(profiles_dir)) {
-        std::cerr << "ERROR: Not a directory: " << profiles_dir << std::endl;
-        return profiles;
-    }
-    
-    try {
-        int file_count = 0;
-        for (const auto& entry : std::filesystem::directory_iterator(profiles_dir)) {
-            file_count++;
-            std::string ext = entry.path().extension().string();
-            if (ext == ".hmm") {
-                std::string filename = entry.path().filename().string();
-                std::string filepath = entry.path().string();
-                
-                int leng = ParseLengFromHMM(filepath);
-                if (leng > 0) {
-                    ProfileSize ps;
-                    ps.filename = filename;
-                    ps.leng = leng;
-                    ps.min_aa = static_cast<int>(leng * 0.85);
-                    ps.max_aa = static_cast<int>(leng * 1.25);
-                    ps.min_bp = ps.min_aa * 3;
-                    ps.max_bp = ps.max_aa * 3;
-                    profiles.push_back(ps);
-                } else {
-                    std::cerr << "WARNING: Could not parse LENG from: " << filepath << std::endl;
-                }
-            }
-        }
-        if (profiles.empty() && file_count > 0) {
-            std::cerr << "WARNING: Found " << file_count << " files but no .hmm files" << std::endl;
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "ERROR: Failed to iterate directory: " << e.what() << std::endl;
-        return profiles;
-    }
-    
-    // Sort by LENG
-    std::sort(profiles.begin(), profiles.end(), 
-              [](const ProfileSize& a, const ProfileSize& b) { return a.leng < b.leng; });
-    
-    return profiles;
-}
+constexpr int MIN_PROFILE_BP = 174;
+constexpr int MAX_PROFILE_BP = 2094;
+constexpr int TOTAL_PROFILES = 29;
 
 }  // namespace HMMProfiles
 
