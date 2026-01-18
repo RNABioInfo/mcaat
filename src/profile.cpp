@@ -28,7 +28,7 @@ std::vector<double> Profile::ParseScoreLine(const std::string& line) {
     
     while (iss >> token) {
         if (token == "*") {
-            scores.push_back(INFINITY);  // Special end marker
+            scores.push_back(-INFINITY);  // Impossible transition in log-space
         } else {
             try {
                 // HMMER3 format stores positive values representing -log(P)
@@ -318,7 +318,7 @@ double Profile::GetTransition(int from_state, int to_state, char from_type, char
     }
     
     if (trans_idx < 0 || trans_idx >= static_cast<int>(state.transitions.size())) {
-        return INFINITY;
+        return -INFINITY;
     }
     
     return state.transitions[trans_idx];

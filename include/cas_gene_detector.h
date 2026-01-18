@@ -28,9 +28,9 @@ struct ViterbiColumn {
         M.assign(hmm_length + 1, -1e9);
         I.assign(hmm_length + 1, -1e9);
         D.assign(hmm_length + 1, -1e9);
-        // Start state
+        // Start state - M[0] is entry point with score 0
         M[0] = 0.0;
-        best_score = 0.0;
+        best_score = -1e9;  // No real alignment yet
         best_hmm_pos = 0;
         seq_length = 0;
     }

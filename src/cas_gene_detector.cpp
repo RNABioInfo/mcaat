@@ -133,26 +133,30 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
         std::string dna;
         std::string aa;
         ViterbiColumn vit;
-        std::vector<uint64_t> path;  // Full node path
-        uint64_t visited_hash;       // Simple hash for cycle detection (last N nodes)
+        uint64_t path_hash;  // Rolling hash for cycle detection
         double score() const { return vit.best_score; }
     };
     
+    // Pre-allocate
     std::vector<State> beam;
+    beam.reserve(beam_width * 4);
+    std::vector<State> next_beam;
+    next_beam.reserve(beam_width * 4);
     
     // Initialize
     State init;
     init.node = start_node;
     init.dna = GetNodeSequence(start_node).substr(start_codon_offset);
+    init.dna.reserve(max_depth + 50);
+    init.aa.reserve(max_depth / 3 + 20);
     init.vit = InitializeViterbi();
-    init.path.push_back(start_node);
-    init.visited_hash = start_node;
+    init.path_hash = start_node;
     
     // Score initial codons
     size_t init_codons = init.dna.length() / 3;
     for (size_t i = 0; i < init_codons; ++i) {
         char aa = CodonToAminoAcid(init.dna.substr(i * 3, 3));
-        if (aa != '*') {  // Skip stop codons (HMMER style)
+        if (aa != '*') {
             init.aa += aa;
             if (profile_) init.vit = ExtendViterbi(init.vit, aa);
         }
@@ -160,9 +164,11 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     
     beam.push_back(std::move(init));
     
-    // Traverse
-    for (int depth = 0; depth < max_depth && !beam.empty(); ++depth) {
-        std::vector<State> next_beam;
+    // Traverse - max depth is HMM length + 25% buffer (in bp = aa * 3)
+    int effective_max_depth = profile_ ? static_cast<int>(profile_->GetLength() * 1.25 * 3) : max_depth;
+    
+    for (int depth = 0; depth < effective_max_depth && !beam.empty(); ++depth) {
+        next_beam.clear();
         
         for (auto& s : beam) {
             uint64_t out[4];
@@ -170,14 +176,14 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
             
             // Check termination: no outgoing edges OR HMM complete
             if (outdeg == 0 || (profile_ && s.vit.best_hmm_pos >= profile_->GetLength())) {
-                // Terminal - save result with FULL path
+                // Terminal - save result
                 AminoAcidPathInfo r;
-                r.dna_sequence = s.dna;
+                r.dna_sequence = std::move(s.dna);
                 r.total_score = s.vit.best_score;
                 r.hmm_position = s.vit.best_hmm_pos;
                 r.is_complete = (profile_ && s.vit.best_hmm_pos >= profile_->GetLength());
                 for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
-                r.node_path = s.path;  // Store FULL path
+                // No node path stored - DNA sequence is sufficient
                 results.push_back(std::move(r));
                 continue;
             }
@@ -185,37 +191,41 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
             for (int i = 0; i < outdeg; ++i) {
                 if (!sdbg.IsValidEdge(out[i])) continue;
                 
-                // Simple cycle detection: check last 50 nodes
-                bool in_recent = false;
-                size_t check_start = (s.path.size() > 50) ? s.path.size() - 50 : 0;
-                for (size_t j = check_start; j < s.path.size(); ++j) {
-                    if (s.path[j] == out[i]) {
-                        in_recent = true;
-                        break;
-                    }
-                }
-                if (in_recent) continue;
+                // Simple cycle check - just avoid immediate self-loops
+                if (out[i] == s.node) continue;
+                
+                // Get the new nucleotide
+                char new_nuc = GetNodeSequence(out[i]).back();
+                
+                // Check if this creates a new codon
+                size_t new_dna_len = s.dna.length() + 1;
+                size_t num_codons = new_dna_len / 3;
+                size_t prev_codons = s.dna.length() / 3;
                 
                 State ns;
                 ns.node = out[i];
-                ns.dna = s.dna + GetNodeSequence(out[i]).back();
-                ns.aa = s.aa;
-                ns.vit = s.vit;
-                ns.path = s.path;
-                ns.path.push_back(out[i]);
+                ns.path_hash = s.path_hash ^ (out[i] * 0x9e3779b97f4a7c15ULL);
                 
-                // Process any new complete codons
-                size_t num_codons = ns.dna.length() / 3;
-                size_t prev_codons = s.dna.length() / 3;
+                // Build DNA (append single char is cheap)
+                ns.dna = s.dna;
+                ns.dna += new_nuc;
                 
-                for (size_t c = prev_codons; c < num_codons; ++c) {
-                    std::string codon = ns.dna.substr(c * 3, 3);
+                // Only process if new codon formed
+                if (num_codons > prev_codons) {
+                    std::string codon = ns.dna.substr(prev_codons * 3, 3);
                     char aa = CodonToAminoAcid(codon);
-                    if (aa != '*') {  // Skip stop codons (HMMER style)
+                    
+                    ns.aa = s.aa;
+                    ns.vit = s.vit;  // Copy Viterbi only when extending
+                    
+                    if (aa != '*') {
                         ns.aa += aa;
                         if (profile_) ns.vit = ExtendViterbi(ns.vit, aa);
                     }
-                    // Stop codons just get skipped, processing continues
+                } else {
+                    // No new codon - just copy references (shallow copy is fine)
+                    ns.aa = s.aa;
+                    ns.vit = s.vit;
                 }
                 
                 next_beam.push_back(std::move(ns));
@@ -229,18 +239,17 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
             next_beam.resize(beam_width);
         }
         
-        beam = std::move(next_beam);
+        std::swap(beam, next_beam);
     }
     
     // Save remaining paths (reached max_depth)
     for (auto& s : beam) {
         AminoAcidPathInfo r;
-        r.dna_sequence = s.dna;
+        r.dna_sequence = std::move(s.dna);
         r.total_score = s.vit.best_score;
         r.hmm_position = s.vit.best_hmm_pos;
-        r.is_complete = false;  // Didn't complete HMM
+        r.is_complete = false;
         for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
-        r.node_path = s.path;  // Store FULL path
         results.push_back(std::move(r));
     }
     

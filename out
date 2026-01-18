@@ -11,35 +11,35 @@ Start codon found:
 
 PROFILE                                    BIT_SCORE   HMM_POS    AA_LEN   DNA_LEN     PATHS    COMPLETE
 --------------------------------------------------------------------------------------------------------
-MerR_1_V-K.hmm                                  0.00         0         1      3003        20          NO
-Cas2_11_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
-Cas2_2_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
-Cas2_0_I-II-III-V.hmm                           0.00         0         1      3003        20          NO
-2OG_1_CAS-I-II-III-IV-V-VI.hmm                  0.00         0         1      3003        20          NO
-Cas6_15_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
-Csa3_1_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
-Cse2gr11_7_CAS-I-E.hmm                          0.00         0         1      3003        20          NO
-Cas6_13_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
-DEDDh_0_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
-WYL_3_CAS-I-II-III-IV-V-VI.hmm                  0.00         0         1      3003        20          NO
-Cas3_1_I.hmm                                    0.00         0         1      3003        20          NO
-Csm3_0_IIID.hmm                                 0.00         0         1      3003        20          NO
-Csm3gr7_2_CAS-III-A-III-D.hmm                   0.00         0         1      3003        20          NO
-Csm3_1_IIIAD.hmm                                0.00         0         1      3003        20          NO
-Csm3gr7_12_CAS-III-A-III-D.hmm                  0.00         0         1      3003        20          NO
-Cas5_0_CAS-I.hmm                                0.00         0         1      3003        20          NO
-Cas6e_2_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
-Cas3HD_0_CAS-I.hmm                              0.00         0         1      3003        20          NO
-Cas7b_0_CAS-I-B-I-C.hmm                         0.00         0         1      3003        20          NO
-Cas1_8_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
-Cas1_0_I-II-III-V.hmm                           0.00         0         1      3003        20          NO
-Cas1_0_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
-Cas6_10_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
-TnpB_0_Competitive.hmm                          0.00         0         1      3003        20          NO
-TnpB_1_Competitive.hmm                          0.00         0         1      3003        20          NO
-Cas12f1_2_CAS-V-F.hmm                           0.00         0         1      3003        20          NO
-Cas8e_4_CAS-I-E.hmm                             0.00         0         1      3003        20          NO
-Cas8c_3_CAS-I-C.hmm                             0.00         0         1      3003        20          NO
+MerR_1_V-K.hmm                                  0.00         0       962      3003        20          NO
+Cas2_11_CAS-I-II-III-IV-V-VI.hmm                0.00         0       962      3003        20          NO
+Cas2_2_CAS-I-II-III-IV-V-VI.hmm                 0.00         0       962      3003        20          NO
+Cas2_0_I-II-III-V.hmm                           0.00         0       962      3003        20          NO
+2OG_1_CAS-I-II-III-IV-V-VI.hmm                  0.00         0       962      3003        20          NO
+Cas6_15_CAS-I-II-III-IV-V-VI.hmm                0.00         0       962      3003        20          NO
+Csa3_1_CAS-I-II-III-IV-V-VI.hmm                 0.00         0       962      3003        20          NO
+Cse2gr11_7_CAS-I-E.hmm                          0.00         0       962      3003        20          NO
+Cas6_13_CAS-I-II-III-IV-V-VI.hmm                0.00         0       962      3003        20          NO
+DEDDh_0_CAS-I-II-III-IV-V-VI.hmm                0.00         0       962      3003        20          NO
+WYL_3_CAS-I-II-III-IV-V-VI.hmm                  0.00         0       962      3003        20          NO
+Cas3_1_I.hmm                                    0.00         0       962      3003        20          NO
+Csm3_0_IIID.hmm                                 0.00         0       962      3003        20          NO
+Csm3gr7_2_CAS-III-A-III-D.hmm                   0.00         0       962      3003        20          NO
+Csm3_1_IIIAD.hmm                                0.00         0       962      3003        20          NO
+Csm3gr7_12_CAS-III-A-III-D.hmm                  0.00         0       962      3003        20          NO
+Cas5_0_CAS-I.hmm                                0.00         0       962      3003        20          NO
+Cas6e_2_CAS-I-II-III-IV-V-VI.hmm                0.00         0       962      3003        20          NO
+Cas3HD_0_CAS-I.hmm                              0.00         0       962      3003        20          NO
+Cas7b_0_CAS-I-B-I-C.hmm                         0.00         0       962      3003        20          NO
+Cas1_8_CAS-I-II-III-IV-V-VI.hmm                 0.00         0       962      3003        20          NO
+Cas1_0_I-II-III-V.hmm                           0.00         0       962      3003        20          NO
+Cas1_0_CAS-I-II-III-IV-V-VI.hmm                 0.00         0       962      3003        20          NO
+Cas6_10_CAS-I-II-III-IV-V-VI.hmm                0.00         0       962      3003        20          NO
+TnpB_0_Competitive.hmm                          0.00         0       962      3003        20          NO
+TnpB_1_Competitive.hmm                          0.00         0       962      3003        20          NO
+Cas12f1_2_CAS-V-F.hmm                           0.00         0       962      3003        20          NO
+Cas8e_4_CAS-I-E.hmm                             0.00         0       962      3003        20          NO
+Cas8c_3_CAS-I-C.hmm                             0.00         0       962      3003        20          NO
 
 === Detailed Analysis of Best Profile ===
 Best profile: MerR_1_V-K.hmm
@@ -47,10 +47,10 @@ Bit score: 0.00
 HMM position reached: 0
 Complete alignment: NO
 DNA length: 3003 bp
-AA length: 1
+AA length: 962
 Node path length: 3001 nodes
 
-First 100 AA: L
+First 100 AA: LWQRFQGLHPLLPQQTEMLVFFRSSKAYLYFPMHLVDYIWVCLPNICYSSAQIKCCLPLPKLSLIPNAVFRDCADEYIEKLNIVFFPHVLVTNRKLCASV
 
 First 300 bp DNA: TTGTAGTGGCAAAGGTTTCAGGGATTACATCCGCTTTGATTACCCCAACAAACAGAGATGCTTGTATTTTTCAGATAATCAAGTAAGGCTTACCTGTATTTTCCCATGCACCTGGTCGATTATATTTGGGTATGTCTTCCAAACATCTGTTACTCAAGCGCACAAATAAAATGCTGTCTTCCTTTGCCAAAATTGTCTCTAATTCCCAACGCAGTTTTTCGCGATTGCGCTGATTAAGAATACATCGAAAAATTGAATATTGTATTCTTTCCCCATGTCCTTGTAACAAACCGTAAGCTT
 

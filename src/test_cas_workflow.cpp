@@ -214,7 +214,6 @@ int main(int argc, char* argv[]) {
         std::cout << "Complete alignment: " << (best_path.is_complete ? "YES" : "NO") << std::endl;
         std::cout << "DNA length: " << best_path.dna_sequence.length() << " bp" << std::endl;
         std::cout << "AA length: " << best_path.amino_acids.size() << std::endl;
-        std::cout << "Node path length: " << best_path.node_path.size() << " nodes" << std::endl;
         
         // Show first 100 amino acids
         std::cout << "\nFirst 100 AA: ";
@@ -225,30 +224,7 @@ int main(int argc, char* argv[]) {
         
         // Show first 300 bp of DNA
         std::cout << "\nFirst 300 bp DNA: ";
-        std::cout << best_path.dna_sequence.substr(0, 300) << std::endl;
-        
-        // Validate: reconstruct DNA from node path
-        if (best_path.node_path.size() > 1) {
-            std::cout << "\n=== Node Path Validation ===" << std::endl;
-            std::cout << "First 10 nodes: ";
-            for (size_t i = 0; i < std::min((size_t)10, best_path.node_path.size()); ++i) {
-                std::cout << best_path.node_path[i] << " ";
-            }
-            std::cout << std::endl;
-            
-            // Reconstruct DNA from path
-            std::string reconstructed = GetNodeSeq(sdbg, best_path.node_path[0]).substr(start.offset);
-            for (size_t i = 1; i < best_path.node_path.size(); ++i) {
-                reconstructed += GetNodeSeq(sdbg, best_path.node_path[i]).back();
-            }
-            
-            bool match = (reconstructed == best_path.dna_sequence);
-            std::cout << "DNA reconstruction from path: " << (match ? "MATCH" : "MISMATCH") << std::endl;
-            if (!match) {
-                std::cout << "  Stored length: " << best_path.dna_sequence.length() << std::endl;
-                std::cout << "  Reconstructed length: " << reconstructed.length() << std::endl;
-            }
-        }
+        std::cout << best_path.dna_sequence.substr(0, std::min((size_t)300, best_path.dna_sequence.length())) << std::endl;
     } else {
         std::cout << "No valid paths found with any profile" << std::endl;
     }
