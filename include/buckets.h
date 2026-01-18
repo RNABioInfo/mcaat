@@ -11,6 +11,8 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <iostream>
+#include <algorithm>
 
 namespace HMMProfiles {
 
@@ -47,23 +49,39 @@ inline int ParseLengFromHMM(const std::string& filepath) {
 inline std::vector<ProfileSize> LoadProfiles(const std::string& profiles_dir) {
     std::vector<ProfileSize> profiles;
     
-    for (const auto& entry : std::filesystem::directory_iterator(profiles_dir)) {
-        if (entry.path().extension() == ".hmm") {
-            std::string filename = entry.path().filename().string();
-            std::string filepath = entry.path().string();
-            
-            int leng = ParseLengFromHMM(filepath);
-            if (leng > 0) {
-                ProfileSize ps;
-                ps.filename = filename;
-                ps.leng = leng;
-                ps.min_aa = static_cast<int>(leng * 0.85);
-                ps.max_aa = static_cast<int>(leng * 1.25);
-                ps.min_bp = ps.min_aa * 3;
-                ps.max_bp = ps.max_aa * 3;
-                profiles.push_back(ps);
+    // Check if directory exists
+    if (!std::filesystem::exists(profiles_dir)) {
+        std::cerr << "ERROR: Profiles directory does not exist: " << profiles_dir << std::endl;
+        return profiles;
+    }
+    
+    if (!std::filesystem::is_directory(profiles_dir)) {
+        std::cerr << "ERROR: Not a directory: " << profiles_dir << std::endl;
+        return profiles;
+    }
+    
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(profiles_dir)) {
+            if (entry.path().extension() == ".hmm") {
+                std::string filename = entry.path().filename().string();
+                std::string filepath = entry.path().string();
+                
+                int leng = ParseLengFromHMM(filepath);
+                if (leng > 0) {
+                    ProfileSize ps;
+                    ps.filename = filename;
+                    ps.leng = leng;
+                    ps.min_aa = static_cast<int>(leng * 0.85);
+                    ps.max_aa = static_cast<int>(leng * 1.25);
+                    ps.min_bp = ps.min_aa * 3;
+                    ps.max_bp = ps.max_aa * 3;
+                    profiles.push_back(ps);
+                }
             }
         }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "ERROR: Failed to iterate directory: " << e.what() << std::endl;
+        return profiles;
     }
     
     // Sort by LENG
