@@ -121,6 +121,7 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
         std::string aa;
         ViterbiColumn vit;
         uint64_t path_hash;  // Rolling hash for cycle detection
+        std::vector<uint64_t> path;  // node path
         double score() const { return vit.best_score; }
     };
     
@@ -138,6 +139,7 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     init.aa.reserve(max_depth / 3 + 20);
     init.vit = InitializeViterbi();
     init.path_hash = start_node;
+    init.path.push_back(start_node);
     
     // Score initial codons
     size_t init_codons = init.dna.length() / 3;
@@ -151,8 +153,9 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     
     beam.push_back(std::move(init));
     
-    // Traverse - max depth is HMM length + 25% buffer (in bp = aa * 3)
-    int effective_max_depth = profile_ ? static_cast<int>(profile_->GetLength() * 1.25 * 3) : max_depth;
+    // Traverse - max depth is HMM length + 25% buffer (aa -> bp)
+    int max_aa = profile_ ? static_cast<int>(std::ceil(profile_->GetLength() * 1.25)) : max_depth / 3;
+    int effective_max_depth = max_aa * 3;
     
     for (int depth = 0; depth < effective_max_depth && !beam.empty(); ++depth) {
         next_beam.clear();
@@ -170,8 +173,8 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
                 r.total_score = s.vit.best_score / std::log(2.0);
                 r.hmm_position = s.vit.best_hmm_pos;
                 r.is_complete = (profile_ && s.vit.E >= s.vit.best_score);
+                r.node_path = std::move(s.path);
                 for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
-                // No node path stored - DNA sequence is sufficient
                 results.push_back(std::move(r));
                 continue;
             }
@@ -189,6 +192,9 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
                 size_t new_dna_len = s.dna.length() + 1;
                 size_t num_codons = new_dna_len / 3;
                 size_t prev_codons = s.dna.length() / 3;
+
+                // Stop if AA length exceeds profile length +25%
+                if (profile_ && num_codons > static_cast<size_t>(max_aa)) continue;
                 
                 State ns;
                 ns.node = out[i];
@@ -197,6 +203,10 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
                 // Build DNA (append single char is cheap)
                 ns.dna = s.dna;
                 ns.dna += new_nuc;
+
+                // Propagate path and append next node
+                ns.path = s.path;
+                ns.path.push_back(out[i]);
                 
                 // Only process if new codon formed
                 if (num_codons > prev_codons) {
@@ -238,6 +248,7 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
         r.total_score = s.vit.best_score / std::log(2.0);
         r.hmm_position = s.vit.best_hmm_pos;
         r.is_complete = false;
+        r.node_path = std::move(s.path);
         for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
         results.push_back(std::move(r));
     }
