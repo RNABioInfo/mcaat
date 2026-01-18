@@ -60,7 +60,7 @@ ViterbiColumn CasGeneDetector::ExtendViterbi(const ViterbiColumn& prev, char aa)
     ViterbiColumn curr;
     if (!profile_) return curr;
 
-    const int L = profile_->GetLength();
+    const int L = std::min(profile_->GetLength(), static_cast<int>(profile_->GetStates().size()));
     if (L <= 0) return curr;
 
     curr.M.assign(L + 1, -1e9);
@@ -154,7 +154,7 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     beam.push_back(std::move(init));
     
     // Traverse - max depth is HMM length + 25% buffer (aa -> bp)
-    int max_aa = profile_ ? static_cast<int>(std::ceil(profile_->GetLength() * 1.25)) : max_depth / 3;
+    int max_aa = profile_ ? static_cast<int>(std::ceil(std::min(profile_->GetLength(), static_cast<int>(profile_->GetStates().size())) * 1.25)) : max_depth / 3;
     int effective_max_depth = max_aa * 3;
     
     for (int depth = 0; depth < effective_max_depth && !beam.empty(); ++depth) {

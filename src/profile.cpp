@@ -264,7 +264,10 @@ double Profile::GetInsertEmission(int position, char amino_acid) const {
 }
 
 double Profile::GetMatchLogOdds(int position, char amino_acid) const {
-    const auto& state = GetState(position);
+    if (position < 1 || position > static_cast<int>(states_.size())) {
+        return -INFINITY;
+    }
+    const auto& state = states_[position - 1];
     int idx = AminoAcidToIndex(amino_acid);
     if (idx < 0 || idx >= static_cast<int>(state.match_emissions.size())) {
         return -INFINITY;  // Invalid amino acid
@@ -287,7 +290,10 @@ double Profile::GetMatchLogOdds(int position, char amino_acid) const {
 }
 
 double Profile::GetInsertLogOdds(int position, char amino_acid) const {
-    const auto& state = GetState(position);
+    if (position < 1 || position > static_cast<int>(states_.size())) {
+        return -INFINITY;
+    }
+    const auto& state = states_[position - 1];
     int idx = AminoAcidToIndex(amino_acid);
     if (idx < 0 || idx >= static_cast<int>(state.insert_emissions.size())) {
         return -INFINITY;
@@ -322,7 +328,10 @@ double Profile::GetSpecialTransition(int state, int type) const {
 double Profile::GetTransition(int from_state, int to_state, char from_type, char to_type) const {
     // Transition indices in HMMER3:
     // 0: m->m, 1: m->i, 2: m->d, 3: i->m, 4: i->i, 5: d->m, 6: d->d
-    const auto& state = GetState(from_state);
+    if (from_state < 1 || from_state > static_cast<int>(states_.size())) {
+        return -INFINITY;
+    }
+    const auto& state = states_[from_state - 1];
     
     int trans_idx = -1;
     if (from_type == 'm' || from_type == 'M') {
