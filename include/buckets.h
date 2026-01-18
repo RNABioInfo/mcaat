@@ -61,8 +61,11 @@ inline std::vector<ProfileSize> LoadProfiles(const std::string& profiles_dir) {
     }
     
     try {
+        int file_count = 0;
         for (const auto& entry : std::filesystem::directory_iterator(profiles_dir)) {
-            if (entry.path().extension() == ".hmm") {
+            file_count++;
+            std::string ext = entry.path().extension().string();
+            if (ext == ".hmm") {
                 std::string filename = entry.path().filename().string();
                 std::string filepath = entry.path().string();
                 
@@ -76,8 +79,13 @@ inline std::vector<ProfileSize> LoadProfiles(const std::string& profiles_dir) {
                     ps.min_bp = ps.min_aa * 3;
                     ps.max_bp = ps.max_aa * 3;
                     profiles.push_back(ps);
+                } else {
+                    std::cerr << "WARNING: Could not parse LENG from: " << filepath << std::endl;
                 }
             }
+        }
+        if (profiles.empty() && file_count > 0) {
+            std::cerr << "WARNING: Found " << file_count << " files but no .hmm files" << std::endl;
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "ERROR: Failed to iterate directory: " << e.what() << std::endl;
