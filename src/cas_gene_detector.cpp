@@ -59,64 +59,53 @@ ViterbiColumn CasGeneDetector::InitializeViterbi() {
 ViterbiColumn CasGeneDetector::ExtendViterbi(const ViterbiColumn& prev, char aa) {
     ViterbiColumn curr;
     if (!profile_) return curr;
-    
-    int L = profile_->GetLength();
+
+    const int L = profile_->GetLength();
     if (L <= 0) return curr;
-    
+
     curr.M.assign(L + 1, -1e9);
     curr.I.assign(L + 1, -1e9);
     curr.D.assign(L + 1, -1e9);
+    curr.E = -1e9;
     curr.seq_length = prev.seq_length + 1;
-    curr.best_score = -1e9;  // Reset to find new best
+    curr.best_score = -1e9;
     curr.best_hmm_pos = prev.best_hmm_pos;
-    
-    // Match states - use log-odds for proper bit scoring
-    for (int j = 1; j <= L; ++j) {
-        double emit_m = profile_->GetMatchLogOdds(j, aa);  // Log-odds vs null model
-        
-        // For j=1, can enter from M[0] (begin state) with score 0
-        // For j>1, normal transitions from previous states at j-1
-        double from_m, from_i, from_d;
-        
-        if (j == 1) {
-            // Entry from begin state - M[0] represents B->M1
-            from_m = prev.M[0];  // prev.M[0] = 0 initially (begin)
-            from_i = -1e9;       // Can't come from I at position 0
-            from_d = -1e9;       // Can't come from D at position 0
-        } else {
-            from_m = prev.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'M');
-            from_i = prev.I[j-1] + profile_->GetTransition(j-1, j, 'I', 'M');
-            from_d = prev.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'M');
+
+    // HMMER-style local esc: 0 for local, -inf for glocal
+    const double esc = profile_->IsLocal() ? 0.0 : -1e9;
+
+    // Set row 0
+    curr.M[0] = curr.I[0] = curr.D[0] = -1e9;
+
+    // Core recurrences (match/insert/delete), no B/N/J/C extras to keep it tight
+    for (int k = 1; k <= L; ++k) {
+        // Match
+        double sc_m = prev.M[k-1] + profile_->GetTransition(k-1, k, 'M', 'M');
+        sc_m = std::max(sc_m, prev.I[k-1] + profile_->GetTransition(k-1, k, 'I', 'M'));
+        sc_m = std::max(sc_m, prev.D[k-1] + profile_->GetTransition(k-1, k, 'D', 'M'));
+        curr.M[k] = sc_m + profile_->GetMatchLogOdds(k, aa);
+
+        // Insert
+        double sc_i = prev.M[k] + profile_->GetTransition(k, k, 'M', 'I');
+        sc_i = std::max(sc_i, prev.I[k] + profile_->GetTransition(k, k, 'I', 'I'));
+        curr.I[k] = sc_i + profile_->GetInsertLogOdds(k, aa);
+
+        // Delete (depends on current row M/D at k-1)
+        double sc_d = curr.M[k-1] + profile_->GetTransition(k-1, k, 'M', 'D');
+        sc_d = std::max(sc_d, curr.D[k-1] + profile_->GetTransition(k-1, k, 'D', 'D'));
+        curr.D[k] = sc_d;
+
+        // E update (local): allow only from M as in HMMER local path
+        curr.E = std::max(curr.E, curr.M[k] + esc);
+
+        if (curr.M[k] > curr.best_score) {
+            curr.best_score = curr.M[k];
+            curr.best_hmm_pos = k;
         }
-        
-        curr.M[j] = emit_m + std::max({from_m, from_i, from_d});
-        
-        // Track best score (for local alignment, any M state can be best)
-        if (curr.M[j] > curr.best_score) {
-            curr.best_score = curr.M[j];
-            curr.best_hmm_pos = j;
-        }
     }
-    
-    // Insert states - use log-odds
-    for (int j = 1; j <= L; ++j) {
-        double emit_i = profile_->GetInsertLogOdds(j, aa);  // Log-odds vs null model
-        double from_m = prev.M[j] + profile_->GetTransition(j, j, 'M', 'I');
-        double from_i = prev.I[j] + profile_->GetTransition(j, j, 'I', 'I');
-        curr.I[j] = emit_i + std::max(from_m, from_i);
-    }
-    
-    // Delete states (no emission, computed from current row)
-    for (int j = 2; j <= L; ++j) {
-        double from_m = curr.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'D');
-        double from_d = curr.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'D');
-        curr.D[j] = std::max(from_m, from_d);
-    }
-    
-    // For beam search guidance: use max score in current column (not all-time best)
-    // This represents "how well aligned is this path at this point in the sequence"
-    // best_score/best_hmm_pos are already set during the M-state loop above
-    
+
+    // Best score for this row: E (local) or best M if glocal
+    curr.best_score = std::max(curr.best_score, curr.E);
     return curr;
 }
 
@@ -177,10 +166,10 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
                 // Terminal - save result
                 AminoAcidPathInfo r;
                 r.dna_sequence = std::move(s.dna);
-                // Convert log-odds to bits: bits = log_odds / log(2)
+                // Convert log-odds (nats) to bits: bits = nats / ln(2)
                 r.total_score = s.vit.best_score / std::log(2.0);
                 r.hmm_position = s.vit.best_hmm_pos;
-                r.is_complete = (profile_ && s.vit.best_hmm_pos >= profile_->GetLength());
+                r.is_complete = (profile_ && s.vit.E >= s.vit.best_score);
                 for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
                 // No node path stored - DNA sequence is sufficient
                 results.push_back(std::move(r));
@@ -245,7 +234,7 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     for (auto& s : beam) {
         AminoAcidPathInfo r;
         r.dna_sequence = std::move(s.dna);
-        // Convert log-odds to bits: bits = log_odds / log(2)
+        // Convert log-odds (nats) to bits
         r.total_score = s.vit.best_score / std::log(2.0);
         r.hmm_position = s.vit.best_hmm_pos;
         r.is_complete = false;

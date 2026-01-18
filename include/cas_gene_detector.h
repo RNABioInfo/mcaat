@@ -18,6 +18,7 @@ struct ViterbiColumn {
     std::vector<double> M;      // Match state scores [0..hmm_length]
     std::vector<double> I;      // Insert state scores [0..hmm_length]
     std::vector<double> D;      // Delete state scores [0..hmm_length]
+    double E;                   // Special end state (local mode)
     double best_score;          // Best score seen so far
     int best_hmm_pos;           // HMM position with best score
     int seq_length;             // Number of amino acids processed
@@ -30,6 +31,7 @@ struct ViterbiColumn {
         D.assign(hmm_length + 1, -1e9);
         // Start state - M[0] is entry point with score 0
         M[0] = 0.0;
+        E = -1e9;
         best_score = -1e9;  // No real alignment yet
         best_hmm_pos = 0;
         seq_length = 0;
