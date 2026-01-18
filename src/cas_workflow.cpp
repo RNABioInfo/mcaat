@@ -133,7 +133,8 @@ DetectedCasGene CasWorkflow::ScoreStartNodeWithAllProfiles(
     best.bit_score = -1e9;
     best.is_complete = false;
     
-    const auto& profiles = HMMProfiles::ALL_PROFILES;
+    // Load profiles dynamically from profiles directory
+    auto profiles = HMMProfiles::LoadProfiles(profiles_dir_);
     std::vector<DetectedCasGene> results(profiles.size());
     
     #pragma omp parallel for schedule(dynamic)
