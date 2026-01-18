@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Repeat node: " << repeat_node << std::endl;
     
     // Find first start codon in valid range
-    StartCodon start = FindFirstStartCodon(sdbg, repeat_node, 600, 1000);
+    StartCodon start = FindFirstStartCodon(sdbg, repeat_node, 250, 1000);
     if (start.distance < 0) {
         std::cerr << "ERROR: No start codon found in range [600, 1000] bp from repeat" << std::endl;
         return 1;

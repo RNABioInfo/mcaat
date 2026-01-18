@@ -1,35 +1,61 @@
-Start codon: node=198585361 dist=58 offset=20
-DNA length: 96 bp
-AA length: 31
-First 100 AA: VINALRHLRFKHFNFKGLENSAIILSTPYGI
+=== CAS Gene Detection Test (Beam Search) ===
+Beam width: 20
+Max depth: 3000 bp
 
-PROFILE	BIT_SCORE	HMM_POS
-MerR_1_V-K.hmm	-7.38321	59
-Cas2_11_CAS-I-II-III-IV-V-VI.hmm	-6.8821	71
-Cas2_2_CAS-I-II-III-IV-V-VI.hmm	-2.06442	77
-Cas2_0_I-II-III-V.hmm	-4.45245	81
-2OG_1_CAS-I-II-III-IV-V-VI.hmm	-4.8188	74
-Cas6_15_CAS-I-II-III-IV-V-VI.hmm	1.45751	54
-Csa3_1_CAS-I-II-III-IV-V-VI.hmm	-0.795762	40
-Cse2gr11_7_CAS-I-E.hmm	-1.86214	132
-Cas6_13_CAS-I-II-III-IV-V-VI.hmm	0.110741	49
-DEDDh_0_CAS-I-II-III-IV-V-VI.hmm	-0.0941503	140
-WYL_3_CAS-I-II-III-IV-V-VI.hmm	6.72599	37
-Cas3_1_I.hmm	-2.62289	29
-Csm3_0_IIID.hmm	-1.77714	168
-Csm3gr7_2_CAS-III-A-III-D.hmm	-0.631828	171
-Csm3_1_IIIAD.hmm	-1.72412	176
-Csm3gr7_12_CAS-III-A-III-D.hmm	-1.23652	137
-Cas5_0_CAS-I.hmm	-2.07575	168
-Cas6e_2_CAS-I-II-III-IV-V-VI.hmm	-2.60196	170
-Cas3HD_0_CAS-I.hmm	-1.17746	188
-Cas7b_0_CAS-I-B-I-C.hmm	3.25898	232
-Cas1_8_CAS-I-II-III-IV-V-VI.hmm	1.69893	274
-Cas1_0_I-II-III-V.hmm	2.075	133
-Cas1_0_CAS-I-II-III-IV-V-VI.hmm	0.296935	135
-Cas6_10_CAS-I-II-III-IV-V-VI.hmm	5.34803	30
-TnpB_0_Competitive.hmm	-1.29117	103
-TnpB_1_Competitive.hmm	2.69563	136
-Cas12f1_2_CAS-V-F.hmm	6.17155	208
-Cas8e_4_CAS-I-E.hmm	3.97369	349
-Cas8c_3_CAS-I-C.hmm	-0.0793194	263
+Graph loaded: 257696565 nodes, k=23
+Repeat node: 55445910
+Start codon found:
+  Node: 203405923
+  Distance from repeat: 286 bp
+  Offset in k-mer: 20
+
+PROFILE                                    BIT_SCORE   HMM_POS    AA_LEN   DNA_LEN     PATHS    COMPLETE
+--------------------------------------------------------------------------------------------------------
+MerR_1_V-K.hmm                                  0.00         0         1      3003        20          NO
+Cas2_11_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
+Cas2_2_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
+Cas2_0_I-II-III-V.hmm                           0.00         0         1      3003        20          NO
+2OG_1_CAS-I-II-III-IV-V-VI.hmm                  0.00         0         1      3003        20          NO
+Cas6_15_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
+Csa3_1_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
+Cse2gr11_7_CAS-I-E.hmm                          0.00         0         1      3003        20          NO
+Cas6_13_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
+DEDDh_0_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
+WYL_3_CAS-I-II-III-IV-V-VI.hmm                  0.00         0         1      3003        20          NO
+Cas3_1_I.hmm                                    0.00         0         1      3003        20          NO
+Csm3_0_IIID.hmm                                 0.00         0         1      3003        20          NO
+Csm3gr7_2_CAS-III-A-III-D.hmm                   0.00         0         1      3003        20          NO
+Csm3_1_IIIAD.hmm                                0.00         0         1      3003        20          NO
+Csm3gr7_12_CAS-III-A-III-D.hmm                  0.00         0         1      3003        20          NO
+Cas5_0_CAS-I.hmm                                0.00         0         1      3003        20          NO
+Cas6e_2_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
+Cas3HD_0_CAS-I.hmm                              0.00         0         1      3003        20          NO
+Cas7b_0_CAS-I-B-I-C.hmm                         0.00         0         1      3003        20          NO
+Cas1_8_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
+Cas1_0_I-II-III-V.hmm                           0.00         0         1      3003        20          NO
+Cas1_0_CAS-I-II-III-IV-V-VI.hmm                 0.00         0         1      3003        20          NO
+Cas6_10_CAS-I-II-III-IV-V-VI.hmm                0.00         0         1      3003        20          NO
+TnpB_0_Competitive.hmm                          0.00         0         1      3003        20          NO
+TnpB_1_Competitive.hmm                          0.00         0         1      3003        20          NO
+Cas12f1_2_CAS-V-F.hmm                           0.00         0         1      3003        20          NO
+Cas8e_4_CAS-I-E.hmm                             0.00         0         1      3003        20          NO
+Cas8c_3_CAS-I-C.hmm                             0.00         0         1      3003        20          NO
+
+=== Detailed Analysis of Best Profile ===
+Best profile: MerR_1_V-K.hmm
+Bit score: 0.00
+HMM position reached: 0
+Complete alignment: NO
+DNA length: 3003 bp
+AA length: 1
+Node path length: 3001 nodes
+
+First 100 AA: L
+
+First 300 bp DNA: TTGTAGTGGCAAAGGTTTCAGGGATTACATCCGCTTTGATTACCCCAACAAACAGAGATGCTTGTATTTTTCAGATAATCAAGTAAGGCTTACCTGTATTTTCCCATGCACCTGGTCGATTATATTTGGGTATGTCTTCCAAACATCTGTTACTCAAGCGCACAAATAAAATGCTGTCTTCCTTTGCCAAAATTGTCTCTAATTCCCAACGCAGTTTTTCGCGATTGCGCTGATTAAGAATACATCGAAAAATTGAATATTGTATTCTTTCCCCATGTCCTTGTAACAAACCGTAAGCTT
+
+=== Node Path Validation ===
+First 10 nodes: 203405923 243939146 49796967 141595448 232854228 198611940 188618798 108193363 23985308 6182144 
+DNA reconstruction from path: MATCH
+
+=== Test Complete ===

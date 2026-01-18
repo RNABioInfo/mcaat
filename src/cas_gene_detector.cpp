@@ -204,19 +204,18 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
                 ns.path = s.path;
                 ns.path.push_back(out[i]);
                 
-                // New codon?
-                size_t expected_aa = ns.dna.length() / 3;
-                while (ns.aa.length() < expected_aa) {
-                    std::string codon = ns.dna.substr(ns.aa.length() * 3, 3);
+                // Process any new complete codons
+                size_t num_codons = ns.dna.length() / 3;
+                size_t prev_codons = s.dna.length() / 3;
+                
+                for (size_t c = prev_codons; c < num_codons; ++c) {
+                    std::string codon = ns.dna.substr(c * 3, 3);
                     char aa = CodonToAminoAcid(codon);
-                    if (aa != '*') {  // Skip stop codons
+                    if (aa != '*') {  // Skip stop codons (HMMER style)
                         ns.aa += aa;
                         if (profile_) ns.vit = ExtendViterbi(ns.vit, aa);
-                    } else {
-                        // Stop codon found but we skip it (HMMER style)
-                        // Just don't add to aa sequence
-                        break;  // Still advance past the codon
                     }
+                    // Stop codons just get skipped, processing continues
                 }
                 
                 next_beam.push_back(std::move(ns));
