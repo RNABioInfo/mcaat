@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
-#include <unordered_set>
+#include <algorithm>
 #include "sdbg/sdbg.h"
 #include "profile.h"
 

@@ -67,35 +67,56 @@ ViterbiColumn CasGeneDetector::ExtendViterbi(const ViterbiColumn& prev, char aa)
     curr.I.assign(L + 1, -1e9);
     curr.D.assign(L + 1, -1e9);
     curr.seq_length = prev.seq_length + 1;
-    curr.best_score = prev.best_score;
+    curr.best_score = -1e9;  // Reset to find new best
     curr.best_hmm_pos = prev.best_hmm_pos;
     
+    // Match states
     for (int j = 1; j <= L; ++j) {
         double emit_m = profile_->GetMatchEmission(j, aa);
         
-        double from_m = (j == 1) ? prev.M[0] : prev.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'M');
-        double from_i = (j == 1) ? -1e9 : prev.I[j-1] + profile_->GetTransition(j-1, j, 'I', 'M');
-        double from_d = (j == 1) ? -1e9 : prev.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'M');
+        // For j=1, can enter from M[0] (begin state) with score 0
+        // For j>1, normal transitions from previous states at j-1
+        double from_m, from_i, from_d;
+        
+        if (j == 1) {
+            // Entry from begin state - M[0] represents B->M1
+            from_m = prev.M[0];  // prev.M[0] = 0 initially (begin)
+            from_i = -1e9;       // Can't come from I at position 0
+            from_d = -1e9;       // Can't come from D at position 0
+        } else {
+            from_m = prev.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'M');
+            from_i = prev.I[j-1] + profile_->GetTransition(j-1, j, 'I', 'M');
+            from_d = prev.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'M');
+        }
         
         curr.M[j] = emit_m + std::max({from_m, from_i, from_d});
         
-        double emit_i = profile_->GetInsertEmission(j, aa);
-        curr.I[j] = emit_i + std::max(
-            prev.M[j] + profile_->GetTransition(j, j, 'M', 'I'),
-            prev.I[j] + profile_->GetTransition(j, j, 'I', 'I')
-        );
-        
+        // Track best score (for local alignment, any M state can be best)
         if (curr.M[j] > curr.best_score) {
             curr.best_score = curr.M[j];
             curr.best_hmm_pos = j;
         }
     }
     
+    // Insert states (emit then stay or transition)
+    for (int j = 1; j <= L; ++j) {
+        double emit_i = profile_->GetInsertEmission(j, aa);
+        double from_m = prev.M[j] + profile_->GetTransition(j, j, 'M', 'I');
+        double from_i = prev.I[j] + profile_->GetTransition(j, j, 'I', 'I');
+        curr.I[j] = emit_i + std::max(from_m, from_i);
+    }
+    
+    // Delete states (no emission, computed from current row)
     for (int j = 2; j <= L; ++j) {
-        curr.D[j] = std::max(
-            curr.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'D'),
-            curr.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'D')
-        );
+        double from_m = curr.M[j-1] + profile_->GetTransition(j-1, j, 'M', 'D');
+        double from_d = curr.D[j-1] + profile_->GetTransition(j-1, j, 'D', 'D');
+        curr.D[j] = std::max(from_m, from_d);
+    }
+    
+    // Keep best score if current is worse (monotonic in local alignment)
+    if (prev.best_score > curr.best_score) {
+        curr.best_score = prev.best_score;
+        curr.best_hmm_pos = prev.best_hmm_pos;
     }
     
     return curr;
@@ -112,7 +133,8 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
         std::string dna;
         std::string aa;
         ViterbiColumn vit;
-        std::unordered_set<uint64_t> visited;
+        std::vector<uint64_t> path;  // Full node path
+        uint64_t visited_hash;       // Simple hash for cycle detection (last N nodes)
         double score() const { return vit.best_score; }
     };
     
@@ -123,14 +145,17 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     init.node = start_node;
     init.dna = GetNodeSequence(start_node).substr(start_codon_offset);
     init.vit = InitializeViterbi();
-    init.visited.insert(start_node);
+    init.path.push_back(start_node);
+    init.visited_hash = start_node;
     
     // Score initial codons
     size_t init_codons = init.dna.length() / 3;
     for (size_t i = 0; i < init_codons; ++i) {
         char aa = CodonToAminoAcid(init.dna.substr(i * 3, 3));
-        init.aa += aa;
-        if (profile_) init.vit = ExtendViterbi(init.vit, aa);
+        if (aa != '*') {  // Skip stop codons (HMMER style)
+            init.aa += aa;
+            if (profile_) init.vit = ExtendViterbi(init.vit, aa);
+        }
     }
     
     beam.push_back(std::move(init));
@@ -143,36 +168,55 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
             uint64_t out[4];
             int outdeg = sdbg.OutgoingEdges(s.node, out);
             
+            // Check termination: no outgoing edges OR HMM complete
             if (outdeg == 0 || (profile_ && s.vit.best_hmm_pos >= profile_->GetLength())) {
-                // Terminal - save result
+                // Terminal - save result with FULL path
                 AminoAcidPathInfo r;
                 r.dna_sequence = s.dna;
                 r.total_score = s.vit.best_score;
                 r.hmm_position = s.vit.best_hmm_pos;
-                r.is_complete = true;
+                r.is_complete = (profile_ && s.vit.best_hmm_pos >= profile_->GetLength());
                 for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
-                r.node_path = {start_node, s.node};
+                r.node_path = s.path;  // Store FULL path
                 results.push_back(std::move(r));
                 continue;
             }
             
             for (int i = 0; i < outdeg; ++i) {
                 if (!sdbg.IsValidEdge(out[i])) continue;
-                if (s.visited.count(out[i])) continue;
+                
+                // Simple cycle detection: check last 50 nodes
+                bool in_recent = false;
+                size_t check_start = (s.path.size() > 50) ? s.path.size() - 50 : 0;
+                for (size_t j = check_start; j < s.path.size(); ++j) {
+                    if (s.path[j] == out[i]) {
+                        in_recent = true;
+                        break;
+                    }
+                }
+                if (in_recent) continue;
                 
                 State ns;
                 ns.node = out[i];
                 ns.dna = s.dna + GetNodeSequence(out[i]).back();
                 ns.aa = s.aa;
                 ns.vit = s.vit;
-                ns.visited = s.visited;
-                ns.visited.insert(out[i]);
+                ns.path = s.path;
+                ns.path.push_back(out[i]);
                 
                 // New codon?
-                if (ns.dna.length() / 3 > ns.aa.length()) {
-                    char aa = CodonToAminoAcid(ns.dna.substr(ns.aa.length() * 3, 3));
-                    ns.aa += aa;
-                    if (profile_) ns.vit = ExtendViterbi(ns.vit, aa);
+                size_t expected_aa = ns.dna.length() / 3;
+                while (ns.aa.length() < expected_aa) {
+                    std::string codon = ns.dna.substr(ns.aa.length() * 3, 3);
+                    char aa = CodonToAminoAcid(codon);
+                    if (aa != '*') {  // Skip stop codons
+                        ns.aa += aa;
+                        if (profile_) ns.vit = ExtendViterbi(ns.vit, aa);
+                    } else {
+                        // Stop codon found but we skip it (HMMER style)
+                        // Just don't add to aa sequence
+                        break;  // Still advance past the codon
+                    }
                 }
                 
                 next_beam.push_back(std::move(ns));
@@ -189,17 +233,23 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
         beam = std::move(next_beam);
     }
     
-    // Save remaining
+    // Save remaining paths (reached max_depth)
     for (auto& s : beam) {
         AminoAcidPathInfo r;
         r.dna_sequence = s.dna;
         r.total_score = s.vit.best_score;
         r.hmm_position = s.vit.best_hmm_pos;
-        r.is_complete = true;
+        r.is_complete = false;  // Didn't complete HMM
         for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
-        r.node_path = {start_node, s.node};
+        r.node_path = s.path;  // Store FULL path
         results.push_back(std::move(r));
     }
+    
+    // Sort results by score
+    std::sort(results.begin(), results.end(), 
+              [](const AminoAcidPathInfo& a, const AminoAcidPathInfo& b) {
+                  return a.total_score > b.total_score;
+              });
     
     return results;
 }
