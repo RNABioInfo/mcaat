@@ -28,11 +28,14 @@ struct ProfileSize {
 // Parse LENG from an HMM file
 inline int ParseLengFromHMM(const std::string& filepath) {
     std::ifstream file(filepath);
-    if (!file.is_open()) return 0;
+    if (!file.is_open()) {
+        std::cerr << "DEBUG: Cannot open file: " << filepath << std::endl;
+        return 0;
+    }
     
     std::string line;
     while (std::getline(file, line)) {
-        if (line.substr(0, 4) == "LENG") {
+        if (line.length() >= 4 && line.substr(0, 4) == "LENG") {
             std::istringstream iss(line);
             std::string key;
             int leng;
@@ -40,8 +43,9 @@ inline int ParseLengFromHMM(const std::string& filepath) {
             return leng;
         }
         // Stop at HMM line (header section ends)
-        if (line.substr(0, 3) == "HMM") break;
+        if (line.length() >= 3 && line.substr(0, 3) == "HMM") break;
     }
+    std::cerr << "DEBUG: LENG not found in: " << filepath << std::endl;
     return 0;
 }
 
