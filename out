@@ -4,53 +4,952 @@ Max depth: 3000 bp
 
 Graph loaded: 257696565 nodes, k=23
 Repeat node: 55445910
-Start codon found:
-  Node: 203405923
-  Distance from repeat: 286 bp
-  Offset in k-mer: 20
+Found 462 start codons in range [150, 400] bp
 
-PROFILE                                    BIT_SCORE   HMM_POS    AA_LEN   DNA_LEN     PATHS    COMPLETE
---------------------------------------------------------------------------------------------------------
-MerR_1_V-K.hmm                               -278.98        28        83       261         1          NO
-Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71        74       231         1         YES
-Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -292.54        79        87       273         1         YES
-Cas2_0_I-II-III-V.hmm                        -336.16        49       100       314         1          NO
-2OG_1_CAS-I-II-III-IV-V-VI.hmm               -364.56        92       114       355         1          NO
-Cas6_15_CAS-I-II-III-IV-V-VI.hmm             -425.71        71       136       423         1          NO
-Csa3_1_CAS-I-II-III-IV-V-VI.hmm              -456.14        62       143       445         1          NO
-Cse2gr11_7_CAS-I-E.hmm                       -551.56        59       175       543         1          NO
-Cas6_13_CAS-I-II-III-IV-V-VI.hmm             -575.58        95       183       569         1          NO
-DEDDh_0_CAS-I-II-III-IV-V-VI.hmm             -612.18        88       195       603         1          NO
-WYL_3_CAS-I-II-III-IV-V-VI.hmm               -656.22        52       209       648         1          NO
-Cas3_1_I.hmm                                 -675.45       124       216       670         1          NO
-Csm3_0_IIID.hmm                              -670.08       104       216       670         1          NO
-Csm3gr7_2_CAS-III-A-III-D.hmm                -681.54        28       219       678         1          NO
-Csm3_1_IIIAD.hmm                             -704.57        19       230       711         1          NO
-Csm3gr7_12_CAS-III-A-III-D.hmm               -738.66        23       242       749         1          NO
-Cas5_0_CAS-I.hmm                             -758.61        98       245       756         1          NO
-Cas6e_2_CAS-I-II-III-IV-V-VI.hmm             -754.45        77       246       760         1          NO
-Cas3HD_0_CAS-I.hmm                           -778.75       165       247       764         1          NO
-Cas7b_0_CAS-I-B-I-C.hmm                      -963.52       130       307       955         1          NO
-Cas1_8_CAS-I-II-III-IV-V-VI.hmm              -914.97       283       297       924         1         YES
-Cas1_0_I-II-III-V.hmm                       -1175.93       178       381      1184         1          NO
-Cas1_0_CAS-I-II-III-IV-V-VI.hmm             -1185.35       186       384      1191         1          NO
-Cas6_10_CAS-I-II-III-IV-V-VI.hmm            -1111.37       322       356      1107         1         YES
-TnpB_0_Competitive.hmm                      -1308.55       400       423      1317         2         YES
-TnpB_1_Competitive.hmm                      -1525.59       311       493      1536         2          NO
-Cas12f1_2_CAS-V-F.hmm                       -1590.58       220       516      1611         2          NO
-Cas8e_4_CAS-I-E.hmm                         -1721.41       455       559      1746         4          NO
-Cas8c_3_CAS-I-C.hmm                         -2052.14       143       668      2099         4          NO
+Start codons:
+  [0] Node: 201238153, Distance: 150 bp, Offset: 20
+  [1] Node: 112146386, Distance: 150 bp, Offset: 19
+  [2] Node: 24660635, Distance: 150 bp, Offset: 18
+  [3] Node: 6328851, Distance: 150 bp, Offset: 17
+  [4] Node: 1989916, Distance: 150 bp, Offset: 16
+  [5] Node: 676832, Distance: 150 bp, Offset: 15
+  [6] Node: 211778, Distance: 150 bp, Offset: 14
+  [7] Node: 128881285, Distance: 150 bp, Offset: 13
+  [8] Node: 88156020, Distance: 150 bp, Offset: 12
+  [9] Node: 223592052, Distance: 150 bp, Offset: 11
+  [10] Node: 46758573, Distance: 150 bp, Offset: 10
+  [11] Node: 215979872, Distance: 150 bp, Offset: 9
+  [12] Node: 246977430, Distance: 150 bp, Offset: 8
+  [13] Node: 50483990, Distance: 150 bp, Offset: 7
+  [14] Node: 65659801, Distance: 150 bp, Offset: 6
+  [15] Node: 15826287, Distance: 150 bp, Offset: 5
+  [16] Node: 132621665, Distance: 150 bp, Offset: 4
+  [17] Node: 89254035, Distance: 150 bp, Offset: 3
+  [18] Node: 20712219, Distance: 150 bp, Offset: 2
+  [19] Node: 209903860, Distance: 150 bp, Offset: 1
+  [20] Node: 245669344, Distance: 150 bp, Offset: 0
+  [21] Node: 204562741, Distance: 172 bp, Offset: 20
+  [22] Node: 190370016, Distance: 172 bp, Offset: 19
+  [23] Node: 241707658, Distance: 172 bp, Offset: 18
+  [24] Node: 252840155, Distance: 172 bp, Offset: 17
+  [25] Node: 51288766, Distance: 172 bp, Offset: 16
+  [26] Node: 217121753, Distance: 172 bp, Offset: 15
+  [27] Node: 193476758, Distance: 172 bp, Offset: 14
+  [28] Node: 193476758, Distance: 178 bp, Offset: 20
+  [29] Node: 242341932, Distance: 172 bp, Offset: 13
+  [30] Node: 242341932, Distance: 178 bp, Offset: 19
+  [31] Node: 201680631, Distance: 172 bp, Offset: 12
+  [32] Node: 201680631, Distance: 178 bp, Offset: 18
+  [33] Node: 201680631, Distance: 180 bp, Offset: 20
+  [34] Node: 42694715, Distance: 172 bp, Offset: 11
+  [35] Node: 42694715, Distance: 178 bp, Offset: 17
+  [36] Node: 42694715, Distance: 180 bp, Offset: 19
+  [37] Node: 214770521, Distance: 172 bp, Offset: 10
+  [38] Node: 214770521, Distance: 178 bp, Offset: 16
+  [39] Node: 214770521, Distance: 180 bp, Offset: 18
+  [40] Node: 45390284, Distance: 172 bp, Offset: 9
+  [41] Node: 45390284, Distance: 178 bp, Offset: 15
+  [42] Node: 45390284, Distance: 180 bp, Offset: 17
+  [43] Node: 11419326, Distance: 172 bp, Offset: 8
+  [44] Node: 11419326, Distance: 178 bp, Offset: 14
+  [45] Node: 11419326, Distance: 180 bp, Offset: 16
+  [46] Node: 3309943, Distance: 172 bp, Offset: 7
+  [47] Node: 3309943, Distance: 178 bp, Offset: 13
+  [48] Node: 3309943, Distance: 180 bp, Offset: 15
+  [49] Node: 1133275, Distance: 172 bp, Offset: 6
+  [50] Node: 1133275, Distance: 178 bp, Offset: 12
+  [51] Node: 1133275, Distance: 180 bp, Offset: 14
+  [52] Node: 52551230, Distance: 172 bp, Offset: 5
+  [53] Node: 52551230, Distance: 178 bp, Offset: 11
+  [54] Node: 52551230, Distance: 180 bp, Offset: 13
+  [55] Node: 13368956, Distance: 172 bp, Offset: 4
+  [56] Node: 13368956, Distance: 178 bp, Offset: 10
+  [57] Node: 13368956, Distance: 180 bp, Offset: 12
+  [58] Node: 131960765, Distance: 172 bp, Offset: 3
+  [59] Node: 131960765, Distance: 178 bp, Offset: 9
+  [60] Node: 131960765, Distance: 180 bp, Offset: 11
+  [61] Node: 28918264, Distance: 172 bp, Offset: 2
+  [62] Node: 28918264, Distance: 178 bp, Offset: 8
+  [63] Node: 28918264, Distance: 180 bp, Offset: 10
+  [64] Node: 7537353, Distance: 172 bp, Offset: 1
+  [65] Node: 7537353, Distance: 178 bp, Offset: 7
+  [66] Node: 7537353, Distance: 180 bp, Offset: 9
+  [67] Node: 2329191, Distance: 172 bp, Offset: 0
+  [68] Node: 2329191, Distance: 178 bp, Offset: 6
+  [69] Node: 2329191, Distance: 180 bp, Offset: 8
+  [70] Node: 798607, Distance: 178 bp, Offset: 5
+  [71] Node: 798607, Distance: 180 bp, Offset: 7
+  [72] Node: 256372, Distance: 178 bp, Offset: 4
+  [73] Node: 256372, Distance: 180 bp, Offset: 6
+  [74] Node: 205397891, Distance: 178 bp, Offset: 3
+  [75] Node: 205397891, Distance: 180 bp, Offset: 5
+  [76] Node: 244400477, Distance: 178 bp, Offset: 2
+  [77] Node: 244400477, Distance: 180 bp, Offset: 4
+  [78] Node: 125212729, Distance: 178 bp, Offset: 1
+  [79] Node: 125212729, Distance: 180 bp, Offset: 3
+  [80] Node: 27244551, Distance: 178 bp, Offset: 0
+  [81] Node: 27244551, Distance: 180 bp, Offset: 2
+  [82] Node: 7002771, Distance: 180 bp, Offset: 1
+  [83] Node: 53910519, Distance: 180 bp, Offset: 0
+  [84] Node: 202785308, Distance: 211 bp, Offset: 20
+  [85] Node: 189928789, Distance: 211 bp, Offset: 19
+  [86] Node: 108621395, Distance: 211 bp, Offset: 18
+  [87] Node: 226788415, Distance: 211 bp, Offset: 17
+  [88] Node: 47080289, Distance: 211 bp, Offset: 16
+  [89] Node: 11879842, Distance: 211 bp, Offset: 15
+  [90] Node: 3494833, Distance: 211 bp, Offset: 14
+  [91] Node: 1201450, Distance: 211 bp, Offset: 13
+  [92] Node: 202683088, Distance: 218 bp, Offset: 20
+  [93] Node: 52562411, Distance: 211 bp, Offset: 12
+  [94] Node: 189904937, Distance: 218 bp, Offset: 19
+  [95] Node: 66104639, Distance: 211 bp, Offset: 11
+  [96] Node: 241593900, Distance: 218 bp, Offset: 18
+  [97] Node: 70645106, Distance: 211 bp, Offset: 10
+  [98] Node: 49323919, Distance: 218 bp, Offset: 17
+  [99] Node: 220657710, Distance: 211 bp, Offset: 9
+  [100] Node: 12402631, Distance: 218 bp, Offset: 16
+  [101] Node: 248322989, Distance: 211 bp, Offset: 8
+  [102] Node: 131816193, Distance: 218 bp, Offset: 15
+  [103] Node: 202992493, Distance: 211 bp, Offset: 7
+  [104] Node: 202992493, Distance: 224 bp, Offset: 20
+  [105] Node: 169206494, Distance: 218 bp, Offset: 14
+  [106] Node: 43004760, Distance: 211 bp, Offset: 6
+  [107] Node: 43004760, Distance: 224 bp, Offset: 19
+  [108] Node: 100927866, Distance: 218 bp, Offset: 13
+  [109] Node: 214861427, Distance: 211 bp, Offset: 5
+  [110] Node: 214861427, Distance: 224 bp, Offset: 18
+  [111] Node: 225784965, Distance: 218 bp, Offset: 12
+  [112] Node: 45412799, Distance: 211 bp, Offset: 4
+  [113] Node: 45412799, Distance: 224 bp, Offset: 17
+  [114] Node: 249361776, Distance: 218 bp, Offset: 11
+  [115] Node: 215582635, Distance: 211 bp, Offset: 3
+  [116] Node: 215582635, Distance: 224 bp, Offset: 16
+  [117] Node: 255218186, Distance: 218 bp, Offset: 10
+  [118] Node: 45586849, Distance: 211 bp, Offset: 2
+  [119] Node: 45586849, Distance: 224 bp, Offset: 15
+  [120] Node: 128292790, Distance: 218 bp, Offset: 9
+  [121] Node: 11485776, Distance: 211 bp, Offset: 1
+  [122] Node: 11485776, Distance: 224 bp, Offset: 14
+  [123] Node: 27945963, Distance: 218 bp, Offset: 8
+  [124] Node: 131676428, Distance: 211 bp, Offset: 0
+  [125] Node: 131676428, Distance: 224 bp, Offset: 13
+  [126] Node: 136527778, Distance: 218 bp, Offset: 7
+  [127] Node: 169174726, Distance: 224 bp, Offset: 12
+  [128] Node: 90806666, Distance: 218 bp, Offset: 6
+  [129] Node: 181005941, Distance: 224 bp, Offset: 11
+  [130] Node: 21142196, Distance: 218 bp, Offset: 5
+  [131] Node: 239701426, Distance: 224 bp, Offset: 10
+  [132] Node: 209961853, Distance: 218 bp, Offset: 4
+  [133] Node: 200761935, Distance: 224 bp, Offset: 9
+  [134] Node: 200761935, Distance: 235 bp, Offset: 20
+  [135] Node: 245679800, Distance: 218 bp, Offset: 3
+  [136] Node: 243436628, Distance: 224 bp, Offset: 8
+  [137] Node: 243436628, Distance: 235 bp, Offset: 19
+  [138] Node: 254097737, Distance: 218 bp, Offset: 2
+  [139] Node: 253355943, Distance: 224 bp, Offset: 7
+  [140] Node: 253355943, Distance: 235 bp, Offset: 18
+  [141] Node: 256454629, Distance: 218 bp, Offset: 1
+  [142] Node: 256214730, Distance: 224 bp, Offset: 6
+  [143] Node: 256214730, Distance: 235 bp, Offset: 17
+  [144] Node: 205059949, Distance: 218 bp, Offset: 0
+  [145] Node: 205059949, Distance: 238 bp, Offset: 20
+  [146] Node: 205009586, Distance: 224 bp, Offset: 5
+  [147] Node: 205009586, Distance: 235 bp, Offset: 16
+  [148] Node: 205009586, Distance: 239 bp, Offset: 20
+  [149] Node: 113227567, Distance: 238 bp, Offset: 19
+  [150] Node: 43528654, Distance: 224 bp, Offset: 4
+  [151] Node: 43528654, Distance: 235 bp, Offset: 15
+  [152] Node: 43528654, Distance: 239 bp, Offset: 19
+  [153] Node: 24887413, Distance: 238 bp, Offset: 18
+  [154] Node: 10834042, Distance: 224 bp, Offset: 3
+  [155] Node: 10834042, Distance: 235 bp, Offset: 14
+  [156] Node: 10834042, Distance: 239 bp, Offset: 18
+  [157] Node: 6391182, Distance: 238 bp, Offset: 17
+  [158] Node: 3087727, Distance: 224 bp, Offset: 2
+  [159] Node: 3087727, Distance: 235 bp, Offset: 13
+  [160] Node: 3087727, Distance: 239 bp, Offset: 17
+  [161] Node: 130245228, Distance: 238 bp, Offset: 16
+  [162] Node: 1053777, Distance: 224 bp, Offset: 1
+  [163] Node: 1053777, Distance: 235 bp, Offset: 12
+  [164] Node: 1053777, Distance: 239 bp, Offset: 16
+  [165] Node: 88537889, Distance: 238 bp, Offset: 15
+  [166] Node: 205617192, Distance: 224 bp, Offset: 0
+  [167] Node: 205617192, Distance: 235 bp, Offset: 11
+  [168] Node: 205617192, Distance: 239 bp, Offset: 15
+  [169] Node: 20535717, Distance: 238 bp, Offset: 14
+  [170] Node: 244461405, Distance: 235 bp, Offset: 10
+  [171] Node: 244461405, Distance: 239 bp, Offset: 14
+  [172] Node: 57332228, Distance: 238 bp, Offset: 13
+  [173] Node: 253686524, Distance: 235 bp, Offset: 9
+  [174] Node: 253686524, Distance: 239 bp, Offset: 13
+  [175] Node: 67653591, Distance: 238 bp, Offset: 12
+  [176] Node: 256309334, Distance: 235 bp, Offset: 8
+  [177] Node: 256309334, Distance: 239 bp, Offset: 12
+  [178] Node: 220056148, Distance: 238 bp, Offset: 11
+  [179] Node: 205031244, Distance: 235 bp, Offset: 7
+  [180] Node: 205031244, Distance: 239 bp, Offset: 11
+  [181] Node: 205031244, Distance: 248 bp, Offset: 20
+  [182] Node: 117601102, Distance: 238 bp, Offset: 10
+  [183] Node: 113220380, Distance: 235 bp, Offset: 6
+  [184] Node: 113220380, Distance: 239 bp, Offset: 10
+  [185] Node: 113220380, Distance: 248 bp, Offset: 19
+  [186] Node: 228817323, Distance: 238 bp, Offset: 9
+  [187] Node: 24885584, Distance: 235 bp, Offset: 5
+  [188] Node: 24885584, Distance: 239 bp, Offset: 9
+  [189] Node: 24885584, Distance: 248 bp, Offset: 18
+  [190] Node: 47333037, Distance: 238 bp, Offset: 8
+  [191] Node: 6390501, Distance: 235 bp, Offset: 4
+  [192] Node: 6390501, Distance: 239 bp, Offset: 8
+  [193] Node: 6390501, Distance: 248 bp, Offset: 17
+  [194] Node: 11957120, Distance: 238 bp, Offset: 7
+  [195] Node: 130245075, Distance: 235 bp, Offset: 3
+  [196] Node: 130245075, Distance: 239 bp, Offset: 7
+  [197] Node: 130245075, Distance: 248 bp, Offset: 16
+  [198] Node: 3527470, Distance: 238 bp, Offset: 6
+  [199] Node: 88537843, Distance: 235 bp, Offset: 2
+  [200] Node: 88537843, Distance: 239 bp, Offset: 6
+  [201] Node: 88537843, Distance: 248 bp, Offset: 15
+  [202] Node: 129550490, Distance: 238 bp, Offset: 5
+  [203] Node: 20535695, Distance: 235 bp, Offset: 1
+  [204] Node: 20535695, Distance: 239 bp, Offset: 5
+  [205] Node: 20535695, Distance: 248 bp, Offset: 14
+  [206] Node: 28295899, Distance: 238 bp, Offset: 4
+  [207] Node: 57332225, Distance: 235 bp, Offset: 0
+  [208] Node: 57332225, Distance: 239 bp, Offset: 4
+  [209] Node: 57332225, Distance: 248 bp, Offset: 13
+  [210] Node: 136595460, Distance: 238 bp, Offset: 3
+  [211] Node: 67653589, Distance: 239 bp, Offset: 3
+  [212] Node: 67653589, Distance: 248 bp, Offset: 12
+  [213] Node: 231982037, Distance: 238 bp, Offset: 2
+  [214] Node: 220056147, Distance: 239 bp, Offset: 2
+  [215] Node: 220056147, Distance: 248 bp, Offset: 11
+  [216] Node: 251022292, Distance: 238 bp, Offset: 1
+  [217] Node: 117601101, Distance: 239 bp, Offset: 1
+  [218] Node: 117601101, Distance: 248 bp, Offset: 10
+  [219] Node: 51048871, Distance: 238 bp, Offset: 0
+  [220] Node: 228817322, Distance: 239 bp, Offset: 0
+  [221] Node: 228817322, Distance: 248 bp, Offset: 9
+  [222] Node: 197686701, Distance: 248 bp, Offset: 8
+  [223] Node: 188322477, Distance: 248 bp, Offset: 7
+  [224] Node: 185576805, Distance: 248 bp, Offset: 6
+  [225] Node: 39313385, Distance: 248 bp, Offset: 5
+  [226] Node: 139458996, Distance: 248 bp, Offset: 4
+  [227] Node: 91752113, Distance: 248 bp, Offset: 3
+  [228] Node: 155882537, Distance: 248 bp, Offset: 2
+  [229] Node: 235125310, Distance: 248 bp, Offset: 1
+  [230] Node: 122179651, Distance: 248 bp, Offset: 0
+  [231] Node: 203405923, Distance: 286 bp, Offset: 20
+  [232] Node: 243939146, Distance: 286 bp, Offset: 19
+  [233] Node: 49796967, Distance: 286 bp, Offset: 18
+  [234] Node: 141595448, Distance: 286 bp, Offset: 17
+  [235] Node: 232854228, Distance: 286 bp, Offset: 16
+  [236] Node: 198611940, Distance: 286 bp, Offset: 15
+  [237] Node: 198611940, Distance: 291 bp, Offset: 20
+  [238] Node: 188618798, Distance: 286 bp, Offset: 14
+  [239] Node: 188618798, Distance: 291 bp, Offset: 19
+  [240] Node: 108193363, Distance: 286 bp, Offset: 13
+  [241] Node: 108193363, Distance: 291 bp, Offset: 18
+  [242] Node: 23985308, Distance: 286 bp, Offset: 12
+  [243] Node: 23985308, Distance: 291 bp, Offset: 17
+  [244] Node: 6182144, Distance: 286 bp, Offset: 11
+  [245] Node: 6182144, Distance: 291 bp, Offset: 16
+  [246] Node: 1947784, Distance: 286 bp, Offset: 10
+  [247] Node: 1947784, Distance: 291 bp, Offset: 15
+  [248] Node: 129232564, Distance: 286 bp, Offset: 9
+  [249] Node: 129232564, Distance: 291 bp, Offset: 14
+  [250] Node: 168528110, Distance: 286 bp, Offset: 8
+  [251] Node: 168528110, Distance: 291 bp, Offset: 13
+  [252] Node: 237185713, Distance: 286 bp, Offset: 7
+  [253] Node: 237185713, Distance: 291 bp, Offset: 12
+  [254] Node: 252116492, Distance: 286 bp, Offset: 6
+  [255] Node: 252116492, Distance: 291 bp, Offset: 11
+  [256] Node: 255910293, Distance: 286 bp, Offset: 5
+  [257] Node: 255910293, Distance: 291 bp, Offset: 10
+  [258] Node: 128444856, Distance: 286 bp, Offset: 4
+  [259] Node: 128444856, Distance: 291 bp, Offset: 9
+  [260] Node: 27985572, Distance: 286 bp, Offset: 3
+  [261] Node: 27985572, Distance: 291 bp, Offset: 8
+  [262] Node: 136536148, Distance: 286 bp, Offset: 2
+  [263] Node: 136536148, Distance: 291 bp, Offset: 7
+  [264] Node: 170673131, Distance: 286 bp, Offset: 1
+  [265] Node: 170673131, Distance: 291 bp, Offset: 6
+  [266] Node: 199777165, Distance: 305 bp, Offset: 20
+  [267] Node: 181356965, Distance: 286 bp, Offset: 0
+  [268] Node: 181356965, Distance: 291 bp, Offset: 5
+  [269] Node: 243282139, Distance: 305 bp, Offset: 19
+  [270] Node: 38536993, Distance: 291 bp, Offset: 4
+  [271] Node: 124913907, Distance: 305 bp, Offset: 18
+  [272] Node: 213778848, Distance: 291 bp, Offset: 3
+  [273] Node: 229745484, Distance: 305 bp, Offset: 17
+  [274] Node: 246388866, Distance: 291 bp, Offset: 2
+  [275] Node: 197928764, Distance: 305 bp, Offset: 16
+  [276] Node: 50354161, Distance: 291 bp, Offset: 1
+  [277] Node: 243015144, Distance: 305 bp, Offset: 15
+  [278] Node: 65634018, Distance: 291 bp, Offset: 0
+  [279] Node: 253239131, Distance: 305 bp, Offset: 14
+  [280] Node: 256189927, Distance: 305 bp, Offset: 13
+  [281] Node: 257183461, Distance: 305 bp, Offset: 12
+  [282] Node: 205214027, Distance: 305 bp, Offset: 11
+  [283] Node: 205214027, Distance: 314 bp, Offset: 20
+  [284] Node: 190515287, Distance: 305 bp, Offset: 10
+  [285] Node: 190515287, Distance: 314 bp, Offset: 19
+  [286] Node: 241744799, Distance: 305 bp, Offset: 9
+  [287] Node: 241744799, Distance: 314 bp, Offset: 18
+  [288] Node: 252851133, Distance: 305 bp, Offset: 8
+  [289] Node: 252851133, Distance: 314 bp, Offset: 17
+  [290] Node: 256093870, Distance: 305 bp, Offset: 7
+  [291] Node: 256093870, Distance: 314 bp, Offset: 16
+  [292] Node: 128494487, Distance: 305 bp, Offset: 6
+  [293] Node: 128494487, Distance: 314 bp, Offset: 15
+  [294] Node: 27994894, Distance: 305 bp, Offset: 5
+  [295] Node: 27994894, Distance: 314 bp, Offset: 14
+  [296] Node: 204782220, Distance: 321 bp, Offset: 20
+  [297] Node: 59360847, Distance: 305 bp, Offset: 4
+  [298] Node: 59360847, Distance: 314 bp, Offset: 13
+  [299] Node: 43467561, Distance: 321 bp, Offset: 19
+  [300] Node: 14667688, Distance: 305 bp, Offset: 3
+  [301] Node: 14667688, Distance: 314 bp, Offset: 12
+  [302] Node: 214989249, Distance: 321 bp, Offset: 18
+  [303] Node: 55714823, Distance: 305 bp, Offset: 2
+  [304] Node: 55714823, Distance: 314 bp, Offset: 11
+  [305] Node: 246637617, Distance: 321 bp, Offset: 17
+  [306] Node: 218246143, Distance: 305 bp, Offset: 1
+  [307] Node: 218246143, Distance: 314 bp, Offset: 10
+  [308] Node: 50401977, Distance: 321 bp, Offset: 16
+  [309] Node: 117121804, Distance: 305 bp, Offset: 0
+  [310] Node: 117121804, Distance: 314 bp, Offset: 9
+  [311] Node: 65644195, Distance: 321 bp, Offset: 15
+  [312] Node: 25831779, Distance: 314 bp, Offset: 8
+  [313] Node: 70527136, Distance: 321 bp, Offset: 14
+  [314] Node: 136036964, Distance: 314 bp, Offset: 7
+  [315] Node: 71613032, Distance: 321 bp, Offset: 13
+  [316] Node: 29517022, Distance: 314 bp, Offset: 6
+  [317] Node: 71892941, Distance: 321 bp, Offset: 12
+  [318] Node: 136814346, Distance: 314 bp, Offset: 5
+  [319] Node: 17220488, Distance: 321 bp, Offset: 11
+  [320] Node: 170745981, Distance: 314 bp, Offset: 4
+  [321] Node: 4993248, Distance: 321 bp, Offset: 10
+  [322] Node: 237710233, Distance: 314 bp, Offset: 3
+  [323] Node: 53339835, Distance: 321 bp, Offset: 9
+  [324] Node: 199944021, Distance: 314 bp, Offset: 2
+  [325] Node: 199944021, Distance: 332 bp, Offset: 20
+  [326] Node: 13584847, Distance: 321 bp, Offset: 8
+  [327] Node: 111771170, Distance: 314 bp, Offset: 1
+  [328] Node: 111771170, Distance: 332 bp, Offset: 19
+  [329] Node: 4128682, Distance: 321 bp, Offset: 7
+  [330] Node: 227602499, Distance: 314 bp, Offset: 0
+  [331] Node: 227602499, Distance: 332 bp, Offset: 18
+  [332] Node: 1426766, Distance: 321 bp, Offset: 6
+  [333] Node: 249689994, Distance: 332 bp, Offset: 17
+  [334] Node: 52601387, Distance: 321 bp, Offset: 5
+  [335] Node: 203382345, Distance: 332 bp, Offset: 16
+  [336] Node: 203382345, Distance: 336 bp, Offset: 20
+  [337] Node: 13384716, Distance: 321 bp, Offset: 4
+  [338] Node: 243933293, Distance: 332 bp, Offset: 15
+  [339] Node: 243933293, Distance: 336 bp, Offset: 19
+  [340] Node: 131964941, Distance: 321 bp, Offset: 3
+  [341] Node: 49795583, Distance: 332 bp, Offset: 14
+  [342] Node: 49795583, Distance: 336 bp, Offset: 18
+  [343] Node: 28919307, Distance: 321 bp, Offset: 2
+  [344] Node: 12523143, Distance: 332 bp, Offset: 13
+  [345] Node: 12523143, Distance: 336 bp, Offset: 17
+  [346] Node: 136712956, Distance: 321 bp, Offset: 1
+  [347] Node: 208184283, Distance: 332 bp, Offset: 12
+  [348] Node: 208184283, Distance: 336 bp, Offset: 16
+  [349] Node: 29630313, Distance: 321 bp, Offset: 0
+  [350] Node: 245261479, Distance: 332 bp, Offset: 11
+  [351] Node: 245261479, Distance: 336 bp, Offset: 15
+  [352] Node: 253959323, Distance: 332 bp, Offset: 10
+  [353] Node: 253959323, Distance: 336 bp, Offset: 14
+  [354] Node: 192065026, Distance: 343 bp, Offset: 20
+  [355] Node: 256403798, Distance: 332 bp, Offset: 9
+  [356] Node: 256403798, Distance: 336 bp, Offset: 13
+  [357] Node: 109227694, Distance: 343 bp, Offset: 19
+  [358] Node: 52040755, Distance: 332 bp, Offset: 8
+  [359] Node: 52040755, Distance: 336 bp, Offset: 12
+  [360] Node: 226922592, Distance: 343 bp, Offset: 18
+  [361] Node: 141976051, Distance: 332 bp, Offset: 7
+  [362] Node: 141976051, Distance: 336 bp, Offset: 11
+  [363] Node: 249588210, Distance: 343 bp, Offset: 17
+  [364] Node: 30754923, Distance: 332 bp, Offset: 6
+  [365] Node: 30754923, Distance: 336 bp, Offset: 10
+  [366] Node: 203351116, Distance: 343 bp, Offset: 16
+  [367] Node: 203351116, Distance: 347 bp, Offset: 20
+  [368] Node: 59947749, Distance: 332 bp, Offset: 5
+  [369] Node: 59947749, Distance: 336 bp, Offset: 9
+  [370] Node: 243926212, Distance: 343 bp, Offset: 15
+  [371] Node: 243926212, Distance: 347 bp, Offset: 19
+  [372] Node: 144128790, Distance: 332 bp, Offset: 4
+  [373] Node: 144128790, Distance: 336 bp, Offset: 8
+  [374] Node: 49793926, Distance: 343 bp, Offset: 14
+  [375] Node: 49793926, Distance: 347 bp, Offset: 18
+  [376] Node: 31246040, Distance: 332 bp, Offset: 3
+  [377] Node: 31246040, Distance: 336 bp, Offset: 7
+  [378] Node: 216662465, Distance: 343 bp, Offset: 13
+  [379] Node: 216662465, Distance: 347 bp, Offset: 17
+  [380] Node: 212271383, Distance: 332 bp, Offset: 2
+  [381] Node: 212271383, Distance: 336 bp, Offset: 6
+  [382] Node: 247200516, Distance: 343 bp, Offset: 12
+  [383] Node: 247200516, Distance: 347 bp, Offset: 16
+  [384] Node: 246162033, Distance: 332 bp, Offset: 1
+  [385] Node: 246162033, Distance: 336 bp, Offset: 5
+  [386] Node: 254635784, Distance: 343 bp, Offset: 11
+  [387] Node: 254635784, Distance: 347 bp, Offset: 15
+  [388] Node: 50314572, Distance: 332 bp, Offset: 0
+  [389] Node: 50314572, Distance: 336 bp, Offset: 4
+  [390] Node: 256651710, Distance: 343 bp, Offset: 10
+  [391] Node: 256651710, Distance: 347 bp, Offset: 14
+  [392] Node: 12689791, Distance: 336 bp, Offset: 3
+  [393] Node: 257347425, Distance: 343 bp, Offset: 9
+  [394] Node: 257347425, Distance: 347 bp, Offset: 13
+  [395] Node: 3800374, Distance: 336 bp, Offset: 2
+  [396] Node: 128747600, Distance: 343 bp, Offset: 8
+  [397] Node: 128747600, Distance: 347 bp, Offset: 12
+  [398] Node: 1309776, Distance: 336 bp, Offset: 1
+  [399] Node: 28063910, Distance: 343 bp, Offset: 7
+  [400] Node: 28063910, Distance: 347 bp, Offset: 11
+  [401] Node: 443385, Distance: 336 bp, Offset: 0
+  [402] Node: 136551240, Distance: 343 bp, Offset: 6
+  [403] Node: 136551240, Distance: 347 bp, Offset: 10
+  [404] Node: 29591541, Distance: 343 bp, Offset: 5
+  [405] Node: 29591541, Distance: 347 bp, Offset: 9
+  [406] Node: 211830395, Distance: 343 bp, Offset: 4
+  [407] Node: 211830395, Distance: 347 bp, Offset: 8
+  [408] Node: 44975023, Distance: 343 bp, Offset: 3
+  [409] Node: 44975023, Distance: 347 bp, Offset: 7
+  [410] Node: 11294750, Distance: 343 bp, Offset: 2
+  [411] Node: 11294750, Distance: 347 bp, Offset: 6
+  [412] Node: 207844053, Distance: 343 bp, Offset: 1
+  [413] Node: 207844053, Distance: 347 bp, Offset: 5
+  [414] Node: 113865566, Distance: 343 bp, Offset: 0
+  [415] Node: 113865566, Distance: 347 bp, Offset: 4
+  [416] Node: 25062928, Distance: 347 bp, Offset: 3
+  [417] Node: 6450818, Distance: 347 bp, Offset: 2
+  [418] Node: 130257008, Distance: 347 bp, Offset: 1
+  [419] Node: 230959714, Distance: 347 bp, Offset: 0
+  [420] Node: 205076101, Distance: 374 bp, Offset: 20
+  [421] Node: 113231742, Distance: 374 bp, Offset: 19
+  [422] Node: 83927337, Distance: 374 bp, Offset: 18
+  [423] Node: 19394346, Distance: 374 bp, Offset: 17
+  [424] Node: 209656760, Distance: 374 bp, Offset: 16
+  [425] Node: 44623421, Distance: 374 bp, Offset: 15
+  [426] Node: 215350259, Distance: 374 bp, Offset: 14
+  [427] Node: 246762641, Distance: 374 bp, Offset: 13
+  [428] Node: 125706922, Distance: 374 bp, Offset: 12
+  [429] Node: 87353348, Distance: 374 bp, Offset: 11
+  [430] Node: 20225278, Distance: 374 bp, Offset: 10
+  [431] Node: 134187288, Distance: 374 bp, Offset: 9
+  [432] Node: 169943758, Distance: 374 bp, Offset: 8
+  [433] Node: 181186511, Distance: 374 bp, Offset: 7
+  [434] Node: 105496503, Distance: 374 bp, Offset: 6
+  [435] Node: 160450143, Distance: 374 bp, Offset: 5
+  [436] Node: 178363932, Distance: 374 bp, Offset: 4
+  [437] Node: 191413782, Distance: 391 bp, Offset: 20
+  [438] Node: 239206108, Distance: 374 bp, Offset: 3
+  [439] Node: 109053683, Distance: 391 bp, Offset: 19
+  [440] Node: 252420731, Distance: 374 bp, Offset: 2
+  [441] Node: 24123916, Distance: 391 bp, Offset: 18
+  [442] Node: 51231219, Distance: 374 bp, Offset: 1
+  [443] Node: 58353025, Distance: 391 bp, Offset: 17
+  [444] Node: 217103875, Distance: 374 bp, Offset: 0
+  [445] Node: 68091691, Distance: 391 bp, Offset: 16
+  [446] Node: 220128416, Distance: 391 bp, Offset: 15
+  [447] Node: 194318488, Distance: 391 bp, Offset: 14
+  [448] Node: 187129296, Distance: 391 bp, Offset: 13
+  [449] Node: 240934223, Distance: 391 bp, Offset: 12
+  [450] Node: 124233068, Distance: 391 bp, Offset: 11
+  [451] Node: 167091468, Distance: 391 bp, Offset: 10
+  [452] Node: 35915356, Distance: 391 bp, Offset: 9
+  [453] Node: 213255050, Distance: 391 bp, Offset: 8
+  [454] Node: 246290389, Distance: 391 bp, Offset: 7
+  [455] Node: 50336498, Distance: 391 bp, Offset: 6
+  [456] Node: 216820354, Distance: 391 bp, Offset: 5
+  [457] Node: 45879231, Distance: 391 bp, Offset: 4
+  [458] Node: 215733112, Distance: 391 bp, Offset: 3
+  [459] Node: 246898393, Distance: 391 bp, Offset: 2
+  [460] Node: 254525170, Distance: 391 bp, Offset: 1
+  [461] Node: 204646050, Distance: 391 bp, Offset: 0
 
-=== Detailed Analysis of Best Profile ===
+START   DIST    BEST_PROFILE                               BIT_SCORE   HMM_POS  AA_LEN  COMPLETE
+------------------------------------------------------------------------------------------------
+0       150     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -275.54        57      86        NO
+1       150     MerR_1_V-K.hmm                               -277.48        13      84        NO
+2       150     MerR_1_V-K.hmm                               -277.48        13      84        NO
+3       150     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -278.59        58      87        NO
+4       150     MerR_1_V-K.hmm                               -280.01        13      85        NO
+5       150     MerR_1_V-K.hmm                               -280.01        13      85        NO
+6       150     MerR_1_V-K.hmm                               -282.02        14      86        NO
+7       150     MerR_1_V-K.hmm                               -282.02        14      86        NO
+8       150     MerR_1_V-K.hmm                               -282.02        14      86        NO
+9       150     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -284.32        61      89        NO
+10      150     MerR_1_V-K.hmm                               -284.94        14      87        NO
+11      150     MerR_1_V-K.hmm                               -284.94        14      87        NO
+12      150     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -286.14        62      90        NO
+13      150     MerR_1_V-K.hmm                               -286.67        15      88        NO
+14      150     MerR_1_V-K.hmm                               -286.67        15      88        NO
+15      150     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -289.08        62      91        NO
+16      150     MerR_1_V-K.hmm                               -289.17        17      89        NO
+17      150     MerR_1_V-K.hmm                               -289.17        17      89        NO
+18      150     MerR_1_V-K.hmm                               -290.60        17      90        NO
+19      150     MerR_1_V-K.hmm                               -290.60        17      90        NO
+20      150     MerR_1_V-K.hmm                               -290.60        17      90        NO
+21      172     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -256.04        40      82        NO
+22      172     MerR_1_V-K.hmm                               -256.70        18      81        NO
+23      172     MerR_1_V-K.hmm                               -256.70        18      81        NO
+24      172     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -259.44        50      83        NO
+25      172     MerR_1_V-K.hmm                               -259.61        54      82        NO
+26      172     MerR_1_V-K.hmm                               -259.61        54      82        NO
+27      172     MerR_1_V-K.hmm                               -259.61        54      82        NO
+28      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -251.50        39      82        NO
+29      172     MerR_1_V-K.hmm                               -259.61        54      82        NO
+30      178     MerR_1_V-K.hmm                               -254.24        54      80        NO
+31      172     MerR_1_V-K.hmm                               -259.61        54      82        NO
+32      178     MerR_1_V-K.hmm                               -254.24        54      80        NO
+33      180     MerR_1_V-K.hmm                               -274.48        21      84        NO
+34      172     MerR_1_V-K.hmm                               -261.78        17      83        NO
+35      178     MerR_1_V-K.hmm                               -256.42        17      81        NO
+36      180     MerR_1_V-K.hmm                               -274.48        21      84        NO
+37      172     MerR_1_V-K.hmm                               -261.78        17      83        NO
+38      178     MerR_1_V-K.hmm                               -256.42        17      81        NO
+39      180     MerR_1_V-K.hmm                               -274.48        21      84        NO
+40      172     MerR_1_V-K.hmm                               -261.78        17      83        NO
+41      178     MerR_1_V-K.hmm                               -256.42        17      81        NO
+42      180     MerR_1_V-K.hmm                               -276.30        22      85        NO
+43      172     MerR_1_V-K.hmm                               -264.23        56      84        NO
+44      178     MerR_1_V-K.hmm                               -258.87        56      82        NO
+45      180     MerR_1_V-K.hmm                               -276.30        22      85        NO
+46      172     MerR_1_V-K.hmm                               -264.23        56      84        NO
+47      178     MerR_1_V-K.hmm                               -258.87        56      82        NO
+48      180     MerR_1_V-K.hmm                               -276.30        22      85        NO
+49      172     MerR_1_V-K.hmm                               -264.23        56      84        NO
+50      178     MerR_1_V-K.hmm                               -258.87        56      82        NO
+51      180     MerR_1_V-K.hmm                               -280.79        23      86        NO
+52      172     MerR_1_V-K.hmm                               -269.25        57      85        NO
+53      178     MerR_1_V-K.hmm                               -263.89        57      83        NO
+54      180     MerR_1_V-K.hmm                               -280.79        23      86        NO
+55      172     MerR_1_V-K.hmm                               -269.25        57      85        NO
+56      178     MerR_1_V-K.hmm                               -263.89        57      83        NO
+57      180     MerR_1_V-K.hmm                               -280.79        23      86        NO
+58      172     MerR_1_V-K.hmm                               -269.25        57      85        NO
+59      178     MerR_1_V-K.hmm                               -263.89        57      83        NO
+60      180     MerR_1_V-K.hmm                               -283.44        24      87        NO
+61      172     MerR_1_V-K.hmm                               -275.29        58      86        NO
+62      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -267.78        55      86        NO
+63      180     MerR_1_V-K.hmm                               -283.44        24      87        NO
+64      172     MerR_1_V-K.hmm                               -275.29        58      86        NO
+65      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -267.78        55      86        NO
+66      180     MerR_1_V-K.hmm                               -283.44        24      87        NO
+67      172     MerR_1_V-K.hmm                               -275.29        58      86        NO
+68      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -267.78        55      86        NO
+69      180     MerR_1_V-K.hmm                               -286.75        25      88        NO
+70      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -267.78        55      86        NO
+71      180     MerR_1_V-K.hmm                               -286.75        25      88        NO
+72      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -270.79        56      87        NO
+73      180     MerR_1_V-K.hmm                               -286.75        25      88        NO
+74      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -270.79        56      87        NO
+75      180     MerR_1_V-K.hmm                               -290.03        55      89        NO
+76      178     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -270.79        56      87        NO
+77      180     MerR_1_V-K.hmm                               -290.03        55      89        NO
+78      178     MerR_1_V-K.hmm                               -274.12        15      86        NO
+79      180     MerR_1_V-K.hmm                               -290.03        55      89        NO
+80      178     MerR_1_V-K.hmm                               -274.12        15      86        NO
+81      180     MerR_1_V-K.hmm                               -291.49        26      90        NO
+82      180     MerR_1_V-K.hmm                               -291.49        26      90        NO
+83      180     MerR_1_V-K.hmm                               -291.49        26      90        NO
+84      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+85      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+86      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+87      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+88      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+89      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+90      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+91      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+92      218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+93      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+94      218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+95      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+96      218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+97      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+98      218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+99      211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+100     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+101     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+102     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+103     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+104     224     MerR_1_V-K.hmm                               -282.06        17      85        NO
+105     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+106     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+107     224     MerR_1_V-K.hmm                               -282.06        17      85        NO
+108     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+109     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+110     224     MerR_1_V-K.hmm                               -282.06        17      85        NO
+111     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+112     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+113     224     MerR_1_V-K.hmm                               -282.06        17      85        NO
+114     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+115     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+116     224     MerR_1_V-K.hmm                               -282.06        17      85        NO
+117     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+118     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+119     224     MerR_1_V-K.hmm                               -282.06        17      85        NO
+120     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+121     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+122     224     MerR_1_V-K.hmm                               -286.52        18      86        NO
+123     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+124     211     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -278.13        79      86       YES
+125     224     MerR_1_V-K.hmm                               -286.52        18      86        NO
+126     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+127     224     MerR_1_V-K.hmm                               -286.52        18      86        NO
+128     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+129     224     MerR_1_V-K.hmm                               -289.22        13      87        NO
+130     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+131     224     MerR_1_V-K.hmm                               -289.22        13      87        NO
+132     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+133     224     MerR_1_V-K.hmm                               -289.22        13      87        NO
+134     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+135     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+136     224     MerR_1_V-K.hmm                               -291.24        14      88        NO
+137     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+138     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+139     224     MerR_1_V-K.hmm                               -291.24        14      88        NO
+140     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+141     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+142     224     MerR_1_V-K.hmm                               -291.24        14      88        NO
+143     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+144     218     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -227.06        71      73       YES
+145     238     MerR_1_V-K.hmm                               -262.19        19      82        NO
+146     224     MerR_1_V-K.hmm                               -294.10        14      89        NO
+147     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+148     239     MerR_1_V-K.hmm                               -277.21        14      85        NO
+149     238     MerR_1_V-K.hmm                               -262.19        19      82        NO
+150     224     MerR_1_V-K.hmm                               -294.10        14      89        NO
+151     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+152     239     MerR_1_V-K.hmm                               -277.21        14      85        NO
+153     238     MerR_1_V-K.hmm                               -262.19        19      82        NO
+154     224     MerR_1_V-K.hmm                               -294.10        14      89        NO
+155     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+156     239     MerR_1_V-K.hmm                               -277.21        14      85        NO
+157     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+158     224     MerR_1_V-K.hmm                               -298.71        16      90        NO
+159     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+160     239     MerR_1_V-K.hmm                               -281.81        16      86        NO
+161     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+162     224     MerR_1_V-K.hmm                               -298.71        16      90        NO
+163     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+164     239     MerR_1_V-K.hmm                               -281.81        16      86        NO
+165     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+166     224     MerR_1_V-K.hmm                               -298.71        16      90        NO
+167     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+168     239     MerR_1_V-K.hmm                               -281.81        16      86        NO
+169     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+170     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+171     239     MerR_1_V-K.hmm                               -286.77        16      87        NO
+172     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+173     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+174     239     MerR_1_V-K.hmm                               -286.77        16      87        NO
+175     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+176     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+177     239     MerR_1_V-K.hmm                               -286.77        16      87        NO
+178     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+179     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+180     239     MerR_1_V-K.hmm                               -289.12        13      88        NO
+181     248     MerR_1_V-K.hmm                               -283.73        13      85        NO
+182     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+183     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+184     239     MerR_1_V-K.hmm                               -289.12        13      88        NO
+185     248     MerR_1_V-K.hmm                               -283.73        13      85        NO
+186     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+187     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+188     239     MerR_1_V-K.hmm                               -289.12        13      88        NO
+189     248     MerR_1_V-K.hmm                               -283.73        13      85        NO
+190     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+191     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+192     239     MerR_1_V-K.hmm                               -292.54        14      89        NO
+193     248     MerR_1_V-K.hmm                               -287.15        14      86        NO
+194     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+195     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+196     239     MerR_1_V-K.hmm                               -292.54        14      89        NO
+197     248     MerR_1_V-K.hmm                               -287.15        14      86        NO
+198     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+199     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+200     239     MerR_1_V-K.hmm                               -292.54        14      89        NO
+201     248     MerR_1_V-K.hmm                               -287.15        14      86        NO
+202     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+203     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+204     239     MerR_1_V-K.hmm                               -295.14        15      90        NO
+205     248     MerR_1_V-K.hmm                               -289.75        15      87        NO
+206     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+207     235     MerR_1_V-K.hmm                               -228.73        69      70       YES
+208     239     MerR_1_V-K.hmm                               -295.14        15      90        NO
+209     248     MerR_1_V-K.hmm                               -289.75        15      87        NO
+210     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+211     239     MerR_1_V-K.hmm                               -295.14        15      90        NO
+212     248     MerR_1_V-K.hmm                               -289.75        15      87        NO
+213     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+214     239     MerR_1_V-K.hmm                               -298.32        16      91        NO
+215     248     MerR_1_V-K.hmm                               -292.93        16      88        NO
+216     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+217     239     MerR_1_V-K.hmm                               -298.32        16      91        NO
+218     248     MerR_1_V-K.hmm                               -292.93        16      88        NO
+219     238     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.40        71      81       YES
+220     239     MerR_1_V-K.hmm                               -298.32        16      91        NO
+221     248     MerR_1_V-K.hmm                               -292.93        16      88        NO
+222     248     MerR_1_V-K.hmm                               -293.95        17      89        NO
+223     248     MerR_1_V-K.hmm                               -293.95        17      89        NO
+224     248     MerR_1_V-K.hmm                               -293.95        17      89        NO
+225     248     MerR_1_V-K.hmm                               -296.00        18      90        NO
+226     248     MerR_1_V-K.hmm                               -296.00        18      90        NO
+227     248     MerR_1_V-K.hmm                               -296.00        18      90        NO
+228     248     MerR_1_V-K.hmm                               -300.43        19      91        NO
+229     248     MerR_1_V-K.hmm                               -300.43        19      91        NO
+230     248     MerR_1_V-K.hmm                               -300.43        19      91        NO
+231     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+232     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+233     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+234     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+235     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+236     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+237     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+238     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+239     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+240     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+241     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+242     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+243     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+244     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+245     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+246     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+247     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+248     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+249     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+250     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+251     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+252     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+253     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+254     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+255     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+256     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+257     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+258     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+259     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+260     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+261     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+262     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+263     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+264     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+265     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+266     305     MerR_1_V-K.hmm                               -245.79        22      79        NO
+267     286     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -249.60        71      74       YES
+268     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+269     305     MerR_1_V-K.hmm                               -245.79        22      79        NO
+270     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+271     305     MerR_1_V-K.hmm                               -245.79        22      79        NO
+272     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+273     305     MerR_1_V-K.hmm                               -249.45        23      80        NO
+274     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+275     305     MerR_1_V-K.hmm                               -249.45        23      80        NO
+276     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+277     305     MerR_1_V-K.hmm                               -249.45        23      80        NO
+278     291     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -243.62        71      80       YES
+279     305     MerR_1_V-K.hmm                               -252.96        24      81        NO
+280     305     MerR_1_V-K.hmm                               -252.96        24      81        NO
+281     305     MerR_1_V-K.hmm                               -252.96        24      81        NO
+282     305     MerR_1_V-K.hmm                               -256.16        19      82        NO
+283     314     MerR_1_V-K.hmm                               -248.14        19      79        NO
+284     305     MerR_1_V-K.hmm                               -256.16        19      82        NO
+285     314     MerR_1_V-K.hmm                               -248.14        19      79        NO
+286     305     MerR_1_V-K.hmm                               -256.16        19      82        NO
+287     314     MerR_1_V-K.hmm                               -248.14        19      79        NO
+288     305     MerR_1_V-K.hmm                               -259.93        13      83        NO
+289     314     MerR_1_V-K.hmm                               -251.91        13      80        NO
+290     305     MerR_1_V-K.hmm                               -259.93        13      83        NO
+291     314     MerR_1_V-K.hmm                               -251.91        13      80        NO
+292     305     MerR_1_V-K.hmm                               -259.93        13      83        NO
+293     314     MerR_1_V-K.hmm                               -251.91        13      80        NO
+294     305     MerR_1_V-K.hmm                               -262.26        14      84        NO
+295     314     MerR_1_V-K.hmm                               -254.24        14      81        NO
+296     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+297     305     MerR_1_V-K.hmm                               -262.26        14      84        NO
+298     314     MerR_1_V-K.hmm                               -254.24        14      81        NO
+299     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+300     305     MerR_1_V-K.hmm                               -262.26        14      84        NO
+301     314     MerR_1_V-K.hmm                               -254.24        14      81        NO
+302     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+303     305     MerR_1_V-K.hmm                               -264.54        15      85        NO
+304     314     MerR_1_V-K.hmm                               -256.52        15      82        NO
+305     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+306     305     MerR_1_V-K.hmm                               -264.54        15      85        NO
+307     314     MerR_1_V-K.hmm                               -256.52        15      82        NO
+308     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+309     305     MerR_1_V-K.hmm                               -264.54        15      85        NO
+310     314     MerR_1_V-K.hmm                               -256.52        15      82        NO
+311     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+312     314     MerR_1_V-K.hmm                               -260.69        16      83        NO
+313     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+314     314     MerR_1_V-K.hmm                               -260.69        16      83        NO
+315     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+316     314     MerR_1_V-K.hmm                               -260.69        16      83        NO
+317     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+318     314     MerR_1_V-K.hmm                               -261.44        17      84        NO
+319     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+320     314     MerR_1_V-K.hmm                               -261.44        17      84        NO
+321     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+322     314     MerR_1_V-K.hmm                               -261.44        17      84        NO
+323     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+324     314     MerR_1_V-K.hmm                               -265.23        18      85        NO
+325     332     MerR_1_V-K.hmm                               -252.16        18      79        NO
+326     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+327     314     MerR_1_V-K.hmm                               -265.23        18      85        NO
+328     332     MerR_1_V-K.hmm                               -252.16        18      79        NO
+329     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+330     314     MerR_1_V-K.hmm                               -265.23        18      85        NO
+331     332     MerR_1_V-K.hmm                               -252.16        18      79        NO
+332     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+333     332     MerR_1_V-K.hmm                               -254.88        19      80        NO
+334     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+335     332     MerR_1_V-K.hmm                               -254.88        19      80        NO
+336     336     MerR_1_V-K.hmm                               -254.75        68      81        NO
+337     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+338     332     MerR_1_V-K.hmm                               -254.88        19      80        NO
+339     336     MerR_1_V-K.hmm                               -254.75        68      81        NO
+340     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+341     332     MerR_1_V-K.hmm                               -259.33        15      81        NO
+342     336     MerR_1_V-K.hmm                               -254.75        68      81        NO
+343     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+344     332     MerR_1_V-K.hmm                               -259.33        15      81        NO
+345     336     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -258.06        54      83        NO
+346     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+347     332     MerR_1_V-K.hmm                               -259.33        15      81        NO
+348     336     MerR_1_V-K.hmm                               -259.22        68      82        NO
+349     321     Cas2_2_CAS-I-II-III-IV-V-VI.hmm              -250.32        79      80       YES
+350     332     MerR_1_V-K.hmm                               -261.37        16      82        NO
+351     336     MerR_1_V-K.hmm                               -259.22        68      82        NO
+352     332     MerR_1_V-K.hmm                               -261.37        16      82        NO
+353     336     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -261.10        55      84        NO
+354     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+355     332     MerR_1_V-K.hmm                               -261.37        16      82        NO
+356     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+357     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+358     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+359     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+360     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+361     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+362     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+363     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+364     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+365     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+366     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+367     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+368     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+369     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+370     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+371     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+372     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+373     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+374     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+375     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+376     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+377     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+378     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+379     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+380     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+381     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+382     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+383     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+384     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+385     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+386     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+387     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+388     332     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -263.01        71      83       YES
+389     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+390     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+391     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+392     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+393     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+394     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+395     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+396     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+397     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+398     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+399     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+400     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+401     336     MerR_1_V-K.hmm                               -262.23        69      83       YES
+402     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+403     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+404     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+405     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+406     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+407     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+408     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+409     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+410     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+411     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+412     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+413     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+414     343     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -257.58        71      79       YES
+415     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+416     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+417     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+418     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+419     347     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -265.86        71      81       YES
+420     374     MerR_1_V-K.hmm                               -251.87        13      79        NO
+421     374     MerR_1_V-K.hmm                               -251.87        13      79        NO
+422     374     MerR_1_V-K.hmm                               -251.87        13      79        NO
+423     374     MerR_1_V-K.hmm                               -255.61        14      80        NO
+424     374     MerR_1_V-K.hmm                               -255.61        14      80        NO
+425     374     MerR_1_V-K.hmm                               -255.61        14      80        NO
+426     374     MerR_1_V-K.hmm                               -257.72        13      81        NO
+427     374     MerR_1_V-K.hmm                               -257.72        13      81        NO
+428     374     MerR_1_V-K.hmm                               -257.72        13      81        NO
+429     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+430     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+431     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+432     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+433     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+434     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+435     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+436     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+437     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+438     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+439     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+440     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+441     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+442     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+443     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+444     374     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -260.75        71      83       YES
+445     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+446     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+447     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+448     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+449     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+450     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+451     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+452     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+453     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+454     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+455     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+456     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+457     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+458     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+459     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+460     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+461     391     Cas2_11_CAS-I-II-III-IV-V-VI.hmm             -240.88        71      74       YES
+
+=== Global Best Result ===
+Start codon index: 92
+Start codon distance: 218 bp
 Best profile: Cas2_11_CAS-I-II-III-IV-V-VI.hmm
-Bit score: -249.60
+Bit score: -227.06
 HMM position reached: 71
 Complete alignment: YES
 DNA length: 231 bp
-AA length: 74
+AA length: 73
 
-First 100 AA: LWQRFQGLHPLLPQQTEMLVFFRSSKAYLYFPMHLVDYIWVCLPNICYSSAQIKCCLPLPKLSLIPNAVFRDCA
+First 100 AA: LVRLSAFCKHLRVKEAVSYSATSLLGKKVSVLVSHSEVLVILDDKRFVSILPYSRAVIFRNIFDTAIATNKDV
 
-First 300 bp DNA: TTGTAGTGGCAAAGGTTTCAGGGATTACATCCGCTTTGATTACCCCAACAAACAGAGATGCTTGTATTTTTCAGATAATCAAGTAAGGCTTACCTGTATTTTCCCATGCACCTGGTCGATTATATTTGGGTATGTCTTCCAAACATCTGTTACTCAAGCGCACAAATAAAATGCTGTCTTCCTTTGCCAAAATTGTCTCTAATTCCCAACGCAGTTTTTCGCGATTGCGCT
+First 300 bp DNA: TTGGTAAGGCTTTCAGCATTTTGCAAGCACCTCTAAAGAGTTAAAGAGGCAGTCAGCTATTCTGCTACAAGTCTTCTGGGTAAAAAGGTGTCTGTTTTGGTTTCACACTCAGAGGTGCTTGTAATTTTAGACGATTAAAAAAGGTTCGTCTCGATTTTGCCATATTCCAGGGCGGTTATATTTAGGAATATCTTCGACACAGCGATTGCTTAGACGAATAAATAGGATGTT
+
+Full AA sequence:
+LVRLSAFCKHLRVKEAVSYSATSLLGKKVSVLVSHSEVLVILDDKRFVSILPYSRAVIFRNIFDTAIATNKDV
 
 === Test Complete ===

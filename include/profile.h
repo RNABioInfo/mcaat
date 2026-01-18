@@ -68,6 +68,7 @@ public:
     
     // Get log-odds emission score (relative to null model)
     double GetMatchLogOdds(int position, char amino_acid) const;
+    double GetInsertLogOdds(int position, char amino_acid) const;
     
     // Get bit score from log-odds
     double LogOddsToBits(double log_odds) const;

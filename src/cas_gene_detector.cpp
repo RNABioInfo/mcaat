@@ -70,9 +70,9 @@ ViterbiColumn CasGeneDetector::ExtendViterbi(const ViterbiColumn& prev, char aa)
     curr.best_score = -1e9;  // Reset to find new best
     curr.best_hmm_pos = prev.best_hmm_pos;
     
-    // Match states
+    // Match states - use log-odds for proper bit scoring
     for (int j = 1; j <= L; ++j) {
-        double emit_m = profile_->GetMatchEmission(j, aa);
+        double emit_m = profile_->GetMatchLogOdds(j, aa);  // Log-odds vs null model
         
         // For j=1, can enter from M[0] (begin state) with score 0
         // For j>1, normal transitions from previous states at j-1
@@ -98,9 +98,9 @@ ViterbiColumn CasGeneDetector::ExtendViterbi(const ViterbiColumn& prev, char aa)
         }
     }
     
-    // Insert states (emit then stay or transition)
+    // Insert states - use log-odds
     for (int j = 1; j <= L; ++j) {
-        double emit_i = profile_->GetInsertEmission(j, aa);
+        double emit_i = profile_->GetInsertLogOdds(j, aa);  // Log-odds vs null model
         double from_m = prev.M[j] + profile_->GetTransition(j, j, 'M', 'I');
         double from_i = prev.I[j] + profile_->GetTransition(j, j, 'I', 'I');
         curr.I[j] = emit_i + std::max(from_m, from_i);
@@ -177,7 +177,8 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
                 // Terminal - save result
                 AminoAcidPathInfo r;
                 r.dna_sequence = std::move(s.dna);
-                r.total_score = s.vit.best_score;
+                // Convert log-odds to bits: bits = log_odds / log(2)
+                r.total_score = s.vit.best_score / std::log(2.0);
                 r.hmm_position = s.vit.best_hmm_pos;
                 r.is_complete = (profile_ && s.vit.best_hmm_pos >= profile_->GetLength());
                 for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));
@@ -244,7 +245,8 @@ std::vector<AminoAcidPathInfo> CasGeneDetector::BeamSearchAminoAcids(
     for (auto& s : beam) {
         AminoAcidPathInfo r;
         r.dna_sequence = std::move(s.dna);
-        r.total_score = s.vit.best_score;
+        // Convert log-odds to bits: bits = log_odds / log(2)
+        r.total_score = s.vit.best_score / std::log(2.0);
         r.hmm_position = s.vit.best_hmm_pos;
         r.is_complete = false;
         for (char c : s.aa) r.amino_acids.push_back(std::string(1, c));

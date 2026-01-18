@@ -286,6 +286,26 @@ double Profile::GetMatchLogOdds(int position, char amino_acid) const {
     return emission - background;
 }
 
+double Profile::GetInsertLogOdds(int position, char amino_acid) const {
+    const auto& state = GetState(position);
+    int idx = AminoAcidToIndex(amino_acid);
+    if (idx < 0 || idx >= static_cast<int>(state.insert_emissions.size())) {
+        return -INFINITY;
+    }
+    
+    double emission = state.insert_emissions[idx];
+    
+    // Background from insert composition or uniform
+    double background = 0.0;
+    if (idx < static_cast<int>(compo_insert_.size())) {
+        background = compo_insert_[idx];
+    } else {
+        background = std::log(1.0 / 20.0);
+    }
+    
+    return emission - background;
+}
+
 double Profile::LogOddsToBits(double log_odds) const {
     // HMMER bit scores: bits = log-odds / log(2)
     return log_odds / std::log(2.0);
