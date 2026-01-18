@@ -141,6 +141,11 @@ int main(int argc, char* argv[]) {
     }
     std::cout << std::endl;
     
+    // Load profiles dynamically from the profiles directory
+    auto all_profiles = HMMProfiles::LoadProfiles(profiles_dir);
+    std::cout << "Loaded " << all_profiles.size() << " HMM profiles" << std::endl;
+    std::cout << std::endl;
+    
     // For each start codon, run all profiles and find best hit
     std::cout << std::left << std::setw(8) << "START"
               << std::setw(8) << "DIST"
@@ -165,7 +170,7 @@ int main(int argc, char* argv[]) {
         std::string best_profile_name;
         AminoAcidPathInfo best_path_info;
         
-        for (const auto& ps : HMMProfiles::ALL_PROFILES) {
+        for (const auto& ps : all_profiles) {
             Profile hmm;
             std::string profile_path = profiles_dir + "/" + ps.filename;
             
