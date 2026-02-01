@@ -538,6 +538,18 @@ int main(int argc, char** argv) {
     auto cycles_map = cycle_finder.results;
     cout << "Number of nodes in results: " << cycles_map.size() << endl;
     // %% FBCE ALGORITHM %%
+
+    // %% Filtering cycles map %%
+    auto it = cycles_map.begin();
+    while (it != cycles_map.end()) {
+        if (it->second.size() > settings.maximum_tangle_nodes) {
+            it = cycles_map.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    cout << "Filtered cycles map, remaining entries: " << cycles_map.size() << endl;
+    // %% Filtering cycles map %%
     
     auto cycles = cycles_map_to_cycles(cycles_map); // easier type to handle
 

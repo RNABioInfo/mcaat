@@ -22,6 +22,7 @@ namespace fs = std::filesystem;
 struct Settings {
     std::string input_files; // Path to the input files
     size_t chunk_size = 1024; // Chunks to load at a time for read file sequences
+    size_t maximum_tangle_nodes = 150; // Heuristic to stop computation at large tangles
     double ram = 0.0; // Maximum RAM usage in gigabytes
     size_t threads = 0; // Number of threads to use
     std::string output_folder; // Output directory path. Empty until chosen by CLI or settings file.
