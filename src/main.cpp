@@ -29,6 +29,8 @@
 #include "sdbg/sdbg.h"
 #include "sdbg_build.h"
 #include "settings.h"
+// #include "phage_curator.h"
+// #include "isolate_protospacers.h"
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -540,28 +542,19 @@ int main(int argc, char** argv) {
     auto cycles = cycles_map_to_cycles(cycles_map); // easier type to handle
 
     cout << "\n══════════════════════════════════════════════" << endl;
-    cout << "🔸STEP 6: Finding relevant reads" << endl;
+    cout << "🔸STEP 6: Order the spacers" << endl;
     cout << "══════════════════════════════════════════════" << endl;
-    const auto reads = run_and_debug_finding_of_relevant_reads(
-        cycles,
-        settings,
-        sdbg
-    );
-
-    cout << "\n══════════════════════════════════════════════" << endl;
-    cout << "🔸STEP 7: Order the spacers" << endl;
-    cout << "══════════════════════════════════════════════" << endl;
-    const auto found_systems = run_and_debug_spacer_ordering(reads, sdbg, cycles);
+    const auto found_systems = run_and_debug_spacer_ordering(settings, sdbg, cycles);
 
 
     if (settings.benchmark_file != "") {
         cout << "\n══════════════════════════════════════════════" << endl;
-        cout << "🔸STEP 8: Compare to ground of truth using benchmark file" << endl;
+        cout << "🔸STEP 7: Compare to ground of truth using benchmark file" << endl;
         cout << "══════════════════════════════════════════════" << endl;
         run_and_debug_benchmark_results(settings, found_systems);
     } else {
         cout << "\n══════════════════════════════════════════════" << endl;
-        cout << "🔸STEP 8: Results" << endl;
+        cout << "🔸STEP 7: Results" << endl;
         cout << "══════════════════════════════════════════════" << endl;
         run_and_debug_results(found_systems);
     }

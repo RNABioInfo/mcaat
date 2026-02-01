@@ -174,13 +174,13 @@ vector<uint32_t> get_all_cycle_indices(
 /**
  * @brief Get the reads where the end- and start-kmers are part of the graphs nodes
  * 
- * @param graph The graph used to check the nodes
+ * @param node_ids Nodes used for finding relevant reads
  * @param reads The reads from which the relevant ones are copied
  * 
  * @return The relevant reads (vector<vector<uint64_t>>)
  */
 vector<vector<uint64_t>> get_relevant_reads(
-    const Graph& graph,
+    const unordered_set<uint64_t>& node_ids,
     const vector<vector<uint64_t>>& all_reads
 );
 

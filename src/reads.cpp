@@ -1,5 +1,15 @@
 #include "reads.h"
 
+size_t extract_reads_size_from_fastq_file(const string& fastq_file_path) {
+    klibpp::SeqStreamIn iss(fastq_file_path.c_str());
+    const auto first_read = iss.read(1);
+    return first_read.size();
+}
+
+klibpp::SeqStreamIn open_fastq_file_stream(const string& fastq_file_path) {
+    return klibpp::SeqStreamIn(fastq_file_path.c_str());
+}
+
 vector<string> extract_sequences_from_fastq_file(const string& fastq_file_path) {
     vector<string> sequences;
 

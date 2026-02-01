@@ -30,19 +30,61 @@ vector<vector<uint64_t>> run_and_debug_finding_of_relevant_reads(
 }
 
 vector<tuple<string, string, vector<string>, float, float>> run_and_debug_spacer_ordering(
-    const vector<vector<uint64_t>>& reads,
+    const Settings& settings,
     SDBG& sdbg,
     const vector<vector<uint64_t>>& cycles
 ) {
     chrono::_V2::system_clock::time_point start_time = chrono::high_resolution_clock::now();
     
     cout << "  ▸ Splitting into subproblems" << endl;
-    if (reads.empty()) {
-        cout << "  ▸ No reads found, skipping spacer ordering" << endl;
-        return {};
-    }
-    const size_t reads_size = reads[0].size();
+    const size_t reads_size = get_reads_size_of_fastq_files(settings);
     auto subgraphs = get_crispr_regions_extended_by_k(sdbg, reads_size, cycles);
+
+    cout << "  ▸ Extracting relevant reads from the whole file" << endl;
+    const auto relevant_nodes = combine_nodes_of_subgraphs(subgraphs);
+    
+    auto fastq_files = get_fastq_files_from_settings(settings);
+    vector<vector<uint64_t>> reads;
+
+    {
+        typedef decltype(open_fastq_file_stream("")) StreamType;
+        std::unique_ptr<StreamType> file_stream_ptr = std::make_unique<StreamType>(fastq_files.first.c_str());
+        bool both_fastq_files_streamed = false;
+        long number_of_reads = 1; // 1 to pass first if condition
+
+        do {
+            if (number_of_reads == 0 && fastq_files.second.has_value()) {
+                std::cout << "switching fastq_file" << std::endl;
+                both_fastq_files_streamed = true;
+                file_stream_ptr = std::make_unique<StreamType>(fastq_files.second.value().c_str());
+            }
+            number_of_reads = 0;
+
+            try {
+                auto file_records = file_stream_ptr->read(settings.chunk_size);
+                for (const auto& record : file_records) {
+                    string sequence = record.seq;
+                    if (both_fastq_files_streamed) {
+                        reverse_pair_ends_sequence(sequence);
+                    }
+
+                    vector<uint64_t> read = get_read_from_sequence(sdbg, relevant_nodes, sequence);
+                    if (!read.empty()) {
+                        number_of_reads++;
+                        reads.push_back(read);
+                    }
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Error reading ";
+                if (both_fastq_files_streamed) {
+                    std::cerr << " second";
+                } else {
+                    std::cerr << " first";
+                }
+                std::cerr << " fastq file sequences because: " << e.what() << std::endl;
+            }
+        } while (number_of_reads > 0 || !both_fastq_files_streamed);
+    }
 
     cout << "  🔄 Filtering subproblems:" << endl;
     vector<Graph> remaining_subgraphs;
@@ -50,7 +92,7 @@ vector<tuple<string, string, vector<string>, float, float>> run_and_debug_spacer
     vector<vector<vector<size_t>>> remaining_cycles;
     for (size_t idx = 0; idx < subgraphs.size(); ++idx) {
         const auto& subgraph = subgraphs[idx];
-        const auto relevant_reads = get_relevant_reads(subgraph, reads);
+        const auto relevant_reads = get_relevant_reads(subgraph.nodes, reads);
         auto relevant_cycles = get_relevant_cycles(subgraph, cycles);
 
         get_minimum_cycles_for_full_coverage(relevant_cycles);

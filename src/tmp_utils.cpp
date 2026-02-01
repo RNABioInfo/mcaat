@@ -13,15 +13,36 @@ pair<string, optional<string>> get_fastq_files_from_settings(
         const size_t space_pos = settings.input_files.find(" ");
         string input_file1 = settings.input_files.substr(0, space_pos);
         string input_file2 = settings.input_files.substr(space_pos + 1);
-        cout<<"  ▸ Two fastq files provided located at " << input_file1 << " and " << input_file2 << endl;
+
         trim_string(input_file1);
         trim_string(input_file2);
 
         return std::make_pair(input_file1, optional<string>(input_file2));
     } else {
-        cout<<"  ▸ Only one fastq file provided located at " << settings.input_files << endl;
         return std::make_pair(settings.input_files, std::nullopt);
     }
+}
+
+size_t get_reads_size_of_fastq_files(const Settings& settings) {
+    string fastq_file = settings.input_files;
+    if (fastq_file.find(" ") != string::npos) { // 2 Fastq files
+        const size_t space_pos = fastq_file.find(" ");
+        fastq_file = fastq_file.substr(0, space_pos);
+        trim_string(fastq_file);
+    }
+
+    return extract_reads_size_from_fastq_file(fastq_file);
+}
+
+unordered_set<uint64_t> combine_nodes_of_subgraphs(
+    const vector<Graph>& subgraphs
+) {
+    unordered_set<uint64_t> all_nodes;
+    for (const auto& subgraph : subgraphs) {
+        all_nodes.insert(subgraph.nodes.begin(), subgraph.nodes.end());
+    }
+
+    return all_nodes;
 }
 
 vector<vector<uint64_t>> cycles_map_to_cycles(

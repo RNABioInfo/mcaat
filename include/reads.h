@@ -18,6 +18,22 @@
 using namespace std;
 
 /**
+ * @brief Gets the reads size
+ * 
+ * @param fastq_file_path
+ * @return reads size (size_t)
+ */
+size_t extract_reads_size_from_fastq_file(const string& fastq_file_path);
+
+/**
+ * @brief Opens a kseqpp file stream
+ *
+ * @param fastq_file_path
+ * @return kseqpp file stream (klibpp::SeqStreamIn)
+ */
+klibpp::SeqStreamIn open_fastq_file_stream(const string& fastq_file_path);
+
+/**
  * @brief Reads all the sequences in the fastq file
  * 
  * Uses kseqpp to parse the fastq files and filters out only the sequences

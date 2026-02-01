@@ -184,14 +184,14 @@ vector<Graph> get_crispr_regions_extended_by_k(
 }
 
 vector<vector<uint64_t>> get_relevant_reads(
-    const Graph& graph,
+    const unordered_set<uint64_t>& node_ids,
     const vector<vector<uint64_t>>& all_reads
 ) {
     vector<vector<uint64_t>> relevant_reads;
 
     for (const auto& read : all_reads) {
-        if (graph.nodes.find(read.at(0)) != graph.nodes.end()
-        || graph.nodes.find(read.at(read.size() - 1)) != graph.nodes.end()) {
+        if (node_ids.find(read.at(0)) != node_ids.end()
+        || node_ids.find(read.at(read.size() - 1)) != node_ids.end()) {
             relevant_reads.push_back(read);
         }
     }

@@ -17,6 +17,8 @@
 #include <set>
 
 #include "settings.h"
+#include "reads.h"
+#include "spacer_ordering.h"
 #include <sdbg/sdbg.h>
 
 using namespace std;
@@ -44,6 +46,26 @@ void trim_string(string& s);
  */
 pair<string, optional<string>> get_fastq_files_from_settings(
     const Settings& settings
+);
+
+/**
+ * @brief Get the reads size of a fastq file
+ * 
+ * @param settings Containing the fastq file
+ * 
+ * @return Reads size (size_t)
+ */
+size_t get_reads_size_of_fastq_files(const Settings& settings);
+
+/**
+ * @brief Combines all nodes from all subgraphs
+ * 
+ * @param subgraphs Used for the nodes
+ * 
+ * @return All nodes (unordered_set<uint64_t>)
+ */
+unordered_set<uint64_t> combine_nodes_of_subgraphs(
+    const vector<Graph>& subgraphs
 );
 
 /**
