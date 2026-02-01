@@ -510,10 +510,10 @@ int CycleFinder::FindApproximateCRISPRArrays()
         vector<size_t> local_cycle_counts(thread_count, 0);
         vector<size_t> local_processed(thread_count, 0);
 
-        #pragma omp parallel num_threads(thread_count)
-        {
+        // #pragma omp parallel num_threads(thread_count) // Multithreading doesn't work here
+        // {
             int tid = omp_get_thread_num();
-            #pragma omp for schedule(static)
+            // #pragma omp for schedule(static) // Multithreading doesn't work here
             for (uint64_t start_node_index = 0; start_node_index < nodes_iterator->second.size(); start_node_index++) {
                 uint64_t start_node = nodes_iterator->second[start_node_index];
                 vector<vector<uint64_t>> cycles = this->FindCycleUtil(start_node);
@@ -523,7 +523,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
                     local_results[tid][start_node] = std::move(cycles);
                 }
             }
-        }
+        // }
 
         // Merge local results into shared structures (serial merge)
         for (int t = 0; t < thread_count; ++t) {
