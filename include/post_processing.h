@@ -1,3 +1,6 @@
+#ifndef POST_PROCESSING_H
+#define POST_PROCESSING_H
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -8,256 +11,539 @@
 #include <unordered_set>
 #include <algorithm>
 #include <numeric>
-#include <rapidfuzz/fuzz.hpp>
+#include <filesystem>
+#include <functional>
+#include "spoa/spoa.hpp"
+#include "settings.h"
 
-class CRISPRAnalyzer {
+namespace fs = std::filesystem;
+
+/**
+ * PostProcessor: Deduplicate cycles and output CRISPR arrays.
+ *
+ * Pipeline:
+ * 1-5: ORIGINAL — glue, group by 23-mer, unanimous extend, extract spacers, dedup
+ * 6:   Cluster similar repeats by edit distance, SPOA consensus (front repeat)
+ * 7:   Per array: detect tail repeat in spacer suffixes, validate it matches
+ *       a prefix of front consensus, SPOA consensus on tails, strip + prepend
+ * 8:   Sanity filter on repeat/spacer dimensions
+ * 9:   Output
+ */
+class PostProcessor {
 private:
-    std::string output_path;
-    std::unordered_map<std::string, std::vector<std::string>> systems;
-    int omitted_repeats = 0;
-    int total_spacers = 0;
-    int amount, min_sl, max_sl, min_rl, max_rl, mean_similarity;
-    std::map<std::string, std::vector<std::string>> grouped_repeat_cycles;
+    Settings& settings;
 
-public:
-    CRISPRAnalyzer(unordered_map<string, vector<string>> systems_map,
-                std::string output = "crispr_report.txt",
-                int amt = 2, int minsl = 23, int maxsl = 50,
-                int minrl = 23, int maxrl = 50, int mean_sim = 90)
-        : systems(std::move(systems_map)), output_path(std::move(output)), amount(amt),
-        min_sl(minsl), max_sl(maxsl), min_rl(minrl), max_rl(maxrl),
-        mean_similarity(mean_sim) {}
+    static constexpr int GROUP_KMER_SIZE = 23;
+    static constexpr int DEDUP_KMER_SIZE = 23;
+    static constexpr int TAIL_KMER_SIZE = 22;
+    static constexpr int MAX_LINES_PER_FILE = 10000;
 
-    std::map<std::string, std::vector<std::string>> getSystems() const {
-        return this->grouped_repeat_cycles;
+    // SPOA merge parameters
+    static constexpr int MAX_EDIT_DIST = 4;
+
+    // Tail detection parameters
+    static constexpr int MAX_TAIL_SCAN = 40;
+    static constexpr double TAIL_AGREE_THRESH = 0.6;
+    static constexpr int TAIL_SUSTAIN_WINDOW = 3;
+    static constexpr int MIN_TAIL_LEN = 5;
+    static constexpr int MIN_SPACER_AFTER_TRIM = 15;
+
+    // Tail validation: max edit distance between tail_consensus and front_consensus prefix
+    static constexpr int MAX_TAIL_PREFIX_EDIT_DIST = 2;
+
+    // Sanity filters
+    static constexpr int MAX_REPEAT_LEN = 55;
+    static constexpr int MIN_REPEAT_LEN = 20;
+    static constexpr int MIN_SPACER_LEN = 20;
+    static constexpr double MIN_MEDIAN_SPACER_REPEAT_RATIO = 0.5;
+
+    struct ConsensusArray {
+        std::string consensus;
+        std::vector<std::pair<std::string, std::string>> entries;
+    };
+    std::vector<ConsensusArray> consensus_arrays;
+
+    std::map<std::string, std::vector<std::string>> crispr_arrays;
+
+    struct SpacerData {
+        std::string spacer;
+        std::string repeat;
+        std::string cycle;
+    };
+
+    std::vector<int> parent;
+
+    int find(int x) {
+        if (parent[x] != x) parent[x] = find(parent[x]);
+        return parent[x];
     }
 
-    void parse_input(const std::string& content) {
-        std::istringstream stream(content);
-        std::string line, repeat;
-        while (std::getline(stream, line)) {
-            if (line.empty() || line == "----------------------------------") continue;
-            if (line.find("Repeat:") == 0) {
-                repeat = line.substr(7);
-                repeat.erase(0, repeat.find_first_not_of(" \t"));
-                systems[repeat] = {};
-            } else if (line.find("Number of Spacers:") == std::string::npos && line != "Spacers:") {
-                systems[repeat].push_back(line);
-            }
-        }
-    }
-    std::vector<std::string> get_common_kmers(const std::vector<std::string>& kmers,
-                                              const std::vector<std::string>& sequences) {
-        std::unordered_map<std::string, int> count;
-        for (const auto& kmer : kmers) {
-            count[kmer]++;
-        }
-
-        std::vector<std::string> common;
-        int threshold = sequences.size() * 0.75;
-        for (const auto& pair : count) {
-            if (pair.second >= threshold) {
-                common.push_back(pair.first);
-            }
-        }
-        return common;
+    void unite(int x, int y) {
+        int px = find(x), py = find(y);
+        if (px != py) parent[px] = py;
     }
 
-    std::vector<std::string> find_common_prefix_kmers(const std::vector<std::string>& sequences, int k) {
+    std::unordered_set<std::string> get_kmers(const std::string& seq, int k) {
+        std::unordered_set<std::string> kmers;
+        if ((int)seq.size() >= k) {
+            for (size_t i = 0; i <= seq.size() - k; ++i)
+                kmers.insert(seq.substr(i, k));
+        }
+        return kmers;
+    }
+
+    std::string glue_kmers(const std::string& line) {
+        std::istringstream iss(line);
         std::vector<std::string> kmers;
-        for (const auto& seq : sequences) {
-            for (int i = 1; i <= std::min(k, (int)seq.size()); ++i) {
-                kmers.push_back(seq.substr(0, i));
-            }
-        }
-        return get_common_kmers(kmers, sequences);
-    }
+        std::string kmer;
+        while (iss >> kmer) kmers.push_back(kmer);
+        if (kmers.empty()) return "";
 
-    std::vector<std::string> find_common_suffix_kmers(const std::vector<std::string>& sequences, int k) {
-        std::vector<std::string> kmers;
-        for (const auto& seq : sequences) {
-            for (int i = std::max(0, (int)seq.size() - k); i < (int)seq.size(); ++i) {
-                kmers.push_back(seq.substr(i));
-            }
-        }
-        return get_common_kmers(kmers, sequences);
-    }
-
-    std::vector<std::string> trim_kmers_from_sequences(const std::vector<std::string>& sequences,
-                                                       const std::vector<std::string>& prefixes,
-                                                       const std::vector<std::string>& suffixes) {
-        std::vector<std::string> trimmed;
-        for (auto seq : sequences) {
-            for (const auto& pre : prefixes) {
-                if (seq.find(pre) == 0) {
-                    seq = seq.substr(pre.size());
+        std::string result = kmers[0];
+        for (size_t i = 1; i < kmers.size(); ++i) {
+            const std::string& next = kmers[i];
+            bool found = false;
+            for (int k = (int)result.size(); k > 0; --k) {
+                if ((int)next.size() >= k &&
+                    result.substr(result.size() - k) == next.substr(0, k)) {
+                    result += next.substr(k);
+                    found = true;
                     break;
                 }
             }
-            for (const auto& suf : suffixes) {
-                if (seq.size() >= suf.size() &&
-                    seq.compare(seq.size() - suf.size(), suf.size(), suf) == 0) {
-                    seq = seq.substr(0, seq.size() - suf.size());
-                    break;
-                }
-            }
-            if ((int)seq.size() >= min_sl && (int)seq.size() <= max_sl) {
-                trimmed.push_back(seq);
-            }
+            if (!found) result += next;
         }
-        return trimmed;
-    }
-    bool validate_spacer_diversity(const std::vector<std::string>& sequences) {
-        std::vector<double> scores;
-        for (size_t i = 0; i < sequences.size(); ++i) {
-            for (size_t j = i + 1; j < sequences.size(); ++j) {
-                double score = rapidfuzz::fuzz::ratio(sequences[i], sequences[j]);
-                scores.push_back(score);
-            }
-        }
-        if (scores.empty()) return false;
-        double sum = std::accumulate(scores.begin(), scores.end(), 0.0);
-        double mean = sum / scores.size();
-        return mean <= mean_similarity;
-    }
-
-    std::vector<std::string> filter_substring_spacers(const std::vector<std::string>& spacers) {
-        std::vector<std::string> filtered;
-        std::unordered_set<std::string> kept;
-        // Sort by length descending to check shorter ones against longer ones
-        std::vector<std::string> sorted = spacers;
-        std::sort(sorted.begin(), sorted.end(), [](const std::string& a, const std::string& b) {
-            return a.size() > b.size();
-        });
-        for (const auto& spacer : sorted) {
-            bool is_substring = false;
-            for (const auto& kept_spacer : kept) {
-                if (rapidfuzz::fuzz::partial_ratio(spacer, kept_spacer) >= 90.0) {
-                    is_substring = true;
-                    break;
-                }
-            }
-            if (!is_substring) {
-                kept.insert(spacer);
-                filtered.push_back(spacer);
-            }
-        }
-        return filtered;
-    }
-
-    std::vector<std::string> filter_by_length(const std::vector<std::string>& spacers) {
-        std::vector<std::string> filtered;
-        for (const auto& spacer : spacers) {
-            if ((int)spacer.size() >= min_sl && (int)spacer.size() <= max_sl) {
-                filtered.push_back(spacer);
-            }
-        }
-        return filtered;
-    }
-
-    std::string reconstruct_repeat(const std::string& original,
-                                   const std::vector<std::string>& prefixes,
-                                   const std::vector<std::string>& suffixes) {
-        std::string result = original;
-        if (!prefixes.empty()) result += prefixes.back();
-        if (!suffixes.empty()) result = suffixes.front() + result;
         return result;
     }
 
-    void generate_report(const std::string& repeat,
-                         const std::vector<std::string>& spacers,
-                         std::ofstream& out) {
-        out << "--------------------------------------------------\n";
-        out << repeat << "\n";
-        this->grouped_repeat_cycles[repeat] = {};
-        out << "--------------------------------------------------\n";
-        for (const auto& spacer : spacers) {
-            out << spacer << "\n";
-            this->grouped_repeat_cycles[repeat].push_back(spacer);
+    int edit_distance(const std::string& a, const std::string& b, int max_dist) {
+        int m = (int)a.size(), n = (int)b.size();
+        if (std::abs(m - n) > max_dist) return max_dist + 1;
+
+        std::vector<int> prev(n + 1), curr(n + 1);
+        for (int j = 0; j <= n; ++j) prev[j] = j;
+
+        for (int i = 1; i <= m; ++i) {
+            curr[0] = i;
+            int row_min = curr[0];
+            for (int j = 1; j <= n; ++j) {
+                int cost = (a[i-1] == b[j-1]) ? 0 : 1;
+                curr[j] = std::min({prev[j] + 1, curr[j-1] + 1, prev[j-1] + cost});
+                row_min = std::min(row_min, curr[j]);
+            }
+            if (row_min > max_dist) return max_dist + 1;
+            std::swap(prev, curr);
         }
-        out << "--------------------------------------------------\n";
-        out << "Number of Spacers: " << spacers.size() << "\n";
-        out << "--------------------------------------------------\n\n";
+        return prev[n];
     }
-    void run_analysis() {
 
-        std::ofstream report(output_path);
-        report << "CRISPR Analysis Report\n";
-        report << "The tool was run with the following parameters:\n";
-        report << "Amount of Spacers: " << amount << "\n";
-        report << "[Min:Max] Length of Spacers: [" << min_sl << ":" << max_sl << "]\n";
-        report << "[Min:Max] Length of Repeats: [" << min_rl << ":" << max_rl << "]\n";
-        report << "Mean Similarity Between Spacers: " << mean_similarity << "\n";
-        report << "Conservation Threshold: 80%\n";
-        report << "--------------------------------------------------\n";
-        for (const auto& pair : systems) {
-            const std::string& repeat = pair.first;
-            const std::vector<std::string>& spacers = pair.second;
+    std::string spoa_consensus(const std::vector<std::pair<std::string, int>>& seq_weights) {
+        if (seq_weights.empty()) return "";
+        if (seq_weights.size() == 1) return seq_weights[0].first;
 
-            if (spacers.size() < 2) {
-                omitted_repeats++;
-                continue;
+        auto alignment_engine = spoa::AlignmentEngine::Create(
+            spoa::AlignmentType::kNW, 5, -4, -8, -6);
+
+        spoa::Graph graph;
+
+        for (const auto& [seq, weight] : seq_weights) {
+            for (int w = 0; w < weight; ++w) {
+                auto alignment = alignment_engine->Align(seq, graph);
+                graph.AddAlignment(alignment, seq);
             }
-
-            int k = this->max_rl - repeat.size();
-            auto prefix_kmers = find_common_prefix_kmers(spacers, k);
-            auto suffix_kmers = find_common_suffix_kmers(spacers, k);
-            std::string updated_repeat = reconstruct_repeat(repeat, prefix_kmers, suffix_kmers);
-
-            if ((int)updated_repeat.size() < min_rl || (int)updated_repeat.size() > max_rl) {
-                omitted_repeats++;
-                continue;
-            }
-
-            auto trimmed = trim_kmers_from_sequences(spacers, prefix_kmers, suffix_kmers);
-            if ((int)trimmed.size() < amount) {
-                omitted_repeats++;
-                continue;
-            }
-
-            std::unordered_set<std::string> unique(trimmed.begin(), trimmed.end());
-            std::vector<std::string> unique_vec(unique.begin(), unique.end());
-
-            unique_vec = filter_substring_spacers(unique_vec);
-
-            unique_vec = filter_by_length(unique_vec);
-
-            if ((int)unique_vec.size() < amount) {
-                omitted_repeats++;
-                continue;
-            }
-
-            // Recompute kmers after filtering substrings
-            auto new_prefix_kmers = find_common_prefix_kmers(unique_vec, k);
-            auto new_suffix_kmers = find_common_suffix_kmers(unique_vec, k);
-            updated_repeat = reconstruct_repeat(repeat, new_prefix_kmers, new_suffix_kmers);
-
-            if ((int)updated_repeat.size() < min_rl || (int)updated_repeat.size() > max_rl) {
-                omitted_repeats++;
-                continue;
-            }
-
-            // Trim again with new kmers
-            unique_vec = trim_kmers_from_sequences(unique_vec, new_prefix_kmers, new_suffix_kmers);
-
-            if ((int)unique_vec.size() < amount) {
-                omitted_repeats++;
-                continue;
-            }
-
-            if (!validate_spacer_diversity(unique_vec)) {
-                omitted_repeats++;
-                continue;
-            }
-
-            generate_report(updated_repeat, unique_vec, report);
-            total_spacers += unique_vec.size();
         }
-        //fill the data in for the grouped_repeat_cycles
 
+        return graph.GenerateConsensus();
+    }
 
-        report << "Number of Systems: " << (systems.size() - omitted_repeats) << "\n";
-        report << "Number of Spacers: " << total_spacers << "\n";
-        report << "Omitted Repeats: " << omitted_repeats << "\n";
+    /**
+     * Detect tail repeat length by reverse majority voting on spacer suffixes.
+     */
+    int detect_tail_length(const std::vector<std::string>& spacers) {
+        if (spacers.size() < 2) return 0;
+
+        int min_len = (int)spacers[0].size();
+        for (const auto& s : spacers)
+            min_len = std::min(min_len, (int)s.size());
+
+        int scan_limit = std::min(MAX_TAIL_SCAN, min_len - MIN_SPACER_AFTER_TRIM);
+        if (scan_limit < MIN_TAIL_LEN) return 0;
+
+        int tail_len = 0;
+        int low_streak = 0;
+
+        for (int rpos = 0; rpos < scan_limit; ++rpos) {
+            int counts[4] = {0, 0, 0, 0};
+            int total = 0;
+            for (const auto& s : spacers) {
+                int pos = (int)s.size() - 1 - rpos;
+                switch (s[pos]) {
+                    case 'A': counts[0]++; total++; break;
+                    case 'C': counts[1]++; total++; break;
+                    case 'G': counts[2]++; total++; break;
+                    case 'T': counts[3]++; total++; break;
+                }
+            }
+            if (total == 0) break;
+
+            int best = *std::max_element(counts, counts + 4);
+            double agreement = (double)best / total;
+
+            if (agreement >= TAIL_AGREE_THRESH) {
+                low_streak = 0;
+                tail_len = rpos + 1;
+            } else {
+                low_streak++;
+                if (low_streak >= TAIL_SUSTAIN_WINDOW) break;
+            }
+        }
+
+        return (tail_len >= MIN_TAIL_LEN) ? tail_len : 0;
+    }
+
+    /**
+     * Validate that tail_consensus approximately matches a prefix of front_consensus.
+     * This is the key biological constraint: the tail is the beginning of the next
+     * repeat occurrence in the cycle, so it must look like the front repeat.
+     */
+    bool validate_tail_matches_front(const std::string& tail, const std::string& front) {
+        if (tail.empty() || front.empty()) return false;
+
+        int check_len = std::min((int)tail.size(), (int)front.size());
+        std::string tail_portion = tail.substr(tail.size() - check_len);
+        std::string front_prefix = front.substr(0, check_len);
+
+        int dist = edit_distance(tail_portion, front_prefix, MAX_TAIL_PREFIX_EDIT_DIST + 1);
+        return dist <= MAX_TAIL_PREFIX_EDIT_DIST;
+    }
+
+    /**
+     * Compute median of a vector of ints.
+     */
+    double median(std::vector<int>& vals) {
+        if (vals.empty()) return 0;
+        std::sort(vals.begin(), vals.end());
+        int n = (int)vals.size();
+        if (n % 2 == 0) return (vals[n/2 - 1] + vals[n/2]) / 2.0;
+        return vals[n/2];
+    }
+
+public:
+    explicit PostProcessor(Settings& s) : settings(s) {}
+
+    std::map<std::string, std::vector<std::string>> getSystems() const {
+        return crispr_arrays;
+    }
+
+    void run_analysis() {
+        std::string input_path = settings.output_folder + "/cycles.txt";
+        std::string output_dir = settings.output_folder;
+        fs::create_directories(output_dir);
+
+        // ==========================================================
+        // ORIGINAL Step 1: Read all cycles and glue k-mers
+        // ==========================================================
+        std::vector<std::string> cycles;
+        {
+            std::ifstream in(input_path);
+            if (!in.is_open()) {
+                std::cerr << "Error: Cannot open cycles file: " << input_path << std::endl;
+                return;
+            }
+            std::string line;
+            while (std::getline(in, line)) {
+                if (!line.empty()) {
+                    line.erase(0, line.find_first_not_of(" \t\r\n"));
+                    line.erase(line.find_last_not_of(" \t\r\n") + 1);
+                    if (!line.empty()) {
+                        std::string glued = glue_kmers(line);
+                        if (!glued.empty()) cycles.push_back(glued);
+                    }
+                }
+            }
+        }
+        std::cout << "Loaded and glued " << cycles.size() << " cycles" << std::endl;
+
+        // ==========================================================
+        // ORIGINAL Step 2: Group by first 23-mer
+        // ==========================================================
+        std::unordered_map<std::string, std::vector<std::string>> groups;
+        for (const auto& seq : cycles) {
+            if ((int)seq.size() >= GROUP_KMER_SIZE)
+                groups[seq.substr(0, GROUP_KMER_SIZE)].push_back(seq);
+        }
+        std::cout << "Grouped into " << groups.size() << " groups" << std::endl;
+
+        // ==========================================================
+        // ORIGINAL Step 3 & 4: Unanimous extend, extract spacers
+        // ==========================================================
+        std::vector<SpacerData> spacer_data;
+
+        for (const auto& [kmer, group_cycles] : groups) {
+            int t = 0;
+            while (true) {
+                std::unordered_set<char> chars;
+                bool valid = true;
+                for (const auto& c : group_cycles) {
+                    int pos = GROUP_KMER_SIZE + t;
+                    if (pos >= (int)c.size() - TAIL_KMER_SIZE) {
+                        valid = false;
+                        break;
+                    }
+                    chars.insert(c[pos]);
+                }
+                if (!valid || chars.size() != 1) break;
+                ++t;
+            }
+
+            int repeat_len = GROUP_KMER_SIZE + t;
+
+            for (const auto& c : group_cycles) {
+                if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
+                    std::string repeat = c.substr(0, repeat_len);
+                    std::string spacer = c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE);
+                    if ((int)spacer.size() >= MIN_SPACER_LEN) {
+                        spacer_data.push_back({spacer, repeat, c});
+                    }
+                }
+            }
+        }
+
+        std::cout << "Extracted " << spacer_data.size() << " spacers" << std::endl;
+        if (spacer_data.empty()) {
+            std::cout << "No spacers found." << std::endl;
+            return;
+        }
+
+        // ==========================================================
+        // ORIGINAL Step 5: Deduplicate spacers via k-mer union-find
+        // ==========================================================
+        std::unordered_map<std::string, std::vector<int>> kmer_index;
+        for (size_t idx = 0; idx < spacer_data.size(); ++idx) {
+            auto kmers = get_kmers(spacer_data[idx].spacer, DEDUP_KMER_SIZE);
+            for (const auto& km : kmers)
+                kmer_index[km].push_back(static_cast<int>(idx));
+        }
+        std::cout << "Built index with " << kmer_index.size() << " unique "
+                  << DEDUP_KMER_SIZE << "-mers" << std::endl;
+
+        parent.resize(spacer_data.size());
+        std::iota(parent.begin(), parent.end(), 0);
+
+        for (const auto& [km, indices] : kmer_index) {
+            for (size_t i = 1; i < indices.size(); ++i)
+                unite(indices[0], indices[i]);
+        }
+
+        std::unordered_map<int, std::vector<int>> clusters;
+        for (size_t idx = 0; idx < spacer_data.size(); ++idx)
+            clusters[find(static_cast<int>(idx))].push_back(static_cast<int>(idx));
+
+        std::cout << "Found " << clusters.size() << " unique spacer clusters" << std::endl;
+
+        // Pick longest spacer per cluster, group by repeat
+        std::map<std::string, std::vector<std::string>> repeat_to_spacers;
+        for (const auto& [root, indices] : clusters) {
+            int best_idx = indices[0];
+            for (int idx : indices) {
+                if (spacer_data[idx].spacer.size() > spacer_data[best_idx].spacer.size())
+                    best_idx = idx;
+            }
+            const auto& sd = spacer_data[best_idx];
+            repeat_to_spacers[sd.repeat].push_back(sd.spacer);
+        }
+
+        // Remove singletons
+        for (auto it = repeat_to_spacers.begin(); it != repeat_to_spacers.end(); ) {
+            if (it->second.size() < 2)
+                it = repeat_to_spacers.erase(it);
+            else
+                ++it;
+        }
+
+        std::cout << "Arrays before SPOA merge: " << repeat_to_spacers.size() << std::endl;
+
+        // ==========================================================
+        // Step 6: Cluster similar repeats by edit distance,
+        //         SPOA consensus on front repeats
+        // ==========================================================
+        std::vector<std::string> all_repeats;
+        for (const auto& [rep, _] : repeat_to_spacers)
+            all_repeats.push_back(rep);
+
+        int nr = (int)all_repeats.size();
+
+        std::vector<int> rep_parent(nr);
+        std::iota(rep_parent.begin(), rep_parent.end(), 0);
+
+        std::function<int(int)> rep_find = [&](int x) -> int {
+            if (rep_parent[x] != x) rep_parent[x] = rep_find(rep_parent[x]);
+            return rep_parent[x];
+        };
+        auto rep_unite = [&](int x, int y) {
+            int px = rep_find(x), py = rep_find(y);
+            if (px != py) rep_parent[px] = py;
+        };
+
+        for (int i = 0; i < nr; ++i) {
+            for (int j = i + 1; j < nr; ++j) {
+                if (edit_distance(all_repeats[i], all_repeats[j], MAX_EDIT_DIST) <= MAX_EDIT_DIST)
+                    rep_unite(i, j);
+            }
+        }
+
+        std::unordered_map<int, std::vector<int>> repeat_clusters;
+        for (int i = 0; i < nr; ++i)
+            repeat_clusters[rep_find(i)].push_back(i);
+
+        std::cout << "Merged repeats into " << repeat_clusters.size()
+                  << " consensus groups (SPOA)" << std::endl;
+
+        // ==========================================================
+        // Step 7: Per consensus group — front SPOA + validated tail SPOA
+        // ==========================================================
+        consensus_arrays.clear();
+        crispr_arrays.clear();
+
+        for (const auto& [croot, rep_indices] : repeat_clusters) {
+            std::vector<std::pair<std::string, int>> weighted_repeats;
+            std::vector<std::pair<std::string, std::string>> merged_entries;
+
+            for (int ri : rep_indices) {
+                const std::string& rep = all_repeats[ri];
+                const auto& spacers = repeat_to_spacers[rep];
+                weighted_repeats.emplace_back(rep, (int)spacers.size());
+                for (const auto& sp : spacers)
+                    merged_entries.emplace_back(rep, sp);
+            }
+
+            if (merged_entries.size() < 2) continue;
+
+            // --- Front consensus via SPOA ---
+            std::string front_consensus = spoa_consensus(weighted_repeats);
+
+            // --- Tail detection + validation ---
+            std::vector<std::string> all_spacers;
+            for (const auto& [rv, sp] : merged_entries)
+                all_spacers.push_back(sp);
+
+            int tail_len = detect_tail_length(all_spacers);
+            std::string tail_consensus;
+            bool tail_valid = false;
+
+            if (tail_len > 0) {
+                // Extract tail portions, SPOA consensus
+                std::vector<std::pair<std::string, int>> tail_seqs;
+                for (const auto& sp : all_spacers) {
+                    std::string tail = sp.substr(sp.size() - tail_len);
+                    tail_seqs.emplace_back(tail, 1);
+                }
+                tail_consensus = spoa_consensus(tail_seqs);
+
+                // VALIDATE: tail must match a prefix of front_consensus
+                tail_valid = validate_tail_matches_front(tail_consensus, front_consensus);
+
+                if (tail_valid) {
+                    // Trim tail from spacers
+                    std::vector<std::pair<std::string, std::string>> trimmed_entries;
+                    for (const auto& [rv, sp] : merged_entries) {
+                        int trim = std::min(tail_len, (int)sp.size() - MIN_SPACER_AFTER_TRIM);
+                        if (trim > 0) {
+                            std::string trimmed = sp.substr(0, sp.size() - trim);
+                            if ((int)trimmed.size() >= MIN_SPACER_AFTER_TRIM) {
+                                trimmed_entries.emplace_back(rv, trimmed);
+                                continue;
+                            }
+                        }
+                        trimmed_entries.push_back({rv, sp});
+                    }
+                    merged_entries = std::move(trimmed_entries);
+                } else {
+                    tail_consensus.clear();
+                }
+            }
+
+            if (merged_entries.size() < 2) continue;
+
+            // Full consensus = tail_consensus + front_consensus
+            std::string full_consensus = tail_consensus + front_consensus;
+
+            // --- Sanity filter: repeat length ---
+            if ((int)full_consensus.size() > MAX_REPEAT_LEN ||
+                (int)full_consensus.size() < MIN_REPEAT_LEN) {
+                std::cout << "  Filtered (repeat length " << full_consensus.size()
+                          << "bp): " << full_consensus.substr(0, 30) << "..." << std::endl;
+                continue;
+            }
+
+            // --- Sanity filter: median spacer / repeat ratio ---
+            std::vector<int> spacer_lens;
+            for (const auto& [rv, sp] : merged_entries)
+                spacer_lens.push_back((int)sp.size());
+
+            double med_spacer = median(spacer_lens);
+            double ratio = med_spacer / (double)full_consensus.size();
+            if (ratio < MIN_MEDIAN_SPACER_REPEAT_RATIO) {
+                std::cout << "  Filtered (spacer/repeat ratio " << ratio
+                          << "): " << full_consensus.substr(0, 30) << "..." << std::endl;
+                continue;
+            }
+
+            consensus_arrays.push_back({full_consensus, merged_entries});
+
+            std::vector<std::string> spacers;
+            for (const auto& [rv, sp] : merged_entries)
+                spacers.push_back(sp);
+            crispr_arrays[full_consensus] = spacers;
+        }
+
+        // ==========================================================
+        // Step 8: Output
+        // ==========================================================
+        int file_index = 1;
+        int current_lines = 0;
+        std::ofstream out;
+
+        auto open_new_file = [&]() {
+            if (out.is_open()) out.close();
+            std::string filename = output_dir + "/CRISPR_Arrays_" +
+                                   std::to_string(file_index) + ".txt";
+            out.open(filename);
+            ++file_index;
+            current_lines = 0;
+            std::cout << "Writing to: " << filename << std::endl;
+        };
+
+        open_new_file();
+
+        for (const auto& arr : consensus_arrays) {
+            int lines_needed = 1 + (int)arr.entries.size() + 1;
+            if (current_lines + lines_needed > MAX_LINES_PER_FILE && current_lines > 0)
+                open_new_file();
+
+            out << "Consensus repeat:\t" << arr.consensus << "\n";
+            ++current_lines;
+
+            for (const auto& [repeat_var, spacer] : arr.entries) {
+                out << repeat_var << "\t\t" << spacer << "\n";
+                ++current_lines;
+            }
+
+            out << "\n";
+            ++current_lines;
+        }
+
+        if (out.is_open()) out.close();
+
+        int total_spacers = 0;
+        for (const auto& arr : consensus_arrays)
+            total_spacers += (int)arr.entries.size();
+
+        std::cout << "\n=== Post-Processing Summary ===" << std::endl;
+        std::cout << "Total CRISPR arrays: " << consensus_arrays.size() << std::endl;
+        std::cout << "Total unique spacers: " << total_spacers << std::endl;
+        std::cout << "Output files: " << (file_index - 1) << std::endl;
     }
 };
+
+#endif // POST_PROCESSING_H
