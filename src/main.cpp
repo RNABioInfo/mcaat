@@ -522,15 +522,20 @@ int main(int argc, char** argv) {
     SDBG sdbg;
     string graph_folder_old = settings.graph_folder;
     settings.graph_folder+="/graph";
-    //settings.graph_folder="/vol/d/development/git/mcaat_master/optimizations/mcaat/build/mcaat_run_2025-12-29_11-15-30/graph/graph";
-      char * cstr = new char [settings.graph_folder.length()+1];
+    char * cstr = new char [settings.graph_folder.length()+1];
     std::strcpy (cstr, settings.graph_folder.c_str());
     cout << "Graph folder: " << cstr << endl;
     sdbg.LoadFromFile(cstr);
     cout << "Loaded the graph" << endl;
     settings.sdbg = &sdbg;
-    // %% LOAD GRAPH %%
 
+    // %% LOAD GRAPH %%
+    // %% LOAD GRAPH %%
+    // per graph calculate in and outdegree distributions of all multiplicity>=2 nodes
+
+    delete[] cstr;
+    
+    
     // %% FBCE ALGORITHM %%
     cout << "FBCE START:" << endl;
     auto start_time = chrono::high_resolution_clock::now();
@@ -539,21 +544,22 @@ int main(int argc, char** argv) {
     auto cycles_map = cycle_finder.results;
     cout << "Number of nodes in results: " << cycles_map.size() << endl;
     // %% FBCE ALGORITHM %%
-    int number_of_spacers = 0;
     // %% FILTERS %%
-    cout << "FILTERS START:" << endl;
-    Filters filters(sdbg, cycles_map);
-    auto  SYSTEMS = filters.ListArrays(number_of_spacers);
-    cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
+    // cout << "FILTERS START:" << endl;
+    // Filters filters(sdbg, cycles_map);
+    // auto  SYSTEMS = filters.ListArrays(number_of_spacers);
+    // cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
     //%% POST PROCESSING %%
     cout << "POST PROCESSING START:" << endl;
-    CRISPRAnalyzer analyzer(SYSTEMS, settings.output_file);
-    analyzer.run_analysis();
-    cout << "Saved in: " << settings.output_file << endl;
+    PostProcessor processor(settings);
+    processor.run_analysis();
+    cout << "Saved in: " << settings.output_folder << endl;
     //%% POST PROCESSING %%
     
     // %% DELETE THE GRAPH FOLDER %%
-    fs::remove_all(graph_folder_old);
+
+    //fs::remove_all(graph_folder_old);
+    std::cout << "Removed folder: " << graph_folder_old << std::endl;
     // %% DELETE THE GRAPH FOLDER %%      
     
     /*
