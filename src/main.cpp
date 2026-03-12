@@ -593,3 +593,132 @@ int main(int argc, char** argv) {
     // %% DELETE THE GRAPH FOLDER %%
 }
 // #endif
+
+
+/*
+
+int main(int argc, char** argv) {
+    // %% PARSE ARGUMENTS %%
+    Settings settings = parse_arguments(argc, argv);
+    if (check_for_error(settings)){
+        cout << "Folder " << settings.output_folder;
+        cout << " will be deleted due to errors." << endl;
+        
+        cout << "Do you want that folder to be removed? (y/n): ";
+        char answer;
+        cin >> answer;
+        if (answer != 'y' && answer != 'Y') {
+            cout << "Exiting the program." << endl;
+            return 1;
+        }
+        cout << "Removing folder: " << settings.output_folder << endl;
+        fs::remove_all(settings.output_folder); 
+        return 1;
+    }
+    // %% PARSE ARGUMENTS %%
+
+    //// %% BUILD GRAPH %%
+    //SDBGBuild sdbg_build(settings);
+    //// %% BUILD GRAPH %%
+    
+    // %% LOAD GRAPH %%
+    // cycle finder max/min length are read from settings.cycle_finder_settings
+    // cycle finder max/min length are read from settings.cycle_finder_settings
+    SDBG sdbg;
+    vector<string> folders = {"/vol/d/development/git/mCAAT/proof_of_concept/data/mg_03/graph/graph"};
+    string graph_folder_old = folders[0];///vol/d/development/git/mcaat_master/mcaat/_build/mcaat_run_2025-08-28_13-23-46
+    settings.graph_folder=folders[0];
+    char * cstr = new char [settings.graph_folder.length()+1];
+    std::strcpy (cstr, settings.graph_folder.c_str());
+    cout << "Graph folder: " << cstr << endl;
+    sdbg.LoadFromFile(cstr);
+    cout << "Loaded the graph" << endl;
+    settings.sdbg = &sdbg;
+
+    // %% LOAD GRAPH %%
+    // %% LOAD GRAPH %%
+    // per graph calculate in and outdegree distributions of all multiplicity>=2 nodes
+
+    delete[] cstr;
+    
+    
+    // %% FBCE ALGORITHM %%
+    cout << "FBCE START:" << endl;
+    auto start_time = chrono::high_resolution_clock::now();
+    CycleFinder cycle_finder(settings);
+    // number_of_spacers_total unused
+    auto cycles_map = cycle_finder.results;
+    cout << "Number of nodes in results: " << cycles_map.size() << endl;
+    // %% FBCE ALGORITHM %%
+    // %% FILTERS %%
+    // cout << "FILTERS START:" << endl;
+    // Filters filters(sdbg, cycles_map);  ---------------------------------- NO MORE ----------------------------------
+    // auto  SYSTEMS = filters.ListArrays(number_of_spacers); ---------------------------------- NO MORE ----------------------------------
+    // cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
+    //%% POST PROCESSING %%
+    cout << "POST PROCESSING START:" << endl;
+    PostProcessor processor(settings);
+    processor.run_analysis();
+    cout << "Saved in: " << settings.output_folder << endl;
+    //%% POST PROCESSING %%
+    
+    // %% DELETE THE GRAPH FOLDER %%
+
+    //fs::remove_all(graph_folder_old);
+    std::cout << "Removed folder: " << graph_folder_old << std::endl;
+    // %% DELETE THE GRAPH FOLDER %%      
+    
+    auto cycles = cycles_map_to_cycles(cycles_map); // easier type to handle
+
+    cout << "\n══════════════════════════════════════════════" << endl;
+    cout << "🔸STEP 6: Finding relevant reads" << endl;
+    cout << "══════════════════════════════════════════════" << endl;
+    const auto reads = run_and_debug_finding_of_relevant_reads(
+        cycles,
+        settings,
+        sdbg
+    );
+
+    cout << "\n══════════════════════════════════════════════" << endl;
+    cout << "🔸STEP 7: Order the spacers" << endl;
+    cout << "══════════════════════════════════════════════" << endl;
+    const auto found_systems = run_and_debug_spacer_ordering(reads, sdbg, cycles);
+
+
+    if (settings.benchmark_file != "") {
+        cout << "\n══════════════════════════════════════════════" << endl;
+        cout << "🔸STEP 8: Compare to ground of truth using benchmark file" << endl;
+        cout << "══════════════════════════════════════════════" << endl;
+        run_and_debug_benchmark_results(settings, found_systems);
+    } else {
+        cout << "\n══════════════════════════════════════════════" << endl;
+        cout << "🔸STEP 8: Results" << endl;
+        cout << "══════════════════════════════════════════════" << endl;
+        run_and_debug_results(found_systems);
+    }
+    
+    cout << "══════════════════════════════════════════════" << endl;
+
+    // %% POST PROCESSING %%
+    cout << "POST PROCESSING START:" << endl;
+    unordered_map<string, vector<string>> all_systems;
+    for (const auto& [_sequence, repeat, spacers, _conf_a, _conf_b] : found_systems) {
+        all_systems[repeat] = spacers;
+    }
+    CRISPRAnalyzer analyzer(all_systems, settings.output_file);
+    analyzer.run_analysis();
+    cout << "Saved in: " << settings.output_file << endl;
+    // %% POST PROCESSING %%
+
+    // %% DELETE THE GRAPH FOLDER %%
+    try {
+        fs::remove_all(settings.graph_folder);
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Warning: Could not remove graph folder: " << e.what() << std::endl;
+    }
+        
+    // %% DELETE THE GRAPH FOLDER %%
+                
+}
+}
+*/
