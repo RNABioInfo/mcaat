@@ -1,7 +1,7 @@
 ## 😸 MCAAT - Metagenomic CRISPR Array Analysis Tool
 
 > [!IMPORTANT]
-> The tool is currently in heavy development. We are testing new functionality like spacer ordering, CAS gene detection and protospacer detection. PLEASE USE DOCKER: [https://hub.docker.com/r/feeka94/mcaat](https://hub.docker.com/r/feeka94/mcaat)
+> The tool is currently in heavy development. We are testing new functionalities like spacer ordering, CAS gene detection and protospacer detection. PLEASE USE DOCKER: [https://hub.docker.com/r/feeka94/mcaat](https://hub.docker.com/r/feeka94/mcaat)
 
 - CRISPR-Cas is a bacterial immune system also famous for its use in genome editing. The diversity of known systems could be significantly increased by metagenomic data. 
 - Here we present the Metagenomic CRISPR Array Analysis Tool MCAAT, a highly sensitive algorithm for finding CRISPR Arrays in un-assembled metagenomic data. 
