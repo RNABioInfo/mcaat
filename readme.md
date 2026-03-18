@@ -1,4 +1,4 @@
-## 😸 MCAAT - Metagenomic CRISPR Array Analysis Tool
+## MCAAT - Metagenomic CRISPR Array Analysis Tool
 
 > [!IMPORTANT]
 > The tool is currently in heavy development. We are testing new functionalities like spacer ordering, CAS gene detection and protospacer detection. PLEASE USE DOCKER: [https://hub.docker.com/r/feeka94/mcaat](https://hub.docker.com/r/feeka94/mcaat)
@@ -9,7 +9,7 @@
 - MCAAT's assembly-free graph-based strategy outperforms assembly-based workflows and other assembly-free methods on synthetic and real metagenomes. 
 ---
 
-### 🥳 NEWS
+### NEWS
 - Docker container available under: https://hub.docker.com/r/feeka94/mcaat
 - Version 0.3 makes use of following optimization techniques:
   - Better data structures for preprocessing, `phmap::flat_hash_set`
@@ -60,7 +60,7 @@ docker rmi mcaat
 
 ### Compiling the project
 
-#### 🔧 Build the Project
+#### Build the Project
 To allow ./install.sh make changes, we execute following command:
 ```bash
 chmod +x ./install.sh
@@ -85,15 +85,15 @@ To clean up you can use --clean flag.
 ```
 
 ---
-### 🧾 Command-Line Arguments
+### Command-Line Arguments
 
-#### ✅ Required
+#### Required
 
 | Argument                  | Description                                                                 |
 |---------------------------|-----------------------------------------------------------------------------|
 | `--input_files <file1> [file2]` | One or two input FASTA/FASTQ files. If one file is provided, it is treated as single-end data. If two files are provided, they are treated as paired-end reads. |
 
-#### ⚙️ Optional
+#### Optional
 
 | Argument                  | Description                                                                 |
 |---------------------------|-----------------------------------------------------------------------------|
@@ -104,7 +104,7 @@ To clean up you can use --clean flag.
 
 ---
 
-### 📁 Output Structure
+### Output Structure
 
 The tool creates the following directory structure inside the specified output folder:
 
@@ -115,7 +115,7 @@ The tool creates the following directory structure inside the specified output f
 
 ---
 
-### 🧪 Example Usage
+### Example Usage
 
 | Scenario                     | Command                                                                 |
 |-----------------------------|-------------------------------------------------------------------------|
@@ -133,7 +133,7 @@ The tool creates the following directory structure inside the specified output f
 
 ---
 
-### ⚙️ Settings file support
+### Settings file support
 
 Create a simple key=value text file (one setting per line) and pass it with `--settings /path/to/file`.
 
