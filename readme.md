@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icon.png" alt="MCAAT" width="180"/>
+</p>
+
 # MCAAT — v1.0.0
 
 Finds CRISPR arrays in raw, un-assembled metagenomic reads. Builds a succinct de Bruijn graph and detects multicycles — the structural signature of CRISPR repeat-spacer arrays — without any prior assembly step.
