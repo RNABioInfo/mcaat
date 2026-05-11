@@ -265,6 +265,19 @@ Settings parse_arguments(int argc, char* argv[]) {
     if (settings.output_file.empty())
         settings.output_file = (fs::path(settings.output_folder) / "CRISPR_Arrays.txt").string();
 
+    // Apply defaults before printing
+    if (settings.threads == 0) {
+        size_t hc = thread::hardware_concurrency();
+        settings.threads = (hc > 2) ? hc - 2 : 1;
+    }
+    if (settings.ram == 0.0) {
+        settings.ram = get_total_system_ram() * 0.95;
+        if (settings.ram < 1.0) {
+            cerr << "Warning: could not read system RAM, defaulting to 4G" << endl;
+            settings.ram = 4.0;
+        }
+    }
+
     // Debug output
     cout << "Output folder: " << settings.output_folder << endl;
     cout << "Graph folder: " << settings.graph_folder << endl;
@@ -306,19 +319,6 @@ Settings parse_arguments(int argc, char* argv[]) {
              << settings.graph_folder << ", " << settings.cycles_folder << endl;
     } catch (const fs::filesystem_error& e) {
         throw runtime_error("Error: Could not create directories: " + string(e.what()));
-    }
-
-    if (settings.threads == 0) {
-        size_t hc = thread::hardware_concurrency();
-        settings.threads = (hc > 2) ? hc - 2 : 1;
-    }
-
-    if (settings.ram == 0.0) {
-        settings.ram = get_total_system_ram() * 0.95;
-        if (settings.ram < 1.0) {
-            cerr << "Warning: could not read system RAM, defaulting to 4G" << endl;
-            settings.ram = 4.0;
-        }
     }
 
     return settings;
