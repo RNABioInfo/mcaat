@@ -1,15 +1,22 @@
 #include "sdbg_build.h"
+#include <cstdio>
+#include <unistd.h>
+#include <fcntl.h>
 
 SDBGBuild::SDBGBuild(Settings settings) : settings(settings)
 {
-    //create a lib file
-    //write to the lib file
-    //build the lib file
-    //build the sdbg
+    // Suppress MEGAHIT's INFO/WARN messages to stderr during graph build
+    int saved_stderr = dup(STDERR_FILENO);
+    int devnull = open("/dev/null", O_WRONLY);
+    dup2(devnull, STDERR_FILENO);
+    close(devnull);
 
     this->BuildLib();
     this->BuildSDBG();
-    
+
+    // Restore stderr
+    dup2(saved_stderr, STDERR_FILENO);
+    close(saved_stderr);
 }
 
 SDBGBuild::~SDBGBuild()
