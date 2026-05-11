@@ -2,9 +2,9 @@
   <img src="icon.png" alt="MCAAT" width="350"/>
 </p>
 
-# MCAAT — v1.0.0
+# MCAAT - v1.0.0
 
-Finds CRISPR arrays in raw, un-assembled metagenomic reads. Builds a succinct de Bruijn graph and detects multicycles — the structural signature of CRISPR repeat-spacer arrays — without any prior assembly step.
+Finds CRISPR arrays in raw, un-assembled metagenomic reads. Builds a succinct de Bruijn graph and detects multicycles - the structural signature of CRISPR repeat-spacer arrays - without any prior assembly step.
 
 Outperforms assembly-based workflows and other assembly-free CRISPR detectors on synthetic and real metagenomes.
 
@@ -52,7 +52,7 @@ mcaat --input-files <file1> [file2] [options]
 
 | Flag | Description |
 |---|---|
-| `--input-files <file1> [file2]` | One or two FASTA/FASTQ files — plain or gzipped. One file = single-end, two files = paired-end |
+| `--input-files <file1> [file2]` | One or two FASTA/FASTQ files - plain or gzipped. One file = single-end, two files = paired-end |
 | `--ram <amount>` | Memory cap. Units: `B`, `K`, `M`, `G` (e.g. `--ram 8G`). Default: 95% of system RAM |
 | `--threads <num>` | Thread count. Default: CPU cores − 2 |
 | `--output-folder <path>` | Output directory. Default: timestamped folder `mcaat_run_YYYY-MM-DD_HH-MM-SS/` |
