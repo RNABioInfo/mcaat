@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstring>
 #include <cctype>
+#include <set>
 #include <unordered_map>
 
 #include <stdio.h>
@@ -26,6 +27,7 @@
 #include "cycle_finder.h"
 #include "filters.h"
 #include "post_processing.h"
+#include "pipeline.h"
 #include "sdbg/sdbg.h"
 #include "sdbg_build.h"
 #include "settings.h"
@@ -109,7 +111,7 @@ Settings parse_arguments(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         string arg = argv[i];
 
-        if (arg == "--help" || arg == "-h" || arg=="") {
+        if (arg == "--help" || arg == "-h") {
             cout << "Usage: ./crispr_analyzer --input_files <file1> [file2] [options]\n"
                  << "\nRequired:\n"
                  << "  --input_files <file1> [file2]   One or two input FASTA/FASTQ files\n"
@@ -127,7 +129,7 @@ Settings parse_arguments(int argc, char* argv[]) {
             exit(0);
         }
        
-        if (arg == "--input-files" || arg == "-i") {
+        if (arg == "--input-files" || arg == "--input_files" || arg == "-i") {
             while (++i < argc && argv[i][0] != '-') {
                 input_files_default.push_back(argv[i]);
                 
@@ -140,7 +142,6 @@ Settings parse_arguments(int argc, char* argv[]) {
             } else {
                 throw runtime_error("Error: Missing value for --benchmark");
             }
-            --i;
         } else if (arg == "--ram") {
             if (++i < argc) {
                 string ram_input = argv[i];
@@ -181,8 +182,11 @@ Settings parse_arguments(int argc, char* argv[]) {
             }
         } else if (arg == "--threads") {
             if (++i < argc) {
-                settings.threads = stoul(argv[i]);
-                
+                try {
+                    settings.threads = stoul(argv[i]);
+                } catch (...) {
+                    throw runtime_error("Error: Invalid value for --threads: " + string(argv[i]));
+                }
             } else {
                 throw runtime_error("Error: Missing value for --threads");
             }
@@ -196,19 +200,31 @@ Settings parse_arguments(int argc, char* argv[]) {
         }
         else if (arg == "--cycle-max-length") {
             if (++i < argc) {
-                settings.cycle_finder_settings.cycle_max_length = stoi(argv[i]);
+                try {
+                    settings.cycle_finder_settings.cycle_max_length = stoi(argv[i]);
+                } catch (...) {
+                    throw runtime_error("Error: Invalid value for --cycle-max-length: " + string(argv[i]));
+                }
             } else {
                 throw runtime_error("Error: Missing value for --cycle-max-length");
             }
         } else if (arg == "--cycle-min-length") {
             if (++i < argc) {
-                settings.cycle_finder_settings.cycle_min_length = stoi(argv[i]);
+                try {
+                    settings.cycle_finder_settings.cycle_min_length = stoi(argv[i]);
+                } catch (...) {
+                    throw runtime_error("Error: Invalid value for --cycle-min-length: " + string(argv[i]));
+                }
             } else {
                 throw runtime_error("Error: Missing value for --cycle-min-length");
             }
         } else if (arg == "--threshold-multiplicity") {
             if (++i < argc) {
-                settings.cycle_finder_settings.threshold_multiplicity = stoull(argv[i]);
+                try {
+                    settings.cycle_finder_settings.threshold_multiplicity = stoull(argv[i]);
+                } catch (...) {
+                    throw runtime_error("Error: Invalid value for --threshold-multiplicity: " + string(argv[i]));
+                }
             } else {
                 throw runtime_error("Error: Missing value for --threshold-multiplicity");
             }
@@ -243,23 +259,45 @@ Settings parse_arguments(int argc, char* argv[]) {
 
     // Set subfolders and output file (but allow them to be set in settings file)
     if (settings.graph_folder.empty())
-        settings.graph_folder = settings.output_folder + "/graph";
+        settings.graph_folder = (fs::path(settings.output_folder) / "graph").string();
     if (settings.cycles_folder.empty())
-        settings.cycles_folder = settings.output_folder + "/cycles";
+        settings.cycles_folder = (fs::path(settings.output_folder) / "cycles").string();
     if (settings.output_file.empty())
-        settings.output_file = settings.output_folder + "/CRISPR_Arrays.txt";
+        settings.output_file = (fs::path(settings.output_folder) / "CRISPR_Arrays.txt").string();
 
     // Debug output
     cout << "Output folder: " << settings.output_folder << endl;
-        cout << "Graph folder: " << settings.graph_folder << endl;
-        cout << "Cycles folder: " << settings.cycles_folder << endl;
-        cout << "CycleFinder settings: max_length=" << settings.cycle_finder_settings.cycle_max_length
-            << " min_length=" << settings.cycle_finder_settings.cycle_min_length
-            << " threshold_mult=" << settings.cycle_finder_settings.threshold_multiplicity
-            << " low_abundance=" << (settings.cycle_finder_settings.low_abundance ? "true" : "false")
-            << " threads=" << settings.threads << endl;
+    cout << "Graph folder: " << settings.graph_folder << endl;
+    cout << "Cycles folder: " << settings.cycles_folder << endl;
+    cout << "CycleFinder settings: max_length=" << settings.cycle_finder_settings.cycle_max_length
+        << " min_length=" << settings.cycle_finder_settings.cycle_min_length
+        << " threshold_mult=" << settings.cycle_finder_settings.threshold_multiplicity
+        << " low_abundance=" << (settings.cycle_finder_settings.low_abundance ? "true" : "false")
+        << " threads=" << settings.threads << endl;
 
-    // Create directories
+    // Validate input files before creating any directories
+    if (input_files_default.size() < 1 || input_files_default.size() > 2) {
+        throw runtime_error("Error: You must provide one or two input files.");
+    }
+
+    static const set<string> valid_exts = {".fa", ".fasta", ".fq", ".fastq", ".gz"};
+    for (const auto& file : input_files_default) {
+        if (!fs::exists(file)) {
+            throw runtime_error("Error: Input file " + file + " does not exist.");
+        }
+        fs::path p(file);
+        if (valid_exts.find(p.extension().string()) == valid_exts.end()) {
+            cerr << "Warning: " << file << " has an unexpected extension, expected FASTA/FASTQ (.fa/.fasta/.fq/.fastq/.gz)" << endl;
+        }
+        // Only overwrite settings.input_files if the CLI actually provided files.
+        // If input files were taken from the settings file, they are already in settings.input_files
+        if (required_files_provided && !input_files_from_settings) {
+            if (!settings.input_files.empty()) settings.input_files += " ";
+            settings.input_files += file;
+        }
+    }
+
+    // Create directories (after input validation)
     try {
         fs::create_directories(settings.output_folder);
         fs::create_directories(settings.graph_folder);
@@ -270,31 +308,17 @@ Settings parse_arguments(int argc, char* argv[]) {
         throw runtime_error("Error: Could not create directories: " + string(e.what()));
     }
 
-    // Validate input files
-    if (input_files_default.size() < 1 || input_files_default.size() > 2) {
-        throw runtime_error("Error: You must provide one or two input files.");
-    }
-
-    int count = 0;
-    for (const auto& file : input_files_default) {
-        if (!fs::exists(file)) {
-            throw runtime_error("Error: Input file " + file + " does not exist.");
-        }
-        count++;
-        // Only overwrite settings.input_files if the CLI actually provided files.
-        // If input files were taken from the settings file, they are already in settings.input_files
-        if (required_files_provided && !input_files_from_settings) {
-            if (!settings.input_files.empty()) settings.input_files += " ";
-            settings.input_files += file;
-        }
-    }
-
     if (settings.threads == 0) {
-        settings.threads = thread::hardware_concurrency() - 2;
+        size_t hc = thread::hardware_concurrency();
+        settings.threads = (hc > 2) ? hc - 2 : 1;
     }
 
     if (settings.ram == 0.0) {
         settings.ram = get_total_system_ram() * 0.95;
+        if (settings.ram < 1.0) {
+            cerr << "Warning: could not read system RAM, defaulting to 4G" << endl;
+            settings.ram = 4.0;
+        }
     }
 
     return settings;
@@ -494,12 +518,9 @@ int main(int argc, char** argv) {
 
 #else
 int main(int argc, char** argv) {
-    // %% PARSE ARGUMENTS %%
     Settings settings = parse_arguments(argc, argv);
-    if (check_for_error(settings)){
-        cout << "Folder " << settings.output_folder;
-        cout << " will be deleted due to errors." << endl;
-        
+    if (check_for_error(settings)) {
+        cout << "Folder " << settings.output_folder << " will be deleted due to errors." << endl;
         cout << "Do you want that folder to be removed? (y/n): ";
         char answer;
         cin >> answer;
@@ -507,114 +528,17 @@ int main(int argc, char** argv) {
             cout << "Exiting the program." << endl;
             return 1;
         }
-        cout << "Removing folder: " << settings.output_folder << endl;
-        fs::remove_all(settings.output_folder); 
+        fs::remove_all(settings.output_folder);
         return 1;
     }
-    // %% PARSE ARGUMENTS %%
 
-    //// %% BUILD GRAPH %%
-    SDBGBuild sdbg_build(settings);
-    //// %% BUILD GRAPH %%
-    
-    // %% LOAD GRAPH %%
-    // cycle finder max/min length are read from settings.cycle_finder_settings
     SDBG sdbg;
-    string graph_folder_old = settings.graph_folder;
-    settings.graph_folder+="/graph";
-    char * cstr = new char [settings.graph_folder.length()+1];
-    std::strcpy (cstr, settings.graph_folder.c_str());
-    cout << "Graph folder: " << cstr << endl;
-    sdbg.LoadFromFile(cstr);
-    cout << "Loaded the graph" << endl;
-    settings.sdbg = &sdbg;
+    step_build_graph(settings);
+    step_load_graph(settings, sdbg);
+    step_find_cycles(settings);
+    step_post_process(settings);
+    step_cleanup(settings);
 
-    // %% LOAD GRAPH %%
-    // %% LOAD GRAPH %%
-    // per graph calculate in and outdegree distributions of all multiplicity>=2 nodes
-
-    delete[] cstr;
-    
-    
-    // %% FBCE ALGORITHM %%
-    cout << "FBCE START:" << endl;
-    auto start_time = chrono::high_resolution_clock::now();
-    CycleFinder cycle_finder(settings);
-    // number_of_spacers_total unused
-    auto cycles_map = cycle_finder.results;
-    cout << "Number of nodes in results: " << cycles_map.size() << endl;
-    // %% FBCE ALGORITHM %%
-    // %% FILTERS %%
-    // cout << "FILTERS START:" << endl;
-    // Filters filters(sdbg, cycles_map);
-    // auto  SYSTEMS = filters.ListArrays(number_of_spacers);
-    // cout<< "Number of spacers: " << number_of_spacers << " before cleaning"<<endl;
-    //%% POST PROCESSING %%
-    cout << "POST PROCESSING START:" << endl;
-    PostProcessor processor(settings);
-    processor.run_analysis();
-    cout << "Saved in: " << settings.output_folder << endl;
-    //%% POST PROCESSING %%
-    
-    // %% DELETE THE GRAPH FOLDER %%
-
-    //fs::remove_all(graph_folder_old);
-    std::cout << "Removed folder: " << graph_folder_old << std::endl;
-    // %% DELETE THE GRAPH FOLDER %%      
-    
-    /*
-    auto cycles = cycles_map_to_cycles(cycles_map); // easier type to handle
-
-    cout << "\n══════════════════════════════════════════════" << endl;
-    cout << "🔸STEP 6: Finding relevant reads" << endl;
-    cout << "══════════════════════════════════════════════" << endl;
-    const auto reads = run_and_debug_finding_of_relevant_reads(
-        cycles,
-        settings,
-        sdbg
-    );
-
-    cout << "\n══════════════════════════════════════════════" << endl;
-    cout << "🔸STEP 7: Order the spacers" << endl;
-    cout << "══════════════════════════════════════════════" << endl;
-    const auto found_systems = run_and_debug_spacer_ordering(reads, sdbg, cycles);
-
-
-    if (settings.benchmark_file != "") {
-        cout << "\n══════════════════════════════════════════════" << endl;
-        cout << "🔸STEP 8: Compare to ground of truth using benchmark file" << endl;
-        cout << "══════════════════════════════════════════════" << endl;
-        run_and_debug_benchmark_results(settings, found_systems);
-    } else {
-        cout << "\n══════════════════════════════════════════════" << endl;
-        cout << "🔸STEP 8: Results" << endl;
-        cout << "══════════════════════════════════════════════" << endl;
-        run_and_debug_results(found_systems);
-    }
-    
-    cout << "══════════════════════════════════════════════" << endl;
-
-    // %% POST PROCESSING %%
-    cout << "POST PROCESSING START:" << endl;
-    unordered_map<string, vector<string>> all_systems;
-    for (const auto& [_sequence, repeat, spacers, _conf_a, _conf_b] : found_systems) {
-        all_systems[repeat] = spacers;
-    }
-    CRISPRAnalyzer analyzer(all_systems, settings.output_file);
-    analyzer.run_analysis();
-    cout << "Saved in: " << settings.output_file << endl;
-    // %% POST PROCESSING %%
-
-    // %% DELETE THE GRAPH FOLDER %%
-    try {
-        fs::remove_all(settings.graph_folder);
-    } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "Warning: Could not remove graph folder: " << e.what() << std::endl;
-    }
-        
-    // %% DELETE THE GRAPH FOLDER %%
-                
-}
-    */
+    return 0;
 }
 #endif

@@ -1,6 +1,6 @@
 #ifndef SDBG_BUILD_H
 #define SDBG_BUILD_H
-#include <linux/limits.h>
+#include <climits>
 #include <filesystem>
 #include <sdbg/sdbg.h>
 #include "settings.h"

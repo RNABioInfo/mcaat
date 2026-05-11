@@ -228,6 +228,26 @@ private:
         return vals[n/2];
     }
 
+    /**
+     * Returns the lexicographically smallest rotation of s.
+     * Ensures cycles from the same CRISPR array starting at different
+     * k-mer offsets all map to the same canonical form before grouping.
+     */
+    std::string canonical_rotation(const std::string& s) {
+        int n = (int)s.size();
+        if (n == 0) return s;
+        int best = 0;
+        for (int i = 1; i < n; ++i) {
+            for (int k = 0; k < n; ++k) {
+                char ci = s[(i + k) % n];
+                char cb = s[(best + k) % n];
+                if (ci < cb) { best = i; break; }
+                if (ci > cb) { break; }
+            }
+        }
+        return s.substr(best) + s.substr(0, best);
+    }
+
 public:
     explicit PostProcessor(Settings& s) : settings(s) {}
 
@@ -257,7 +277,7 @@ public:
                     line.erase(line.find_last_not_of(" \t\r\n") + 1);
                     if (!line.empty()) {
                         std::string glued = glue_kmers(line);
-                        if (!glued.empty()) cycles.push_back(glued);
+                        if (!glued.empty()) cycles.push_back(canonical_rotation(glued));
                     }
                 }
             }

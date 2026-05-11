@@ -8,7 +8,6 @@
 #include <array>
 #include <stack>
 #include <omp.h>
-#include "path_writer.h"
 #include "settings.h"
 #include <unordered_set>
 //#include "progressbar.hpp"
@@ -80,7 +79,7 @@ class CycleFinder {
         // 1. Call ChunkStartNodes to chunk the start nodes based on their multiplicity for parallel processing
         // 1.1 ChunkStartNodes will call DepthLevelSearch to determine if there is a cycle in a certain depth
         // 2. Call FindCycleUtil to find the cycles in the graph
-        // 3. Call PathWriter to write the cycles to a file
+        // 3. Write cycle labels to output_folder/cycles.txt
         // 4. Return the number of cycles found
         int FindApproximateCRISPRArrays();
         ~CycleFinder();

@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM ubuntu:22.04 AS builder
+FROM debian:bookworm AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
+    gettext \
     zlib1g-dev \
     libomp-dev \
     libpthread-stubs0-dev \
@@ -18,7 +19,7 @@ WORKDIR /app
 RUN git clone --recurse-submodules https://github.com/RNABioInfo/mcaat.git .
 
 RUN mkdir build && cd build && \
-    cmake .. && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j$(nproc)
 
 # Stage 2: Runtime

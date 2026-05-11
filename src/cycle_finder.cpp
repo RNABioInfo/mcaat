@@ -2,6 +2,8 @@
 #include "filters.h"
 #include "settings.h"
 #include <stdexcept>
+#include <fstream>
+#include <stack>
 
 // Parallel hashmap for better performance in DLS
 #include <parallel_hashmap/phmap.h>
@@ -377,17 +379,22 @@ vector<uint64_t> CycleFinder::CollectTips() {
 } 
 
 void CycleFinder::RecursiveReduction(uint64_t tip) {
-    if (this->settings.sdbg->EdgeOutdegree(tip)> 0) 
-        return;
-    unordered_set<uint64_t> parents;
-    this->_GetIncomings(tip, parents);
-    this->settings.sdbg->SetInvalidEdge(tip);
-    for (uint64_t parent : parents) 
-        if(this->settings.sdbg->IsValidEdge(parent)) 
-            this->RecursiveReduction(parent);
-        else 
+    std::stack<uint64_t> work;
+    work.push(tip);
+    while (!work.empty()) {
+        uint64_t node = work.top();
+        work.pop();
+        if (this->settings.sdbg->EdgeOutdegree(node) > 0)
             continue;
-    return;
+        if (!this->settings.sdbg->IsValidEdge(node))
+            continue;
+        unordered_set<uint64_t> parents;
+        this->_GetIncomings(node, parents);
+        this->settings.sdbg->SetInvalidEdge(node);
+        for (uint64_t parent : parents)
+            if (this->settings.sdbg->IsValidEdge(parent))
+                work.push(parent);
+    }
 }
 void CycleFinder::InvalidateMultiplicityOneNodes() {
     uint64_t invalidated = 0;
@@ -500,6 +507,10 @@ int CycleFinder::FindApproximateCRISPRArrays()
         v.resize(words, 0);
     }
     for (auto nodes_iterator = start_nodes_chunked.begin(); nodes_iterator != start_nodes_chunked.end(); nodes_iterator++) {
+        // Reset visited bitmaps so nodes from a higher-multiplicity bucket don't
+        // block traversal in lower-multiplicity buckets.
+        for (auto &v : per_thread_visited)
+            std::fill(v.begin(), v.end(), 0);
         size_t cumulative_at_bucket_start = cumulative;
         auto thread_count = static_cast<int>(this->settings.threads);
         if (static_cast<int>(nodes_iterator->second.size()) < thread_count)
@@ -543,7 +554,41 @@ int CycleFinder::FindApproximateCRISPRArrays()
         // Completed cycle enumeration
         std::cout << "Cycle enumeration completed: total cycles=" << cumulative
               << ", result nodes=" << this->results.size() << std::endl;
+
+    const std::string cycles_path = this->settings.output_folder + "/cycles.txt";
+    this->writeMapToFile(this->results, cycles_path);
+
     return cumulative;
+}
+
+void CycleFinder::writeMapToFile(
+    const std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>>& cycles,
+    const std::string& filename)
+{
+    std::ofstream out(filename);
+    if (!out.is_open()) {
+        std::cerr << "Error: Cannot write cycles to: " << filename << std::endl;
+        return;
+    }
+    const size_t k = this->settings.sdbg->k();
+    std::vector<uint8_t> seq(k);
+    for (const auto& [start_node, cycle_vec] : cycles) {
+        for (const auto& cycle : cycle_vec) {
+            for (size_t i = 0; i < cycle.size(); ++i) {
+                seq.assign(k, 0);
+                this->settings.sdbg->GetLabel(cycle[i], seq.data());
+                std::string label(k, 'N');
+                for (size_t j = 0; j < k; ++j) {
+                    uint8_t c = seq[k - 1 - j];
+                    label[j] = (c >= 1 && c <= 4) ? "ACGT"[c - 1] : 'N';
+                }
+                if (i > 0) out << ' ';
+                out << label;
+            }
+            out << '\n';
+        }
+    }
+    std::cout << "Cycles written to: " << filename << std::endl;
 }
 
 CycleFinder::~CycleFinder() {}

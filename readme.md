@@ -1,172 +1,122 @@
-## MCAAT - Metagenomic CRISPR Array Analysis Tool
+# MCAAT — v1.0.0
 
-> [!IMPORTANT]
-> The tool is currently in heavy development. We are testing new functionalities like spacer ordering, CAS gene detection and protospacer detection. PLEASE USE DOCKER: [https://hub.docker.com/r/feeka94/mcaat](https://hub.docker.com/r/feeka94/mcaat)
+Finds CRISPR arrays in raw, un-assembled metagenomic reads. Builds a succinct de Bruijn graph and detects multicycles — the structural signature of CRISPR repeat-spacer arrays — without any prior assembly step.
 
-- CRISPR-Cas is a bacterial immune system also famous for its use in genome editing. The diversity of known systems could be significantly increased by metagenomic data. 
-- Here we present the Metagenomic CRISPR Array Analysis Tool MCAAT, a highly sensitive algorithm for finding CRISPR Arrays in un-assembled metagenomic data. 
-- It takes advantage of the properties of CRISPR arrays that form multicycles in de Bruijn graphs. 
-- MCAAT's assembly-free graph-based strategy outperforms assembly-based workflows and other assembly-free methods on synthetic and real metagenomes. 
----
+Outperforms assembly-based workflows and other assembly-free CRISPR detectors on synthetic and real metagenomes.
 
-### NEWS
-- Docker container available under: https://hub.docker.com/r/feeka94/mcaat
-- Version 0.3 makes use of following optimization techniques:
-  - Better data structures for preprocessing, `phmap::flat_hash_set`
-  - Added compiler intrinsics to guide the hardware in the right direction
-  - Reserving the capacity to prevent rehashing
-In depth technical details: [educational resource](./src/z_educational_guide.md) and [optimization developer notes](./src/z_optimization_dev_notes.md). 
+## Requirements
 
+- CMake ≥ 3.12, C++17, zlib, OpenMP, BZip2
+- Docker (recommended for production use)
 
-### Installation using docker
-#### Docker Build
+## Build
+
+```bash
+git clone --recurse-submodules https://github.com/feeka94/mcaat.git
+cd mcaat
+
+chmod +x ./install.sh
+./install.sh
+```
+
+The `mcaat` binary will be at `build/mcaat`.
+
+Optional flags:
+
+```bash
+./install.sh --install   # also installs to system
+./install.sh --clean     # clean build artifacts
+```
+
+### Docker
 
 ```bash
 docker build -t mcaat .
-```
 
----
-
-#### Run the Tool Using Docker
-
-Mount your working directory to access input/output files:
-
-```bash
 docker run --rm -v $(pwd):/data mcaat \
-  --input_files /data/reads_R1.fastq /data/reads_R2.fastq \
+  --input-files /data/reads_R1.fastq /data/reads_R2.fastq \
   --output-folder /data/results
 ```
 
----
+The image is based on `debian:bookworm-slim` and ships only the `mcaat` binary and runtime libs (`libomp5`, `zlib1g`).
 
-#### Final Image Size
-
-The final image is based on `debian:bookworm-slim` and includes only:
-
-- The `mcaat` binary
-- Runtime libraries: `libomp5`, `zlib1g`
-
-This keeps the image small and portable.
-
----
-
-#### Clean Up
-
-To remove the image:
+## Usage
 
 ```bash
-docker rmi mcaat
+mcaat --input-files <file1> [file2] [options]
 ```
 
-### Compiling the project
+| Flag | Description |
+|---|---|
+| `--input-files <file1> [file2]` | One or two FASTA/FASTQ files — plain or gzipped. One file = single-end, two files = paired-end |
+| `--ram <amount>` | Memory cap. Units: `B`, `K`, `M`, `G` (e.g. `--ram 8G`). Default: 95% of system RAM |
+| `--threads <num>` | Thread count. Default: CPU cores − 2 |
+| `--output-folder <path>` | Output directory. Default: timestamped folder `mcaat_run_YYYY-MM-DD_HH-MM-SS/` |
+| `--benchmark <file>` | File with expected CRISPR sequences (one per line) for evaluation |
+| `--cycle-max-length <int>` | Maximum cycle length to search. Default: 77 |
+| `--cycle-min-length <int>` | Minimum cycle length to search. Default: 27 |
+| `--threshold-multiplicity <int>` | Min edge multiplicity for cycle start nodes. Default: 20 |
+| `--low-abundance <true\|false>` | Enable low-abundance mode. Default: true |
+| `--settings <path>` | Key=value settings file (CLI flags override it) |
+| `--help`, `-h` | Show usage and exit |
 
-#### Build the Project
-To allow ./install.sh make changes, we execute following command:
-```bash
-chmod +x ./install.sh
-```
-You can build the project and the working version will be saved in the build folder.
-```bash
-./install.sh
-```
-It is also possible to install the library by simply putting the --install flag.
-```bash
-./install.sh --install
-```
-To clean up you can use --clean flag.
-
----
-
-
-### Usage
-
-```bash
-./mcaat --input-files <file1> [file2] [--ram <amount>] [--threads <num>] [--output-folder <path>] [--help]
-```
-
----
-### Command-Line Arguments
-
-#### Required
-
-| Argument                  | Description                                                                 |
-|---------------------------|-----------------------------------------------------------------------------|
-| `--input_files <file1> [file2]` | One or two input FASTA/FASTQ files. If one file is provided, it is treated as single-end data. If two files are provided, they are treated as paired-end reads. |
-
-#### Optional
-
-| Argument                  | Description                                                                 |
-|---------------------------|-----------------------------------------------------------------------------|
-| `--ram <amount>`          | Maximum RAM to use. Units: `B`, `K`, `M`, `G`. <br>**Default:** 95% of system RAM <br>**Example:** `--ram 4G` |
-| `--threads <num>`         | Number of threads to use. <br>**Default:** total CPU cores minus 2          |
-| `--output-folder <path>`  | Output directory for results. <br>If not provided, a timestamped folder will be created automatically. If provided, the folder is used exactly as given. |
-| `--help`, `-h`            | Show usage information and exit                                            |
-
----
-
-### Output Structure
-
-The tool creates the following directory structure inside the specified output folder:
+## Output
 
 ```
 <output-folder>/
-├── CRISPR_Arrays.txt         # Raw CRISPR array output
+├── CRISPR_Arrays.txt    # detected arrays: repeat + spacers per system
+├── graph/               # succinct de Bruijn graph files
+└── cycles/              # raw cycle data
 ```
 
----
+## Settings file
 
-### Example Usage
+Pass a `key=value` file with `--settings`. CLI flags override any value from the file.
 
-| Scenario                     | Command                                                                 |
-|-----------------------------|-------------------------------------------------------------------------|
-| Paired-end input with custom output | `./mcaat --input_files reads_R1.fastq reads_R2.fastq --ram 8G --threads 12 --output-folder results/my_run` |
-| Single-end input with default output | `./mcaat --input_files reads.fastq` <br>Creates a folder like `mcaat_run_2025-07-07_15-30-00/` |
-
-
----
-
-#### Notes
-
-- Input files must exist and be accessible.
-- If RAM is set below 1 GB or above system capacity, the program will exit with an error.
-- If only one input file is provided, the tool assumes single-end data.
-
----
-
-### Settings file support
-
-Create a simple key=value text file (one setting per line) and pass it with `--settings /path/to/file`.
-
-The program reads values from this file unless you override them with CLI flags. If you change the file, run the program again — new values will be used.
-
-Example of ```settings.txt``` (must include `input_files`):
 ```
-# MUST INCLUDE
-input_files=/data/sample_folder/1.fastq /data/sample_folder/2.fastq.fastq
+input_files=/data/R1.fastq /data/R2.fastq
 ram=128G
 threads=26
-output_folder=results/run_2025-11-19
-# OPTIONAL
+output_folder=results/run_1
 cycle_max_length=77
 cycle_min_length=27
 threshold_multiplicity=20
 low_abundance=true
 ```
 
-Notes:
-- `input_files` accepts one or two paths; entries may be separated by spaces, commas, or semicolons.
-- Terminal values will override the ```settings.txt```. For example for simplicity you can use the ```settings.txt``` file and change only ```-i``` parameter.
+`input_files` accepts one or two paths separated by spaces, commas, or semicolons.
 
----
+## Source
 
-#### Requirements
+```
+CMakeLists.txt
+install.sh
+Dockerfile
+libs/megahit/              MEGAHIT sdbg (submodule)
+libs/spoa/                 sequence alignment (submodule)
+libs/kseqpp/               FASTA/FASTQ I/O (submodule)
+libs/rapidfuzz-cpp/        fuzzy string matching (submodule)
+include/                   headers
+src/
+  main.cpp                 CLI + argument parsing
+  sdbg_build.cpp           de Bruijn graph construction
+  cycle_finder.cpp         multicycle detection (parallel DFS)
+  post_processing.h        CRISPR array extraction and consensus
+  pipeline.h               production pipeline steps
+include/                   headers
+tests/                     unit tests
+docs/                      algorithmic notes and optimization report
+```
 
-- C++17 compiler
-- [RapidFuzz](https://github.com/maxbachmann/rapidfuzz-cpp) (for fuzzy string matching)
-- Filesystem support (`<filesystem>`)
+## Roadmap
 
----
+### v2.0.0 (planned)
+- **CAS detection**: identify and annotate CAS genes flanking detected CRISPR arrays
+- **Protospacer detection**: map spacers back to reads/contigs to find protospacer sequences and PAM sites
 
-## Support
+## Citation
 
-If you encounter issues or have questions, feel free to open an issue or write us an email: fikrat.talibli@ibmg.uni-stuttgart.de. If you are using this software please cite this paper: https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558.
+If you use MCAAT please cite: https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558
+
+Contact: fikrat.talibli@ibmg.uni-stuttgart.de
+

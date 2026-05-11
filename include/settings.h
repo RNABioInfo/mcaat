@@ -74,8 +74,18 @@ struct Settings {
         
         // Check input files
         bool input_valid = !input_files.empty();
-        settings_message_map["Input Files"] = make_pair(input_valid, 
-            input_valid ? input_files + " exist(s)" : "No input files specified");
+        if (input_valid) {
+            istringstream iss(input_files);
+            string tok;
+            while (iss >> tok) {
+                if (!fs::exists(tok)) {
+                    input_valid = false;
+                    break;
+                }
+            }
+        }
+        settings_message_map["Input Files"] = make_pair(input_valid,
+            input_valid ? input_files : "File(s) not found: " + input_files);
 
         // Check RAM (using reasonable default max of 128GB if not specified)
         string ram_str = to_string(ram).substr(0, to_string(ram).find(".") + 3);
