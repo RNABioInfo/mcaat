@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon.png" alt="MCAAT" width="350"/>
+  <img src="icon.png?v=2" alt="MCAAT" width="350"/>
 </p>
 
 # MCAAT - v1.0.0
