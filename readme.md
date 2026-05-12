@@ -116,37 +116,38 @@ low-abundance=true
 CMakeLists.txt
 install.sh
 Dockerfile
-libs/megahit/              MEGAHIT sdbg (submodule)
-libs/spoa/                 sequence alignment (submodule)
-libs/kseqpp/               FASTA/FASTQ I/O (submodule)
+libs/
+  megahit/                 MEGAHIT sdbg (submodule)
+  spoa/                    sequence alignment (submodule)
+  kseqpp/                  FASTA/FASTQ I/O (submodule)
 include/
-  core/                    shared infrastructure
+  core/
     settings.h             global settings struct + file parser
-    pipeline.h             production pipeline steps
-    sdbg_build.h           de Bruijn graph construction wrapper
-    tmp_utils.h            shared utilities
+    pipeline.h             production pipeline steps (header-only)
+    sdbg_build.h
+    tmp_utils.h
     main_run_and_debug.h   debug-only scaffolding
-  crispr_array/            CRISPR array detection
+  crispr_array/
     cycle_finder.h
     filters.h
-    post_processing.h
+    post_processing.h      array consensus + output (header-only)
     evaluation.h
     spacer_ordering.h
     graph_generic_func.h
     sequence_generic_func.h
     node_counter.h
-  io/                      I/O helpers
+  io/
     reads.h
     io_ops.h
     path_writer.h
-  protospacer_detection/   protospacer & phage curation
+  protospacer_detection/
     isolate_protospacers.h
     phage_curator.h
-  cas/                     CAS gene detection (v2.0.0)
+  cas/                     (v2.0.0)
 src/
   main.cpp                 CLI + argument parsing
   core/
-    sdbg_build.cpp         de Bruijn graph construction
+    sdbg_build.cpp
     tmp_utils.cpp
     main_run_and_debug.cpp
   crispr_array/
@@ -163,7 +164,7 @@ src/
   protospacer_detection/
     isolate_protospacers.cpp
     phage_curator.cpp
-  cas/                     CAS gene detection (v2.0.0)
+  cas/                     (v2.0.0)
 tests/                     unit tests
 docs/                      algorithmic notes and optimization report
 ```
