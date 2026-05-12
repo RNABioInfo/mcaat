@@ -258,23 +258,21 @@ private:
     }
 
     /**
-     * Returns the lexicographically smallest rotation of s.
-     * Ensures cycles from the same CRISPR array starting at different
-     * k-mer offsets all map to the same canonical form before grouping.
+     * Rotate s to start at the position of its highest-frequency GROUP_KMER_SIZE-mer
+     * as measured across all cycles (supplied via freq_map).
      */
-    std::string canonical_rotation(const std::string& s) {
+    std::string freq_rotation(const std::string& s,
+                              const std::unordered_map<std::string,int>& freq_map) const {
         int n = (int)s.size();
-        if (n == 0) return s;
-        int best = 0;
-        for (int i = 1; i < n; ++i) {
-            for (int k = 0; k < n; ++k) {
-                char ci = s[(i + k) % n];
-                char cb = s[(best + k) % n];
-                if (ci < cb) { best = i; break; }
-                if (ci > cb) { break; }
-            }
+        if (n < GROUP_KMER_SIZE) return s;
+        int best_pos = 0, best_freq = 0;
+        for (int i = 0; i + GROUP_KMER_SIZE <= n; ++i) {
+            auto it = freq_map.find(s.substr(i, GROUP_KMER_SIZE));
+            int f = (it != freq_map.end()) ? it->second : 0;
+            if (f > best_freq) { best_freq = f; best_pos = i; }
         }
-        return s.substr(best) + s.substr(0, best);
+        if (best_pos == 0) return s;
+        return s.substr(best_pos) + s.substr(0, best_pos);
     }
 
     /**
@@ -330,9 +328,16 @@ public:
                 }
             }
 
+            // Build global k-mer frequency map — repeat k-mers are high-frequency.
+            std::unordered_map<std::string,int> kmer_freq;
+            kmer_freq.reserve(raw_cycles.size() * 4);
+            for (const auto& seq : raw_cycles)
+                for (int i = 0; i + GROUP_KMER_SIZE <= (int)seq.size(); ++i)
+                    kmer_freq[seq.substr(i, GROUP_KMER_SIZE)]++;
+
             cycles.reserve(raw_cycles.size());
             for (const auto& seq : raw_cycles)
-                cycles.push_back(canonical_rotation(seq));
+                cycles.push_back(freq_rotation(seq, kmer_freq));
         }
         std::cout << "  ▸ Loaded " << cycles.size() << " cycles" << std::endl;
 
