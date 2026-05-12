@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <iomanip>
 #include <cstring>
 #include <cctype>
 #include <set>
@@ -33,14 +34,237 @@
 #include "core/settings.h"
 #include "protospacer_detection/phage_curator.h"
 #include "protospacer_detection/isolate_protospacers.h"
+#include "cas/cas_workflow.h"
+#include "cas/cas_writer.h"
+#include "core/array_to_nodes.h"
+
+// needed before the subcommand function body
+namespace fs = std::filesystem;
+
+// ── detect-cas-genes subcommand ───────────────────────────────────────────────
+
+struct CasDetectConfig {
+    std::string arrays_dir;       // folder with CRISPR_Arrays_*.txt
+    std::string graph_path;       // SDBG graph path (dir or prefix)
+    std::string output_dir;       // where CAS_Systems_*.txt are written
+    std::string profiles_dir;     // path to CasFinder-main/profiles/
+    std::string rules_csv;        // path to mcaat/docs/_rules.csv
+    double  min_score       = 0.3;
+    int     beam_width      = 50;
+    int     intergenic_max  = 2000;
+    int     intergenic_min  = -24;
+    int     max_cassette_bp = 30000;
+    int     max_genes       = 10;
+    bool    sensitivity     = false;
+};
+
+static CasDetectConfig parse_cas_config_file(const std::string& path) {
+    CasDetectConfig cfg;
+    std::ifstream f(path);
+    if (!f.is_open())
+        throw std::runtime_error("Cannot open config file: " + path);
+    std::string line;
+    auto trim = [](std::string s) {
+        const char* ws = " \t\r\n";
+        s.erase(0, s.find_first_not_of(ws));
+        if (!s.empty()) s.erase(s.find_last_not_of(ws) + 1);
+        return s;
+    };
+    while (std::getline(f, line)) {
+        auto pos_hash = line.find('#');
+        if (pos_hash != std::string::npos) line = line.substr(0, pos_hash);
+        line = trim(line);
+        if (line.empty()) continue;
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = trim(line.substr(0, eq));
+        std::string val = trim(line.substr(eq + 1));
+        std::replace(key.begin(), key.end(), '_', '-');
+        if      (key == "profiles-dir")      cfg.profiles_dir     = val;
+        else if (key == "rules-csv")         cfg.rules_csv        = val;
+        else if (key == "min-normalized-score") cfg.min_score     = std::stod(val);
+        else if (key == "beam-width")        cfg.beam_width       = std::stoi(val);
+        else if (key == "intergenic-max")    cfg.intergenic_max   = std::stoi(val);
+        else if (key == "intergenic-min")    cfg.intergenic_min   = std::stoi(val);
+        else if (key == "max-cassette-bp")   cfg.max_cassette_bp  = std::stoi(val);
+        else if (key == "max-genes")         cfg.max_genes        = std::stoi(val);
+        else if (key == "sensitivity")       cfg.sensitivity      = (val == "true" || val == "1");
+    }
+    return cfg;
+}
+
+static int run_detect_cas_genes(int argc, char** argv) {
+    // argv[0] = "detect-cas-genes"
+    std::string arrays_dir, graph_path, output_dir, config_file;
+    std::string cli_profiles_dir, cli_rules_csv;
+    bool output_set = false;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "--arrays" || arg == "-a") && i + 1 < argc) {
+            arrays_dir = argv[++i];
+        } else if ((arg == "--graph" || arg == "-g") && i + 1 < argc) {
+            graph_path = argv[++i];
+        } else if ((arg == "--output-folder" || arg == "--output") && i + 1 < argc) {
+            output_dir = argv[++i];
+            output_set = true;
+        } else if (arg == "--profiles-dir" && i + 1 < argc) {
+            cli_profiles_dir = argv[++i];
+        } else if (arg == "--rules-csv" && i + 1 < argc) {
+            cli_rules_csv = argv[++i];
+        } else if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
+            config_file = argv[++i];
+        } else if (arg == "--help" || arg == "-h") {
+            std::cout <<
+                "\nUsage: mcaat detect-cas-genes --arrays <dir> --graph <path>"
+                " --profiles-dir <dir> --rules-csv <file> [options]\n\n"
+                "Required:\n"
+                "  --arrays <dir>          Folder with CRISPR_Arrays_*.txt (MCAAT output)\n"
+                "  --graph  <path>         SDBG graph directory or prefix from a previous run\n"
+                "  --profiles-dir <dir>    HMM profiles folder (CasFinder-main/profiles/)\n"
+                "                          Must contain *.hmm files\n"
+                "  --rules-csv <file>      Type classification rules (mcaat/docs/_rules.csv)\n\n"
+                "Optional:\n"
+                "  --output-folder <dir>   Output directory  [default: <arrays_dir>/cas_detection]\n"
+                "  --config <file>         Key=value config; CLI flags override config values\n\n"
+                "Config keys (--config file):\n"
+                "  profiles-dir=<path>         same as --profiles-dir\n"
+                "  rules-csv=<path>            same as --rules-csv\n"
+                "  min-normalized-score=0.3    Minimum HMM score per position (bits)\n"
+                "  beam-width=50               Beam width for graph traversal\n"
+                "  intergenic-max=2000         Max intergenic gap (bp)\n"
+                "  intergenic-min=-24          Min intergenic gap (bp, negative allows overlaps)\n"
+                "  max-cassette-bp=30000       Max cassette span (bp)\n"
+                "  max-genes=10                Max genes per cassette\n"
+                "  sensitivity=false           Enable sensitivity mode (lower thresholds)\n\n";
+            return 0;
+        } else {
+            std::cerr << "Unknown argument: " << arg << "\n";
+            return 1;
+        }
+    }
+
+    if (arrays_dir.empty())
+        throw std::runtime_error("detect-cas-genes: --arrays is required");
+    if (graph_path.empty())
+        throw std::runtime_error("detect-cas-genes: --graph is required");
+
+    // Load config if provided
+    CasDetectConfig cfg;
+    if (!config_file.empty()) cfg = parse_cas_config_file(config_file);
+
+    // Apply CLI overrides (CLI flags beat config file values)
+    cfg.arrays_dir  = arrays_dir;
+    cfg.graph_path  = graph_path;
+    if (!cli_profiles_dir.empty()) cfg.profiles_dir = cli_profiles_dir;
+    if (!cli_rules_csv.empty())    cfg.rules_csv    = cli_rules_csv;
+    if (output_set) cfg.output_dir = output_dir;
+    if (cfg.output_dir.empty())
+        cfg.output_dir = (fs::path(arrays_dir) / "cas_detection").string();
+
+    // Require profiles and rules
+    if (cfg.profiles_dir.empty())
+        throw std::runtime_error(
+            "detect-cas-genes: --profiles-dir is required.\n"
+            "  Pass it on the command line or add  profiles-dir=<path>  to your --config file.");
+    if (cfg.rules_csv.empty())
+        throw std::runtime_error(
+            "detect-cas-genes: --rules-csv is required.\n"
+            "  Pass it on the command line or add  rules-csv=<path>  to your --config file.");
+    if (!fs::exists(cfg.profiles_dir))
+        throw std::runtime_error("profiles-dir does not exist: " + cfg.profiles_dir);
+    if (!fs::is_directory(cfg.profiles_dir))
+        throw std::runtime_error("profiles-dir is not a directory: " + cfg.profiles_dir);
+    // Verify there are actually .hmm files present
+    {
+        bool has_hmm = false;
+        for (const auto& e : fs::directory_iterator(cfg.profiles_dir)) {
+            if (e.path().extension() == ".hmm") { has_hmm = true; break; }
+        }
+        if (!has_hmm)
+            throw std::runtime_error(
+                "profiles-dir contains no .hmm files: " + cfg.profiles_dir + "\n"
+                "  Expected CasFinder HMM profiles (*.hmm) in this folder.");
+    }
+    if (!fs::exists(cfg.rules_csv))
+        throw std::runtime_error("rules-csv does not exist: " + cfg.rules_csv);
+    if (!fs::exists(cfg.arrays_dir))
+        throw std::runtime_error("arrays dir does not exist: " + cfg.arrays_dir);
+
+    fs::create_directories(cfg.output_dir);
+
+    std::cout << "\nMCAAT  detect-cas-genes\n\n"
+              << "  ▸ Arrays       " << cfg.arrays_dir  << "\n"
+              << "  ▸ Graph        " << cfg.graph_path  << "\n"
+              << "  ▸ Profiles     " << cfg.profiles_dir << "\n"
+              << "  ▸ Rules        " << cfg.rules_csv   << "\n"
+              << "  ▸ Output       " << cfg.output_dir  << "\n\n";
+
+    auto t_start = std::chrono::high_resolution_clock::now();
+    auto elapsed = [&]() {
+        return std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - t_start).count();
+    };
+
+    // ── 1. Load graph ───────────────────────────────────────────────────────
+    std::cout << "[1/3] Loading graph...\n";
+    SDBG sdbg;
+    {
+        std::string load_path = fs::is_directory(cfg.graph_path)
+            ? cfg.graph_path + "/graph"
+            : cfg.graph_path;
+        sdbg.LoadFromFile(load_path.c_str());
+        std::cout << "      " << sdbg.size() << " nodes  k=" << sdbg.k()
+                  << "  (" << std::fixed << std::setprecision(1) << elapsed() << " s)\n\n";
+    }
+
+    // ── 2. Map CRISPR arrays to graph nodes ─────────────────────────────────
+    std::cout << "[2/3] Mapping CRISPR arrays to graph...\n";
+    auto filtered = BuildFilteredArraysFromDir(cfg.arrays_dir, sdbg);
+    std::cout << "      " << filtered.size() << " arrays mapped"
+              << "  (" << std::fixed << std::setprecision(1) << elapsed() << " s)\n\n";
+
+    if (filtered.empty()) {
+        std::cout << "  No arrays found in " << cfg.arrays_dir
+                  << " — nothing to detect.\n\n";
+        return 0;
+    }
+
+    // ── 3. Detect Cas genes ─────────────────────────────────────────────────
+    std::cout << "[3/3] Detecting Cas genes...\n";
+    CasWorkflow workflow(sdbg, cfg.profiles_dir, cfg.rules_csv);
+
+    // Apply parameters
+    CasWorkflowParams params = workflow.GetParams();
+    params.MIN_NORMALIZED_SCORE = cfg.min_score;
+    params.BEAM_WIDTH           = cfg.beam_width;
+    workflow.SetParams(params);
+
+    if (cfg.sensitivity) {
+        workflow.ApplySensitivityMode(true);
+        std::cout << "      sensitivity mode enabled\n";
+    }
+
+    auto results = workflow.DetectAllCassettesFromFiltered(filtered);
+    std::cout << "      done  (" << std::fixed << std::setprecision(1) << elapsed() << " s)\n\n";
+
+    // ── 4. Write output ─────────────────────────────────────────────────────
+    CasWriter writer(cfg.output_dir);
+    writer.Write(results);
+    std::cout << "\nOutput: " << cfg.output_dir << "\n\n";
+
+    return 0;
+}
+
+// ── standard MCAAT helpers (unchanged) ───────────────────────────────────────
 
 using namespace std;
-namespace fs = std::filesystem;
 #ifdef DEBUG
 #pragma message("DEBUG is defined")
 #else
 #pragma message("DEBUG is NOT defined")
 #endif
+
 void print_usage(const char* program_name) {
     cout << "\nMCAAT — Metagenomic CRISPR Array Analysis  v1.0.0\n\n";
 }
@@ -534,6 +758,16 @@ int main(int argc, char** argv) {
 
 #else
 int main(int argc, char** argv) {
+    // ── Subcommand routing ───────────────────────────────────────────────────
+    if (argc >= 2 && std::string(argv[1]) == "detect-cas-genes") {
+        try {
+            return run_detect_cas_genes(argc - 1, argv + 1);
+        } catch (const std::exception& e) {
+            std::cerr << "\nError: " << e.what() << "\n\n";
+            return 1;
+        }
+    }
+
     cout << "\nMCAAT — Metagenomic CRISPR Array Analysis\n\n";
 
     Settings settings = parse_arguments(argc, argv);

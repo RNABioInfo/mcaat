@@ -1,0 +1,45 @@
+# CAS Type Classification Rules (Extracted from XML definitions - MacSyFinder compatible)
+# Format: type_class,mandatory_profiles,accessory_profiles,min_mandatory,min_genes,max_genes,db_count
+# mandatory: Type-defining genes that MUST be present (at least min_mandatory of them)
+# accessory: Optional genes that support classification (cas1/2/4 adaptation + others)
+# db_count:  Number of verified instances in CRISPRCasDB (used as log-prior in type scoring)
+# ANY mandatory OR accessory gene can START a cassette!
+#
+type_class,mandatory_profiles,accessory_profiles,min_mandatory,min_genes,max_genes,db_count
+I-A,cas5a;cas5;cas8a1|cas8a2|cas8a3|cas8a4|cas8a5|cas8a6|cas8a7|cas8a8|cas8a9;csa5gr11;cas7,cas5;cas6;cas3;cas3hd;cas2;cas4;cas1;cas7,1,2,9,298
+I-B,cas5;cas7|cas7b;cas8b2|cas8b10|cas8b11|cas8b12|cas8b13|cas8b1|cas8b3|cas8b4|cas8b5|cas8b6|cas8b7|cas8b8|cas8b9,cas3;cas3hd;cas5;cas11b;cas6;cas7|cas7b;cas2;cas4;cas1,1,2,8,1261
+I-C,cas5;cas7;cas8c,cas3;cas3hd;cas7b;cas6;cas2;cas4;cas1,1,2,7,1712
+I-D,cas6;cas10d;csc1gr5;csc2gr7,cas3|cas3d|cas3hd;cas6|cas6e;cas11d;hth;cas2;cas4;cas1,1,2,8,197
+I-E,cas5;cas7;cas8e;cse2gr11;cas6e,cas3|cas3hd;cas5;cas2;cas4;cas1,1,2,8,5977
+I-F,cas3f;cas5f|cas5;cas7f|cas7;cas8f,cas3|cas3hd;cas5;cas6f;cas1,1,2,6,1452
+I-G,cas3;cas5u;csb2gr5;cas7;csb1gr7;cas8u1|cas8u2;csb3,cas3|cas3hd;cas6e;cas2;cas4;cas1,1,2,6,321
+II-A,cas9;csn2,cas9;cas2;cas1,1,2,4,1231
+II-B,cas9,cas2;cas4;cas1,1,2,4,80
+II-C,cas9,cas6;cas2;cas1,1,2,3,1756
+III-A,cas10;csm4gr5;csm2gr11;csm3gr7;csm5gr7;csx26,cas10;csm3gr7;csm6;csx22;csx1;cas6;tpr;csx23;cas2;cas4;cas1,1,2,9,1123
+III-B,cmr1gr7;cmr5gr11;cas10;cmr6gr7;cmr7,cas6|cas6f;cmr1gr7;cmr3gr5;cmr4gr7;cas10;casr;csx1;cora;dhh;csx18;csm6;primpol;csm3gr7;cas2;cas4;cas1,1,2,9,635
+III-C,cas10;cmr1gr7;cmr3gr5;cmr5gr11;cmr6gr7,cmr1gr7;cmr3gr5;cmr4gr7;cas6;csm3gr7;toprim;cas2;cas4;cas1,1,2,9,84
+III-D,cas10;cas6;csm2gr11;cas11;csm3gr7;csx10gr5;csm4gr5;csx19;csx24;csx25,cas10;cas6;casr;csm2gr11;csm3gr7;csx1;csm6;csx21;csx23;cas2;cas4;cas1,1,2,10,375
+III-E,gramp,cas10;rt;cas2;cas1,1,2,3,50
+III-F,cas10;ssgr11;cas5,cas10;csm3gr7;cas6;rt;csm6,1,2,4,20
+IV-A,csf1gr8;csf2gr7;csf3gr5;csf5gr6,csf1gr8;csf2gr7;csf4;cas6e|cas6f|cas6;csm3gr7;pd;cas1,1,2,5,29
+IV-B,csf4gr11;csf2gr7;csf3gr5,csf2gr7;csf1gr8;csf5gr6;cas6e|cas6,1,2,4,22
+IV-C,cas11;cas10-like;csf3gr5,csf2gr7;cas6;cas2;cas4,1,2,6,15
+IV-D,recd;csf2gr7;csf3gr5,cas6;csf4gr11;csf2gr7;csf1gr8;csf5gr6;cas6e,1,2,4,12
+IV-E,csf3-csf1;cas6,csf2gr7;cas6|cas6e;csf4;csm3gr7;pd,1,2,4,10
+V-A,cas12a,cas2;cas4;cas1,1,2,4,46
+V-B,cas12b1|cas12b2,cas2;cas4;cas1,1,2,3,13
+V-C,cas12c,cas1,1,1,2,5
+V-D,cas12d,cas1,1,1,2,5
+V-E,cas12e,cas2;cas4;cas1,1,2,4,5
+V-F,cas12f1|cas12f2|cas12f3|cas12f6|cas12f7|cas12,cas12f4;cas2;cas4;cas1,1,2,4,16
+V-G,cas12g,,1,1,1,1
+V-H,cas12h,,1,1,1,1
+V-I,cas12i,,1,1,1,1
+V-K,cas12k,cas4,1,1,1,99
+VI-A,cas13a,cas2;cas1,1,1,3,41
+VI-B,cas13b,csx28|csx27|tm,1,1,2,130
+VI-C,cas13c,,1,1,1,6
+VI-D,cas13d,cas2;cas1,1,1,3,1
+VI-X,cas13x,cas2;cas1,1,1,3,1
+VI-Y,cas13y,cas2;cas1,1,1,3,1

@@ -4,8 +4,10 @@
 #include "core/settings.h"
 #include "sdbg/sdbg.h"
 #include "core/sdbg_build.h"
+#include "core/array_to_nodes.h"
 #include "crispr_array/cycle_finder.h"
 #include "crispr_array/post_processing.h"
+#include "cas/crispr_postprocessor.h"
 #include <iostream>
 #include <filesystem>
 
@@ -40,8 +42,23 @@ inline void step_post_process(Settings& settings) {
     processor.run_analysis();
 }
 
-inline void step_cleanup(const Settings& settings) {
-    namespace fs = std::filesystem;
+/**
+ * @brief Map post-processed CRISPR arrays back to SDBG nodes.
+ *
+ * Reads all CRISPR_Arrays_*.txt files from settings.output_folder,
+ * encodes each repeat/spacer sequence as k-mers, and looks up the
+ * corresponding SDBG node IDs via IndexBinarySearch.  Returns a
+ * vector of FilteredArray structs ready for CasWorkflow.
+ */
+inline std::vector<CRISPRPostProcessor::FilteredArray>
+step_build_filtered_arrays(const Settings& settings, const SDBG& sdbg) {
+    std::cout << "  ▸ Mapping CRISPR arrays to graph nodes..." << std::endl;
+    auto arrays = BuildFilteredArraysFromDir(settings.output_folder, sdbg);
+    std::cout << "  ▸ Mapped " << arrays.size() << " arrays" << std::endl;
+    return arrays;
+}
+
+inline void step_cleanup(const Settings& settings) {    namespace fs = std::filesystem;
     fs::path graph_dir = fs::path(settings.output_folder) / "graph";
     std::error_code ec;
     fs::remove_all(graph_dir, ec);
