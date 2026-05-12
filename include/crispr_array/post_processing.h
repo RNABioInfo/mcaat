@@ -388,18 +388,20 @@ public:
                 }
             }
 
-            // For each cycle, find the repeat/spacer boundary as the last
-            // position (within MAX_REPEAT_LEN) whose 23-mer is in repeat_kmers.
-            // Cycles are rotated to start within the repeat, so the last such
-            // position p gives repeat_len = p + GROUP_KMER_SIZE exactly.
+            // For each cycle, find the repeat/spacer boundary as the end of
+            // the CONTIGUOUS run of intersection k-mers starting at position 0.
+            // Using a contiguous run (not global max) prevents a stray spacer
+            // k-mer that coincidentally appears in the intersection from pushing
+            // the boundary past the true repeat end.
             for (const auto& c : group_cycles) {
-                int last_repeat_pos = -1;
+                // Position 0 is always in intersection (it is the grouping k-mer).
+                int last_repeat_pos = 0;
                 int limit = std::min((int)c.size(), MAX_REPEAT_LEN);
-                for (int i = 0; i + GROUP_KMER_SIZE <= limit; ++i) {
-                    if (repeat_kmers.count(c.substr(i, GROUP_KMER_SIZE)))
-                        last_repeat_pos = i;
+                for (int i = 1; i + GROUP_KMER_SIZE <= limit; ++i) {
+                    if (!repeat_kmers.count(c.substr(i, GROUP_KMER_SIZE)))
+                        break;
+                    last_repeat_pos = i;
                 }
-                if (last_repeat_pos < 0) continue;
 
                 int repeat_len = last_repeat_pos + GROUP_KMER_SIZE;
                 if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
