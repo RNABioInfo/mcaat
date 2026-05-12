@@ -359,30 +359,49 @@ public:
         std::cout << "  ▸ Grouped into " << groups.size() << " repeat groups" << std::endl;
 
         // ==========================================================
-        // ORIGINAL Step 3 & 4: Unanimous extend, extract spacers
+        // Step 3 & 4: k-mer set intersection to find repeat boundary
         // ==========================================================
+        // Repeat k-mers by definition appear in EVERY cycle of the same group
+        // (the repeat sequence is conserved across all spacers). Spacer k-mers
+        // differ between cycles. The intersection of all cycles' k-mer sets
+        // isolates the repeat k-mers exactly — no character-by-character
+        // heuristic needed.
         std::vector<SpacerData> spacer_data;
 
         for (const auto& [kmer, group_cycles] : groups) {
-            int t = 0;
-            while (true) {
-                std::unordered_set<char> chars;
-                bool valid = true;
-                for (const auto& c : group_cycles) {
-                    int pos = GROUP_KMER_SIZE + t;
-                    if (pos >= (int)c.size() - TAIL_KMER_SIZE) {
-                        valid = false;
-                        break;
-                    }
-                    chars.insert(c[pos]);
+            // Seed intersection with first cycle's k-mers
+            std::unordered_set<std::string> repeat_kmers;
+            {
+                const auto& c0 = group_cycles[0];
+                for (int i = 0; i + GROUP_KMER_SIZE <= (int)c0.size(); ++i)
+                    repeat_kmers.insert(c0.substr(i, GROUP_KMER_SIZE));
+            }
+            // Intersect with each remaining cycle's k-mers
+            for (size_t ci = 1; ci < group_cycles.size(); ++ci) {
+                std::unordered_set<std::string> cset;
+                const auto& cc = group_cycles[ci];
+                for (int i = 0; i + GROUP_KMER_SIZE <= (int)cc.size(); ++i)
+                    cset.insert(cc.substr(i, GROUP_KMER_SIZE));
+                for (auto it = repeat_kmers.begin(); it != repeat_kmers.end(); ) {
+                    if (!cset.count(*it)) it = repeat_kmers.erase(it);
+                    else ++it;
                 }
-                if (!valid || chars.size() != 1) break;
-                ++t;
             }
 
-            int repeat_len = GROUP_KMER_SIZE + t;
-
+            // For each cycle, find the repeat/spacer boundary as the last
+            // position (within MAX_REPEAT_LEN) whose 23-mer is in repeat_kmers.
+            // Cycles are rotated to start within the repeat, so the last such
+            // position p gives repeat_len = p + GROUP_KMER_SIZE exactly.
             for (const auto& c : group_cycles) {
+                int last_repeat_pos = -1;
+                int limit = std::min((int)c.size(), MAX_REPEAT_LEN);
+                for (int i = 0; i + GROUP_KMER_SIZE <= limit; ++i) {
+                    if (repeat_kmers.count(c.substr(i, GROUP_KMER_SIZE)))
+                        last_repeat_pos = i;
+                }
+                if (last_repeat_pos < 0) continue;
+
+                int repeat_len = last_repeat_pos + GROUP_KMER_SIZE;
                 if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
                     std::string repeat = canonical_seq(c.substr(0, repeat_len));
                     std::string spacer = canonical_seq(c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE));
