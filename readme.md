@@ -62,7 +62,7 @@ mcaat --graph <path> [options]
 | Flag | Description |
 |---|---|
 | `--input-files <file1> [file2]` | One or two FASTA/FASTQ files — plain or gzipped. One file = single-end, two = paired-end |
-| `--graph <path>` | Pre-built SDBG graph folder from a previous run (skips graph construction) |
+| `--graph <path>` | Pre-built SDBG graph directory (or file prefix) from a previous run (skips graph construction) |
 
 **Optional:**
 

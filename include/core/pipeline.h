@@ -14,10 +14,16 @@ inline void step_build_graph(Settings& settings) {
 }
 
 inline void step_load_graph(Settings& settings, SDBG& sdbg) {
-    // Use pre-built graph if provided via --graph, otherwise use the built graph subfolder
-    std::string load_path = settings.graph_input.empty()
-        ? settings.graph_folder + "/graph"
-        : settings.graph_input;
+    namespace fs = std::filesystem;
+    std::string load_path;
+    if (settings.graph_input.empty()) {
+        load_path = settings.graph_folder + "/graph";
+    } else {
+        // If the user passed a directory, auto-append the prefix
+        load_path = fs::is_directory(settings.graph_input)
+            ? settings.graph_input + "/graph"
+            : settings.graph_input;
+    }
     std::cout << "  ▸ Loading graph: " << load_path << std::endl;
     sdbg.LoadFromFile(load_path.c_str());
     std::cout << "  ▸ Graph loaded  (" << sdbg.size() << " nodes, k=" << sdbg.k() << ")" << std::endl;
