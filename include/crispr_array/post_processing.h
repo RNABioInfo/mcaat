@@ -492,6 +492,9 @@ public:
             // --- Sanity filter: repeat length ---
             if ((int)full_consensus.size() > MAX_REPEAT_LEN ||
                 (int)full_consensus.size() < MIN_REPEAT_LEN) {
+                std::cout << "  [filtered] repeat len=" << full_consensus.size()
+                          << "bp (allowed " << MIN_REPEAT_LEN << "–" << MAX_REPEAT_LEN << "): "
+                          << full_consensus.substr(0, 30) << "\n";
                 continue;
             }
 
@@ -503,6 +506,9 @@ public:
             double med_spacer = median(spacer_lens);
             double ratio = med_spacer / (double)full_consensus.size();
             if (ratio < MIN_MEDIAN_SPACER_REPEAT_RATIO) {
+                std::cout << "  [filtered] spacer/repeat ratio=" << ratio
+                          << " (min " << MIN_MEDIAN_SPACER_REPEAT_RATIO << "): "
+                          << full_consensus.substr(0, 30) << "\n";
                 continue;
             }
 
