@@ -1,5 +1,5 @@
-<p align="left">
-  <img src="icon.png?v=2" alt="MCAAT" width="350"/>
+<p align="center">
+  <img src="icon.png?v=2" alt="MCAAT" width="330"/>
 </p>
 
 # metagenomic CRISPR analysis tool - MCAAT v1.0.0
