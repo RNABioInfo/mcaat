@@ -605,7 +605,8 @@ public:
             double med_spacer = median(spacer_lens);
             double ratio = med_spacer / (double)full_consensus.size();
             if (ratio < MIN_MEDIAN_SPACER_REPEAT_RATIO) {
-                std::cout << "  [filtered] spacer/repeat ratio=" << ratio
+                std::cout << "  [filtered] spacer/repeat ratio="
+                          << std::defaultfloat << std::setprecision(4) << ratio
                           << " (min " << MIN_MEDIAN_SPACER_REPEAT_RATIO << "): "
                           << full_consensus.substr(0, 30) << "\n";
                 continue;
