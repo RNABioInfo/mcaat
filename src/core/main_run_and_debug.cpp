@@ -1,4 +1,4 @@
-#include "main_run_and_debug.h"
+#include "core/main_run_and_debug.h"
 
 vector<vector<uint64_t>> run_and_debug_finding_of_relevant_reads(
     const vector<vector<uint64_t>> &cycles,
