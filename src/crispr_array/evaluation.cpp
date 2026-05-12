@@ -1,4 +1,4 @@
-#include "evaluation.h"
+#include "crispr_array/evaluation.h"
 
 uint16_t get_levenshtein_distance(const string& s1, const string& s2) {
     vector<vector<uint16_t>> dist;

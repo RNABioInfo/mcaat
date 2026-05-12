@@ -24,7 +24,7 @@
 #include <algorithm>
 
 #include "sdbg/sdbg.h"
-#include "reads.h"
+#include "io/reads.h"
 
 #include "core/cft.hpp"
 #include "core/Instance.hpp"

@@ -8,7 +8,7 @@
 #include <array>
 #include <stack>
 #include <omp.h>
-#include "settings.h"
+#include "core/settings.h"
 #include <unordered_set>
 //#include "progressbar.hpp"
 #include <list>

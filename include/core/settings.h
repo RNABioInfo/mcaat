@@ -21,6 +21,7 @@ namespace fs = std::filesystem;
 
 struct Settings {
     std::string input_files; // Path to the input files
+    std::string graph_input;  // Path to a pre-built SDBG graph folder (skips build step)
     double ram = 0.0; // Maximum RAM usage in gigabytes
     size_t threads = 0; // Number of threads to use
     std::string output_folder; // Output directory path. Empty until chosen by CLI or settings file.
@@ -113,27 +114,26 @@ struct Settings {
     string print_settings() {
         string erroneous_properties;
         auto settings_map = validate_settings();
-
         for (const auto& [key, value] : settings_map) {
-            if (value.first) {
-                cout << "[✔] " << key << ": " << value.second << endl;
-            } else {
+            if (!value.first) {
                 erroneous_properties += key + " ";
-                cout << "[✗] " << key << ": " << value.second << endl;
+                cout << "  [✗] " << key << ": " << value.second << "\n";
             }
         }
         return erroneous_properties;
     }
 
     // Read settings values from a simple key=value file. Lines starting with # or // are ignored.
-    // Keys mirror struct property names; examples:
-    // input_files=/path/a.fa /path/b.fa
+    // Keys match CLI flag names (dashes); underscore variants are also accepted.
+    // Examples:
+    // input-files=/path/a.fa /path/b.fa
+    // graph=/path/to/graph
     // ram=4G
     // threads=4
-    // cycle_max_length=77
-    // cycle_min_length=27
-    // threshold_multiplicity=20
-    // low_abundance=true
+    // cycle-max-length=77
+    // cycle-min-length=27
+    // threshold-multiplicity=20
+    // low-abundance=true
     bool LoadFromFile(const std::string& path) {
         std::ifstream file(path);
         if (!file.is_open()) {
@@ -161,8 +161,11 @@ struct Settings {
             string key = trim(s.substr(0, eq));
             string val = trim(s.substr(eq + 1));
 
+            // Normalize key: replace underscores with dashes so both formats are accepted
+            std::replace(key.begin(), key.end(), '_', '-');
+
             // Interpret known keys
-            if (key == "input_files") {
+            if (key == "input-files") {
                 // allow space/comma/semicolon-separated file list; normalize to single-space separated
                 vector<string> tokens;
                 string cur;
@@ -184,6 +187,8 @@ struct Settings {
                     this->input_files += tokens[i];
                     if (i + 1 < tokens.size()) this->input_files += " ";
                 }
+            } else if (key == "graph") {
+                this->graph_input = val;
             } else if (key == "ram") {
                 // reuse same parsing as CLI: accept B/K/M/G suffix
                 try {
@@ -208,21 +213,21 @@ struct Settings {
                 }
             } else if (key == "threads") {
                 try { this->threads = stoul(val); } catch (...) { }
-            } else if (key == "output_folder") { this->output_folder = val; }
-            else if (key == "graph_folder") { this->graph_folder = val; }
-            else if (key == "cycles_folder") { this->cycles_folder = val; }
-            else if (key == "output_file") { this->output_file = val; }
-            else if (key == "cycle_max_length") { this->cycle_finder_settings.cycle_max_length = stoi(val); }
-            else if (key == "cycle_min_length") { this->cycle_finder_settings.cycle_min_length = stoi(val); }
-            else if (key == "threshold_multiplicity") { this->cycle_finder_settings.threshold_multiplicity = stoull(val); }
-            else if (key == "low_abundance") {
+            } else if (key == "output-folder") { this->output_folder = val; }
+            else if (key == "graph-folder") { this->graph_folder = val; }
+            else if (key == "cycles-folder") { this->cycles_folder = val; }
+            else if (key == "output-file") { this->output_file = val; }
+            else if (key == "cycle-max-length") { this->cycle_finder_settings.cycle_max_length = stoi(val); }
+            else if (key == "cycle-min-length") { this->cycle_finder_settings.cycle_min_length = stoi(val); }
+            else if (key == "threshold-multiplicity") { this->cycle_finder_settings.threshold_multiplicity = stoull(val); }
+            else if (key == "low-abundance") {
                 std::transform(val.begin(), val.end(), val.begin(), ::tolower);
                 this->cycle_finder_settings.low_abundance = (val == "true" || val == "1" || val == "yes");
             }
-            else if (key == "spacer_min_length") { this->dna_sequence_settings.spacer_min_length = stoi(val); }
-            else if (key == "spacer_max_length") { this->dna_sequence_settings.spacer_max_length = stoi(val); }
-            else if (key == "repeat_min_length") { this->dna_sequence_settings.repeat_min_length = stoi(val); }
-            else if (key == "repeat_max_length") { this->dna_sequence_settings.repeat_max_length = stoi(val); }
+            else if (key == "spacer-min-length") { this->dna_sequence_settings.spacer_min_length = stoi(val); }
+            else if (key == "spacer-max-length") { this->dna_sequence_settings.spacer_max_length = stoi(val); }
+            else if (key == "repeat-min-length") { this->dna_sequence_settings.repeat_min_length = stoi(val); }
+            else if (key == "repeat-max-length") { this->dna_sequence_settings.repeat_max_length = stoi(val); }
             // unknown keys are ignored for forward-compatibility
         }
         file.close();

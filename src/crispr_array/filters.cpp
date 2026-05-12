@@ -1,4 +1,4 @@
-#include "filters.h"
+#include "crispr_array/filters.h"
 
 char Filters::_FetchLastCharacter(size_t node) {
     vector<uint8_t> seq(sdbg.k());

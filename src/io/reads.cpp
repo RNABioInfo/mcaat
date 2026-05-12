@@ -1,4 +1,4 @@
-#include "reads.h"
+#include "io/reads.h"
 
 vector<string> extract_sequences_from_fastq_file(const string& fastq_file_path) {
     vector<string> sequences;

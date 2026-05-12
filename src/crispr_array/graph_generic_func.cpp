@@ -1,5 +1,5 @@
 #include <unordered_set>
-#include "graph_generic_func.h"
+#include "crispr_array/graph_generic_func.h"
 
 
 // generic helper functions for graph operations

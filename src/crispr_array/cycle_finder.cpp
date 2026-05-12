@@ -1,6 +1,6 @@
-#include "cycle_finder.h"
-#include "filters.h"
-#include "settings.h"
+#include "crispr_array/cycle_finder.h"
+#include "crispr_array/filters.h"
+#include "core/settings.h"
 #include <stdexcept>
 #include <fstream>
 #include <stack>
@@ -405,7 +405,7 @@ void CycleFinder::InvalidateMultiplicityOneNodes() {
             invalidated += 1;
         }
     }
-    std::cout << "Pre-filter: invalidated " << invalidated << " node(s) with multiplicity <= 1." << std::endl;
+    std::cout << "  ▸ Pre-filter: removed " << invalidated << " low-multiplicity edges" << std::endl;
 }
 
 /**
@@ -431,7 +431,7 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
             if(!this->settings.sdbg->IsValidEdge(node)) continue;
             size_t edge_indegree = this->settings.sdbg->EdgeIndegree(node);
             uint64_t my_loaded = loaded.fetch_add(1, std::memory_order_relaxed) + 1;
-            if (my_loaded % 1000000 == 0) std::cout << "ChunkStartNodes: scanned " << (my_loaded / 1000000) << "M nodes" << std::endl;
+            if (my_loaded % 1000000 == 0) std::cout << "  ▸ Scanning: " << (my_loaded / 1000000) << "M nodes..." << std::endl;
             if (edge_indegree >= 2 && this->settings.sdbg->EdgeMultiplicity(node) > this->settings.cycle_finder_settings.threshold_multiplicity)
             {
                 if(this->_IncomingNotEqualToCurrentNode(node, edge_indegree)) continue;
@@ -456,7 +456,7 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
    //writeStartNodesToFile(start_nodes_chunked, "start_nodes.txt");
     size_t sum_of_all_quantities_in_all_chunks = 0;
     for (const auto& [key, value] : start_nodes_chunked) {
-        std::cout << "Chunked start nodes: multiplicity bucket (log2)=" << key << ", nodes=" << value.size() << std::endl;
+        std::cout << "  ▸ Bucket mult\u00d7" << (1 << key) << " (log2=" << key << "): " << value.size() << " nodes" << std::endl;
         sum_of_all_quantities_in_all_chunks += value.size();
     }
     return sum_of_all_quantities_in_all_chunks;
@@ -470,7 +470,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
  {
     
     vector<uint64_t> tips = this->CollectTips();
-    std::cout << "Graph size: " << this->settings.sdbg->size() << " nodes; gathered tips: " << tips.size() << std::endl;
+    std::cout << "  ▸ Graph: " << this->settings.sdbg->size() << " nodes, tips: " << tips.size() << std::endl;
     
     this->InvalidateMultiplicityOneNodes();
     for ( uint64_t tip : tips) {
@@ -485,20 +485,18 @@ int CycleFinder::FindApproximateCRISPRArrays()
     }
 
     tips = this->CollectTips();
-    std::cout << "After pruning, tips: " << tips.size() << ", valid edges: " << valid_edges << std::endl;
+    std::cout << "  ▸ After tip pruning: " << valid_edges << " valid edges, " << tips.size() << " tips remain" << std::endl;
     // struct mallinfo mem_info = mallinfo(); // deprecated
     // size_t graph_mem_info = mem_info.uordblks; // unused
     int cumulative = 0;
-    std::cout << "Total nodes in graph: " << this->settings.sdbg->size() << std::endl;
-    string mode = "fastq";
-    std::cout << "Starting cycle enumeration: max_len=" << this->settings.cycle_finder_settings.cycle_max_length
-              << " min_len=" << this->settings.cycle_finder_settings.cycle_min_length
-              << " threads=" << this->settings.threads << std::endl;
+    std::cout << "  ▸ Params: max-len=" << this->settings.cycle_finder_settings.cycle_max_length
+              << "  min-len=" << this->settings.cycle_finder_settings.cycle_min_length
+              << "  threads=" << this->settings.threads << std::endl;
         std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>> all_cycles;
 
     map<int, vector<uint64_t>, greater<int>> start_nodes_chunked;
     size_t start_nodes_amount=this->ChunkStartNodes(start_nodes_chunked);
-    std::cout << "Start nodes found in chunks: " << start_nodes_amount << std::endl;
+    std::cout << "  ▸ Start nodes: " << start_nodes_amount << std::endl;
     size_t counter = 0;
     int max_threads = static_cast<int>(this->settings.threads);
     size_t words = (this->settings.sdbg->size() + 63) / 64;
@@ -548,12 +546,13 @@ int CycleFinder::FindApproximateCRISPRArrays()
         malloc_trim(0);
         // Summarize work performed for this multiplicity bucket and avoid printing too often
         size_t cycles_in_bucket = cumulative - cumulative_at_bucket_start;
-        std::cout << "Bucket log2_mult=" << nodes_iterator->first << ": processed " << nodes_iterator->second.size()
-                  << " nodes, found " << cycles_in_bucket << " cycles (cumulative " << cumulative << ")" << std::endl;
+        std::cout << "  ▸ Bucket log2=" << nodes_iterator->first << ": "
+                  << nodes_iterator->second.size() << " nodes, "
+                  << cycles_in_bucket << " cycles (total " << cumulative << ")" << std::endl;
     }
         // Completed cycle enumeration
-        std::cout << "Cycle enumeration completed: total cycles=" << cumulative
-              << ", result nodes=" << this->results.size() << std::endl;
+        std::cout << "  ▸ Total: " << cumulative << " cycles across "
+              << this->results.size() << " start nodes" << std::endl;
 
     const std::string cycles_path = this->settings.output_folder + "/cycles.txt";
     this->writeMapToFile(this->results, cycles_path);
@@ -588,7 +587,7 @@ void CycleFinder::writeMapToFile(
             out << '\n';
         }
     }
-    std::cout << "Cycles written to: " << filename << std::endl;
+    std::cout << "  ▸ Cycles saved: " << filename << std::endl;
 }
 
 CycleFinder::~CycleFinder() {}

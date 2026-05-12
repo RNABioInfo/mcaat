@@ -1,4 +1,4 @@
-#include "spacer_ordering.h"
+#include "crispr_array/spacer_ordering.h"
 
 void find_strongly_connected_components_dfs(
     const uint64_t node,

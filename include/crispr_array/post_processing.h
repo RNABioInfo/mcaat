@@ -13,8 +13,11 @@
 #include <numeric>
 #include <filesystem>
 #include <functional>
+#include <chrono>
+#include <iomanip>
+#include <ctime>
 #include "spoa/spoa.hpp"
-#include "settings.h"
+#include "core/settings.h"
 
 namespace fs = std::filesystem;
 
@@ -282,7 +285,7 @@ public:
                 }
             }
         }
-        std::cout << "Loaded and glued " << cycles.size() << " cycles" << std::endl;
+        std::cout << "  ▸ Loaded " << cycles.size() << " cycles" << std::endl;
 
         // ==========================================================
         // ORIGINAL Step 2: Group by first 23-mer
@@ -292,7 +295,7 @@ public:
             if ((int)seq.size() >= GROUP_KMER_SIZE)
                 groups[seq.substr(0, GROUP_KMER_SIZE)].push_back(seq);
         }
-        std::cout << "Grouped into " << groups.size() << " groups" << std::endl;
+        std::cout << "  ▸ Grouped into " << groups.size() << " repeat groups" << std::endl;
 
         // ==========================================================
         // ORIGINAL Step 3 & 4: Unanimous extend, extract spacers
@@ -329,9 +332,9 @@ public:
             }
         }
 
-        std::cout << "Extracted " << spacer_data.size() << " spacers" << std::endl;
+        std::cout << "  ▸ Extracted " << spacer_data.size() << " spacers" << std::endl;
         if (spacer_data.empty()) {
-            std::cout << "No spacers found." << std::endl;
+            std::cout << "  No spacers found." << std::endl;
             return;
         }
 
@@ -344,8 +347,7 @@ public:
             for (const auto& km : kmers)
                 kmer_index[km].push_back(static_cast<int>(idx));
         }
-        std::cout << "Built index with " << kmer_index.size() << " unique "
-                  << DEDUP_KMER_SIZE << "-mers" << std::endl;
+        std::cout << "  ▸ Index: " << kmer_index.size() << " unique " << DEDUP_KMER_SIZE << "-mers" << std::endl;
 
         parent.resize(spacer_data.size());
         std::iota(parent.begin(), parent.end(), 0);
@@ -359,7 +361,7 @@ public:
         for (size_t idx = 0; idx < spacer_data.size(); ++idx)
             clusters[find(static_cast<int>(idx))].push_back(static_cast<int>(idx));
 
-        std::cout << "Found " << clusters.size() << " unique spacer clusters" << std::endl;
+        std::cout << "  ▸ Spacer clusters: " << clusters.size() << std::endl;
 
         // Pick longest spacer per cluster, group by repeat
         std::map<std::string, std::vector<std::string>> repeat_to_spacers;
@@ -381,7 +383,7 @@ public:
                 ++it;
         }
 
-        std::cout << "Arrays before SPOA merge: " << repeat_to_spacers.size() << std::endl;
+        std::cout << "  ▸ Arrays before merge: " << repeat_to_spacers.size() << std::endl;
 
         // ==========================================================
         // Step 6: Cluster similar repeats by edit distance,
@@ -416,8 +418,7 @@ public:
         for (int i = 0; i < nr; ++i)
             repeat_clusters[rep_find(i)].push_back(i);
 
-        std::cout << "Merged repeats into " << repeat_clusters.size()
-                  << " consensus groups (SPOA)" << std::endl;
+        std::cout << "  ▸ Repeat groups (post-SPOA merge): " << repeat_clusters.size() << std::endl;
 
         // ==========================================================
         // Step 7: Per consensus group — front SPOA + validated tail SPOA
@@ -491,8 +492,6 @@ public:
             // --- Sanity filter: repeat length ---
             if ((int)full_consensus.size() > MAX_REPEAT_LEN ||
                 (int)full_consensus.size() < MIN_REPEAT_LEN) {
-                std::cout << "  Filtered (repeat length " << full_consensus.size()
-                          << "bp): " << full_consensus.substr(0, 30) << "..." << std::endl;
                 continue;
             }
 
@@ -504,8 +503,6 @@ public:
             double med_spacer = median(spacer_lens);
             double ratio = med_spacer / (double)full_consensus.size();
             if (ratio < MIN_MEDIAN_SPACER_REPEAT_RATIO) {
-                std::cout << "  Filtered (spacer/repeat ratio " << ratio
-                          << "): " << full_consensus.substr(0, 30) << "..." << std::endl;
                 continue;
             }
 
@@ -520,6 +517,17 @@ public:
         // ==========================================================
         // Step 8: Output
         // ==========================================================
+        // Generate timestamp string for file header
+        auto now = std::chrono::system_clock::now();
+        auto now_t = std::chrono::system_clock::to_time_t(now);
+        std::ostringstream ts;
+        ts << std::put_time(std::localtime(&now_t), "%Y-%m-%d %H:%M:%S");
+        std::string timestamp_str = ts.str();
+
+        int total_spacers_final = 0;
+        for (const auto& arr : consensus_arrays)
+            total_spacers_final += (int)arr.entries.size();
+
         int file_index = 1;
         int current_lines = 0;
         std::ofstream out;
@@ -531,21 +539,33 @@ public:
             out.open(filename);
             ++file_index;
             current_lines = 0;
-            std::cout << "Writing to: " << filename << std::endl;
+            // Write file header
+            out << "# MCAAT — CRISPR Array Output\n";
+            out << "# Generated : " << timestamp_str << "\n";
+            out << "# Arrays    : " << consensus_arrays.size() << "\n";
+            out << "# Spacers   : " << total_spacers_final << "\n";
+            out << "# " << std::string(54, '─') << "\n\n";
+            std::cout << "  ▸ Writing " << filename << std::endl;
         };
 
         open_new_file();
 
+        int array_num = 0;
         for (const auto& arr : consensus_arrays) {
-            int lines_needed = 1 + (int)arr.entries.size() + 1;
+            ++array_num;
+            int lines_needed = 2 + (int)arr.entries.size() + 1;
             if (current_lines + lines_needed > MAX_LINES_PER_FILE && current_lines > 0)
                 open_new_file();
 
-            out << "Consensus repeat:\t" << arr.consensus << "\n";
-            ++current_lines;
+            out << ">Array_" << array_num << "  spacers=" << arr.entries.size() << "\n";
+            out << arr.consensus << "\n";
+            current_lines += 2;
 
             for (const auto& [repeat_var, spacer] : arr.entries) {
-                out << repeat_var << "\t\t" << spacer << "\n";
+                const std::string& rv = (repeat_var == arr.consensus)
+                    ? std::string(arr.consensus.size(), '-')
+                    : repeat_var;
+                out << "        " << rv << "\t" << spacer << "\n";
                 ++current_lines;
             }
 
@@ -559,10 +579,9 @@ public:
         for (const auto& arr : consensus_arrays)
             total_spacers += (int)arr.entries.size();
 
-        std::cout << "\n=== Post-Processing Summary ===" << std::endl;
-        std::cout << "Total CRISPR arrays: " << consensus_arrays.size() << std::endl;
-        std::cout << "Total unique spacers: " << total_spacers << std::endl;
-        std::cout << "Output files: " << (file_index - 1) << std::endl;
+        std::cout << "  ▸ Arrays: " << consensus_arrays.size()
+                  << "   Spacers: " << total_spacers
+                  << "   Files: " << (file_index - 1) << std::endl;
     }
 };
 

@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <sdbg/sdbg.h>
-#include "graph_generic_func.h"
+#include "crispr_array/graph_generic_func.h"
 #include <string>
 #include <stack>
 #include <functional>

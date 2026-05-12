@@ -1,4 +1,4 @@
-#include "isolate_protospacers.h"
+#include "protospacer_detection/isolate_protospacers.h"
 #include <vector>
 #include <sstream>
 

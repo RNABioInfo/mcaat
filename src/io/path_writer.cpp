@@ -1,4 +1,4 @@
-#include "path_writer.h"
+#include "io/path_writer.h"
 #ifdef DEBUG
 PathWriter::PathWriter(string mode, SDBG& sdbg, vector<uint64_t> path, string genome_id, string type) 
     : sdbg(sdbg), genome_id(genome_id), type(type) {

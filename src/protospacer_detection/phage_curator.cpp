@@ -1,4 +1,4 @@
-#include "phage_curator.h"
+#include "protospacer_detection/phage_curator.h"
 #include <fstream>
 #include <deque>
 #include <cstdio> // for std::remove

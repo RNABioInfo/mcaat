@@ -20,19 +20,19 @@
 #include <sys/sysctl.h>
 #endif
 #ifdef DEBUG
-#include "io_ops.h"
+#include "io/io_ops.h"
 #endif
 
-#include "main_run_and_debug.h"
-#include "cycle_finder.h"
-#include "filters.h"
-#include "post_processing.h"
-#include "pipeline.h"
+#include "core/main_run_and_debug.h"
+#include "crispr_array/cycle_finder.h"
+#include "crispr_array/filters.h"
+#include "crispr_array/post_processing.h"
+#include "core/pipeline.h"
 #include "sdbg/sdbg.h"
-#include "sdbg_build.h"
-#include "settings.h"
-#include "phage_curator.h"
-#include "isolate_protospacers.h"
+#include "core/sdbg_build.h"
+#include "core/settings.h"
+#include "protospacer_detection/phage_curator.h"
+#include "protospacer_detection/isolate_protospacers.h"
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -42,21 +42,13 @@ namespace fs = std::filesystem;
 #pragma message("DEBUG is NOT defined")
 #endif
 void print_usage(const char* program_name) {
-    cout << "-------------------------------------------------------" << endl;
-    cout << "\n";
-    cout << "mCAAT - Metagenomic CRISPR Array Analysis Tool v. 0.4" << endl;
-    cout << "\n";
-    cout << "-------------------------------------------------------" << endl;
+    cout << "\nMCAAT — Metagenomic CRISPR Array Analysis  v1.0.0\n\n";
 }
 
 bool check_for_error(Settings& settings) {
-    cout << "Step 1. Checking the inputs: " << endl;
     string erroneous_message = settings.print_settings();
-    if (erroneous_message.empty()) {
-        cout << "All inputs are correct. [✔]" << endl;
-        return false;
-    }
-    cout << "Please check the following: " << erroneous_message << endl;
+    if (erroneous_message.empty()) return false;
+    cout << "  Errors found in: " << erroneous_message << "\n";
     return true;
 }
 
@@ -112,20 +104,24 @@ Settings parse_arguments(int argc, char* argv[]) {
         string arg = argv[i];
 
         if (arg == "--help" || arg == "-h") {
-            cout << "Usage: ./crispr_analyzer --input_files <file1> [file2] [options]\n"
-                 << "\nRequired:\n"
-                 << "  --input_files <file1> [file2]   One or two input FASTA/FASTQ files\n"
-                 << "\nOptional:\n"
-                 << "  --ram <amount>                  RAM to use (e.g., 4G, 500M). Default: 95% of system RAM\n"
-                 << "  --threads <num>                 Number of threads. Default: CPU cores - 2\n"
-                 << "  --output-folder <path>          Output directory. If not provided, a timestamped folder is created\n"
-                 << "  --benchmark <file>              File containing expected crispr sequences line separated\n"
-                 << "  --cycle-max-length <int>       Maximum cycle length to search (default in settings)\n"
-                 << "  --cycle-min-length <int>       Minimum cycle length to search (default in settings)\n"
-                 << "  --threshold-multiplicity <int> Minimum multiplicity threshold for start nodes (default in settings)\n"
-                 << "  --low-abundance <true|false>   Enable low abundance mode for cycle filtering\n"
-                 << "  --settings <path>              Path to a key=value settings file (overridden by CLI args)\n"
-                 << "  --help, -h                      Show this help message\n";
+            cout << "\nMCAAT — Metagenomic CRISPR Array Analysis\n\n"
+                 << "Usage:\n"
+                 << "  mcaat --input-files <file1> [file2] [options]\n"
+                 << "  mcaat --graph <path> [options]\n"
+                 << "\nInput (one required):\n"
+                 << "  --input-files <file1> [file2]   One or two FASTA/FASTQ files (plain or gzipped)\n"
+                 << "  --graph <path>                  Pre-built SDBG graph folder (skips construction)\n"
+                 << "\nOptions:\n"
+                 << "  --output-folder <path>          Output directory  [default: mcaat_run_TIMESTAMP]\n"
+                 << "  --ram <amount>                  Memory cap: B/K/M/G suffix  [default: 95% system]\n"
+                 << "  --threads <num>                 Thread count  [default: CPU cores - 2]\n"
+                 << "  --cycle-max-length <int>        Maximum cycle length  [default: 77]\n"
+                 << "  --cycle-min-length <int>        Minimum cycle length  [default: 27]\n"
+                 << "  --threshold-multiplicity <int>  Edge multiplicity cutoff  [default: 20]\n"
+                 << "  --low-abundance <true|false>    Low-abundance mode  [default: true]\n"
+                 << "  --benchmark <file>              Expected sequences for evaluation\n"
+                 << "  --settings <path>               Key=value settings file (CLI overrides)\n"
+                 << "  --help, -h                      Show this message\n\n";
             exit(0);
         }
        
@@ -136,6 +132,16 @@ Settings parse_arguments(int argc, char* argv[]) {
             }
             --i;
             required_files_provided = true;
+        } else if (arg == "--graph") {
+            if (++i < argc) {
+                settings.graph_input = argv[i];
+                if (!fs::exists(settings.graph_input)) {
+                    throw runtime_error("Error: Graph folder does not exist: " + settings.graph_input);
+                }
+                required_files_provided = true;
+            } else {
+                throw runtime_error("Error: Missing value for --graph");
+            }
         } else if (arg == "--benchmark") {
             if (++i < argc) {
                 settings.benchmark_file = argv[i];
@@ -249,8 +255,8 @@ Settings parse_arguments(int argc, char* argv[]) {
         input_files_from_settings = true;
     }
 
-    if (!required_files_provided && input_files_default.empty() && settings.input_files.empty()) {
-        throw runtime_error("Error: No input files provided. Use --input-files <file1> [file2]");
+    if (!required_files_provided && input_files_default.empty() && settings.input_files.empty() && settings.graph_input.empty()) {
+        throw runtime_error("Error: No input provided. Use --input-files <file1> [file2] or --graph <path>");
     }
     // Set default output folder if not provided (only if not set by settings file)
     if (!output_folder_provided && settings.output_folder.empty()) {
@@ -278,36 +284,42 @@ Settings parse_arguments(int argc, char* argv[]) {
         }
     }
 
-    // Debug output
-    cout << "Output folder: " << settings.output_folder << endl;
-    cout << "Graph folder: " << settings.graph_folder << endl;
-    cout << "Cycles folder: " << settings.cycles_folder << endl;
-    cout << "CycleFinder settings: max_length=" << settings.cycle_finder_settings.cycle_max_length
-        << " min_length=" << settings.cycle_finder_settings.cycle_min_length
-        << " threshold_mult=" << settings.cycle_finder_settings.threshold_multiplicity
-        << " low_abundance=" << (settings.cycle_finder_settings.low_abundance ? "true" : "false")
-        << " threads=" << settings.threads << endl;
+    // Print settings summary
+    cout << "  ▸ Output      " << settings.output_folder << "\n";
+    if (!settings.graph_input.empty())
+        cout << "  ▸ Graph       " << settings.graph_input << "  (pre-built)\n";
+    else
+        cout << "  ▸ Input       " << settings.input_files << "\n";
+    cout << fixed << setprecision(1)
+         << "  ▸ RAM         " << settings.ram << " GB"
+         << "    Threads  " << settings.threads << "\n"
+         << "  ▸ Cycles      len " << settings.cycle_finder_settings.cycle_min_length
+         << "–" << settings.cycle_finder_settings.cycle_max_length
+         << "   threshold ×" << settings.cycle_finder_settings.threshold_multiplicity
+         << "   low-abundance " << (settings.cycle_finder_settings.low_abundance ? "on" : "off") << "\n\n";
 
-    // Validate input files before creating any directories
-    if (input_files_default.size() < 1 || input_files_default.size() > 2) {
-        throw runtime_error("Error: You must provide one or two input files.");
-    }
+    // Validate input files before creating any directories (skipped when --graph is used)
+    if (settings.graph_input.empty()) {
+        if (input_files_default.size() < 1 || input_files_default.size() > 2) {
+            throw runtime_error("Error: You must provide one or two input files.");
+        }
 
-    static const set<string> valid_exts = {".fa", ".fasta", ".fq", ".fastq", ".gz"};
-    for (const auto& file : input_files_default) {
-        if (!fs::exists(file)) {
-            throw runtime_error("Error: Input file " + file + " does not exist.");
+        static const set<string> valid_exts = {".fa", ".fasta", ".fq", ".fastq", ".gz"};
+        for (const auto& file : input_files_default) {
+            if (!fs::exists(file)) {
+                throw runtime_error("Error: Input file " + file + " does not exist.");
+            }
+            fs::path p(file);
+            if (valid_exts.find(p.extension().string()) == valid_exts.end()) {
+                cerr << "Warning: " << file << " has an unexpected extension, expected FASTA/FASTQ (.fa/.fasta/.fq/.fastq/.gz)" << endl;
+            }
+            if (required_files_provided && !input_files_from_settings) {
+                if (!settings.input_files.empty()) settings.input_files += " ";
+                settings.input_files += file;
+            }
         }
-        fs::path p(file);
-        if (valid_exts.find(p.extension().string()) == valid_exts.end()) {
-            cerr << "Warning: " << file << " has an unexpected extension, expected FASTA/FASTQ (.fa/.fasta/.fq/.fastq/.gz)" << endl;
-        }
-        // Only overwrite settings.input_files if the CLI actually provided files.
-        // If input files were taken from the settings file, they are already in settings.input_files
-        if (required_files_provided && !input_files_from_settings) {
-            if (!settings.input_files.empty()) settings.input_files += " ";
-            settings.input_files += file;
-        }
+    } else {
+        // graph_input already shown in settings summary above
     }
 
     // Create directories (after input validation)
@@ -315,8 +327,6 @@ Settings parse_arguments(int argc, char* argv[]) {
         fs::create_directories(settings.output_folder);
         fs::create_directories(settings.graph_folder);
         fs::create_directories(settings.cycles_folder);
-        cout << "Created directories: " << settings.output_folder << ", "
-             << settings.graph_folder << ", " << settings.cycles_folder << endl;
     } catch (const fs::filesystem_error& e) {
         throw runtime_error("Error: Could not create directories: " + string(e.what()));
     }
@@ -518,26 +528,54 @@ int main(int argc, char** argv) {
 
 #else
 int main(int argc, char** argv) {
+    cout << "\nMCAAT — Metagenomic CRISPR Array Analysis\n\n";
+
     Settings settings = parse_arguments(argc, argv);
     if (check_for_error(settings)) {
-        cout << "Folder " << settings.output_folder << " will be deleted due to errors." << endl;
-        cout << "Do you want that folder to be removed? (y/n): ";
+        cout << "  Folder " << settings.output_folder << " will be deleted.\n";
+        cout << "  Remove it? (y/n): ";
         char answer;
         cin >> answer;
         if (answer != 'y' && answer != 'Y') {
-            cout << "Exiting the program." << endl;
+            cout << "  Exiting.\n";
             return 1;
         }
         fs::remove_all(settings.output_folder);
         return 1;
     }
 
+    auto t_start = chrono::high_resolution_clock::now();
+    auto step_elapsed = [](chrono::high_resolution_clock::time_point t0) {
+        return chrono::duration<double>(chrono::high_resolution_clock::now() - t0).count();
+    };
+
     SDBG sdbg;
-    step_build_graph(settings);
+    auto t0 = chrono::high_resolution_clock::now();
+    if (settings.graph_input.empty()) {
+        cout << "[1/4] Building de Bruijn graph...\n";
+        step_build_graph(settings);
+    } else {
+        cout << "[1/4] Using pre-built graph\n";
+    }
     step_load_graph(settings, sdbg);
+    cout << "      done in " << fixed << setprecision(1) << step_elapsed(t0) << " s\n\n";
+
+    t0 = chrono::high_resolution_clock::now();
+    cout << "[2/4] Finding CRISPR cycles...\n";
     step_find_cycles(settings);
+    cout << "      done in " << fixed << setprecision(1) << step_elapsed(t0) << " s\n\n";
+
+    t0 = chrono::high_resolution_clock::now();
+    cout << "[3/4] Post-processing arrays...\n";
     step_post_process(settings);
+    cout << "      done in " << fixed << setprecision(1) << step_elapsed(t0) << " s\n\n";
+
+    cout << "[4/4] Cleaning up...\n";
     step_cleanup(settings);
+
+    double total = step_elapsed(t_start);
+    cout << "\nDone in " << fixed << setprecision(1) << total << " s\n"
+         << "Output: " << settings.output_folder << "\n\n";
 
     return 0;
 }
