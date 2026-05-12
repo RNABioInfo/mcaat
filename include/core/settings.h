@@ -73,20 +73,17 @@ struct Settings {
     map<string, pair<bool, string>> validate_settings() const {
         map<string, pair<bool, string>> settings_message_map;
         
-        // Check input files
-        bool input_valid = !input_files.empty();
-        if (input_valid) {
+        // Check input files — skipped when a pre-built graph is provided
+        bool input_valid = !graph_input.empty() || (!input_files.empty() && [&]() {
             istringstream iss(input_files);
             string tok;
-            while (iss >> tok) {
-                if (!fs::exists(tok)) {
-                    input_valid = false;
-                    break;
-                }
-            }
-        }
+            while (iss >> tok)
+                if (!fs::exists(tok)) return false;
+            return true;
+        }());
         settings_message_map["Input Files"] = make_pair(input_valid,
-            input_valid ? input_files : "File(s) not found: " + input_files);
+            input_valid ? (graph_input.empty() ? input_files : "(graph mode)")
+                        : "File(s) not found: " + input_files);
 
         // Check RAM (using reasonable default max of 128GB if not specified)
         string ram_str = to_string(ram).substr(0, to_string(ram).find(".") + 3);

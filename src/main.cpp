@@ -135,8 +135,14 @@ Settings parse_arguments(int argc, char* argv[]) {
         } else if (arg == "--graph") {
             if (++i < argc) {
                 settings.graph_input = argv[i];
-                if (!fs::exists(settings.graph_input)) {
-                    throw runtime_error("Error: Graph folder does not exist: " + settings.graph_input);
+                // Accept a directory (auto-appends /graph in step_load_graph)
+                // or a file prefix — validate by checking the .sdbg_info file exists
+                std::string prefix = fs::is_directory(settings.graph_input)
+                    ? settings.graph_input + "/graph"
+                    : settings.graph_input;
+                if (!fs::exists(prefix + ".sdbg_info")) {
+                    throw runtime_error("Error: No SDBG graph found at: " + settings.graph_input +
+                        "\n  Expected file: " + prefix + ".sdbg_info");
                 }
                 required_files_provided = true;
             } else {
