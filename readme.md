@@ -2,9 +2,9 @@
   <img src="icon.png?v=2" alt="MCAAT" width="350"/>
 </p>
 
-# MCAAT - v1.0.0
+# metagenomic CRISPR analysis tool - MCAAT v1.0.0
 
-**metagenomic CRISPR analysis tool**
+****
 Finds CRISPR arrays in raw, un-assembled metagenomic reads. Builds a succinct de Bruijn graph and detects multicycles - the structural signature of CRISPR repeat-spacer arrays - without any prior assembly step.
 
 Outperforms assembly-based workflows and other assembly-free CRISPR detectors on synthetic and real metagenomes.
