@@ -145,10 +145,13 @@ private:
     }
 
     static std::string revcomp(const std::string& s) {
-        static const char ct[256] = {
-            ['A']='T',['T']='A',['C']='G',['G']='C',
-            ['a']='T',['t']='A',['c']='G',['g']='C',['N']='N',['n']='N'
-        };
+        static const auto ct = [](){
+            std::array<char,256> t{};
+            t['A']='T'; t['T']='A'; t['C']='G'; t['G']='C';
+            t['a']='T'; t['t']='A'; t['c']='G'; t['g']='C';
+            t['N']='N'; t['n']='N';
+            return t;
+        }();
         std::string rc(s.size(), 'N');
         for (size_t i = 0; i < s.size(); ++i)
             rc[s.size()-1-i] = ct[(unsigned char)s[i]];
