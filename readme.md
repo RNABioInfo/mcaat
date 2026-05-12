@@ -1,4 +1,4 @@
-<p align="center">
+<p align="left">
   <img src="icon.png?v=2" alt="MCAAT" width="350"/>
 </p>
 
