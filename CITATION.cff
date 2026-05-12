@@ -9,3 +9,15 @@ authors:
 version: "1.0.0"
 date-released: "2025-02-20"
 url: "https://github.com/RNABioInfo/mcaat.git"
+preferred-citation:
+  type: article
+  title: "MCAAT: Metagenomic CRISPR Array Analysis Tool"
+  authors:
+    - family-names: "Talibli"
+      given-names: "Fikrat"
+    - family-names: "Voß"
+      given-names: "Björn"
+  journal: "microLife"
+  year: 2025
+  doi: "10.1093/femsml/uqaf016"
+  url: "https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558"
