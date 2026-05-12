@@ -95,7 +95,6 @@ Each `CRISPR_Arrays_N.txt` file has a short header followed by one block per arr
 # Generated : 2026-05-12 10:30:21
 # Arrays    : 42
 # Spacers   : 312
-# ──────────────────────────────────────────────────────
 
 >Array_1  spacers=8
 ATCGATCGATCGATCGATCGATCG

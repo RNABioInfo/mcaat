@@ -549,8 +549,7 @@ public:
             out << "# MCAAT — CRISPR Array Output\n";
             out << "# Generated : " << timestamp_str << "\n";
             out << "# Arrays    : " << consensus_arrays.size() << "\n";
-            out << "# Spacers   : " << total_spacers_final << "\n";
-            out << "# " << std::string(54, '─') << "\n\n";
+            out << "# Spacers   : " << total_spacers_final << "\n\n";
             std::cout << "  ▸ Writing " << filename << std::endl;
         };
 
