@@ -258,24 +258,23 @@ private:
     }
 
     /**
-     * Rotate s to start at the position of its highest-frequency GROUP_KMER_SIZE-mer
-     * as measured across all cycles (supplied via freq_map).
-     * Repeat k-mers are high-frequency (they appear in every cycle for that array).
-     * Spacer k-mers are low-frequency (appear in only the cycles containing that spacer).
-     * This guarantees the rotation always lands inside the repeat, never the spacer.
+     * Returns the lexicographically smallest rotation of s.
+     * Ensures cycles from the same CRISPR array starting at different
+     * k-mer offsets all map to the same canonical form before grouping.
      */
-    std::string freq_rotation(const std::string& s,
-                              const std::unordered_map<std::string,int>& freq_map) const {
+    std::string canonical_rotation(const std::string& s) {
         int n = (int)s.size();
-        if (n < GROUP_KMER_SIZE) return s;
-        int best_pos = 0, best_freq = 0;
-        for (int i = 0; i + GROUP_KMER_SIZE <= n; ++i) {
-            auto it = freq_map.find(s.substr(i, GROUP_KMER_SIZE));
-            int f = (it != freq_map.end()) ? it->second : 0;
-            if (f > best_freq) { best_freq = f; best_pos = i; }
+        if (n == 0) return s;
+        int best = 0;
+        for (int i = 1; i < n; ++i) {
+            for (int k = 0; k < n; ++k) {
+                char ci = s[(i + k) % n];
+                char cb = s[(best + k) % n];
+                if (ci < cb) { best = i; break; }
+                if (ci > cb) { break; }
+            }
         }
-        if (best_pos == 0) return s;
-        return s.substr(best_pos) + s.substr(0, best_pos);
+        return s.substr(best) + s.substr(0, best);
     }
 
     /**
@@ -331,20 +330,9 @@ public:
                 }
             }
 
-            // Build global 23-mer frequency map.
-            // Repeat k-mers appear in EVERY cycle for that array (high freq).
-            // Spacer k-mers appear only in the cycles containing that specific spacer (low freq).
-            std::unordered_map<std::string,int> kmer_freq;
-            kmer_freq.reserve(raw_cycles.size() * 4);
-            for (const auto& seq : raw_cycles)
-                for (int i = 0; i + GROUP_KMER_SIZE <= (int)seq.size(); ++i)
-                    kmer_freq[seq.substr(i, GROUP_KMER_SIZE)]++;
-
-            // Second pass: rotate each cycle to start at its highest-frequency 23-mer.
-            // This reliably places the rotation start inside the repeat, never in a spacer.
             cycles.reserve(raw_cycles.size());
             for (const auto& seq : raw_cycles)
-                cycles.push_back(freq_rotation(seq, kmer_freq));
+                cycles.push_back(canonical_rotation(seq));
         }
         std::cout << "  ▸ Loaded " << cycles.size() << " cycles" << std::endl;
 
@@ -384,8 +372,8 @@ public:
 
             for (const auto& c : group_cycles) {
                 if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
-                    std::string repeat = canonical_seq(c.substr(0, repeat_len));
-                    std::string spacer = canonical_seq(c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE));
+                    std::string repeat = c.substr(0, repeat_len);
+                    std::string spacer = c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE);
                     if ((int)spacer.size() >= MIN_SPACER_LEN) {
                         spacer_data.push_back({spacer, repeat, c});
                     }
@@ -501,17 +489,6 @@ public:
 
             if (merged_entries.size() < 2) continue;
 
-            // Deduplicate spacers — identical spacers can reappear after Step 6
-            // merges separate per-variant buckets into a single group.
-            {
-                std::unordered_set<std::string> seen;
-                std::vector<std::pair<std::string,std::string>> deduped;
-                for (const auto& e : merged_entries)
-                    if (seen.insert(e.second).second) deduped.push_back(e);
-                merged_entries = std::move(deduped);
-            }
-            if (merged_entries.size() < 2) continue;
-
             // --- Front consensus via SPOA ---
             std::string front_consensus = spoa_consensus(weighted_repeats);
 
@@ -568,34 +545,6 @@ public:
                           << "bp (allowed " << MIN_REPEAT_LEN << "–" << MAX_REPEAT_LEN << "): "
                           << full_consensus.substr(0, 30) << "\n";
                 continue;
-            }
-            // --- Sanity filter: repeat must not be a tandem repeat ---
-            // Low-complexity tandem repeats (e.g. GCGCGCGCGC) form valid multicycles
-            // but are not CRISPR. CRISPR repeats are complex, non-periodic sequences.
-            if (is_tandem_repeat(full_consensus)) {
-                std::cout << "  [filtered] tandem repeat: "
-                          << full_consensus.substr(0, 30) << "\n";
-                continue;
-            }
-
-            // --- Sanity filter: spacers must be different from the repeat ---
-            // In real CRISPR, spacers are foreign-DNA sequences with no similarity
-            // to the repeat. If the majority of spacers look like the repeat,
-            // this is a false positive (tandem repeat artifact or rotation error).
-            {
-                int similar = 0;
-                for (const auto& [rv, sp] : merged_entries) {
-                    int max_len = std::max((int)sp.size(), (int)full_consensus.size());
-                    int dist = edit_distance(sp, full_consensus, max_len);
-                    double sim = 1.0 - (double)dist / max_len;
-                    if (sim > MAX_SPACER_REPEAT_SIMILARITY) ++similar;
-                }
-                if (similar > (int)merged_entries.size() / 2) {
-                    std::cout << "  [filtered] spacers too similar to repeat (" << similar
-                              << "/" << merged_entries.size() << "): "
-                              << full_consensus.substr(0, 30) << "\n";
-                    continue;
-                }
             }
             // --- Sanity filter: median spacer / repeat ratio ---
             std::vector<int> spacer_lens;
