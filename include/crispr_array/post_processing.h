@@ -359,51 +359,30 @@ public:
         std::cout << "  ▸ Grouped into " << groups.size() << " repeat groups" << std::endl;
 
         // ==========================================================
-        // Step 3 & 4: k-mer set intersection to find repeat boundary
+        // Step 3 & 4: Unanimous extend, extract spacers
         // ==========================================================
-        // Repeat k-mers by definition appear in EVERY cycle of the same group
-        // (the repeat sequence is conserved across all spacers). Spacer k-mers
-        // differ between cycles. The intersection of all cycles' k-mer sets
-        // isolates the repeat k-mers exactly — no character-by-character
-        // heuristic needed.
         std::vector<SpacerData> spacer_data;
 
         for (const auto& [kmer, group_cycles] : groups) {
-            // Seed intersection with first cycle's k-mers
-            std::unordered_set<std::string> repeat_kmers;
-            {
-                const auto& c0 = group_cycles[0];
-                for (int i = 0; i + GROUP_KMER_SIZE <= (int)c0.size(); ++i)
-                    repeat_kmers.insert(c0.substr(i, GROUP_KMER_SIZE));
-            }
-            // Intersect with each remaining cycle's k-mers
-            for (size_t ci = 1; ci < group_cycles.size(); ++ci) {
-                std::unordered_set<std::string> cset;
-                const auto& cc = group_cycles[ci];
-                for (int i = 0; i + GROUP_KMER_SIZE <= (int)cc.size(); ++i)
-                    cset.insert(cc.substr(i, GROUP_KMER_SIZE));
-                for (auto it = repeat_kmers.begin(); it != repeat_kmers.end(); ) {
-                    if (!cset.count(*it)) it = repeat_kmers.erase(it);
-                    else ++it;
-                }
-            }
-
-            // For each cycle, find the repeat/spacer boundary as the end of
-            // the CONTIGUOUS run of intersection k-mers starting at position 0.
-            // Using a contiguous run (not global max) prevents a stray spacer
-            // k-mer that coincidentally appears in the intersection from pushing
-            // the boundary past the true repeat end.
-            for (const auto& c : group_cycles) {
-                // Position 0 is always in intersection (it is the grouping k-mer).
-                int last_repeat_pos = 0;
-                int limit = std::min((int)c.size(), MAX_REPEAT_LEN);
-                for (int i = 1; i + GROUP_KMER_SIZE <= limit; ++i) {
-                    if (!repeat_kmers.count(c.substr(i, GROUP_KMER_SIZE)))
+            int t = 0;
+            while (true) {
+                std::unordered_set<char> chars;
+                bool valid = true;
+                for (const auto& c : group_cycles) {
+                    int pos = GROUP_KMER_SIZE + t;
+                    if (pos >= (int)c.size() - TAIL_KMER_SIZE) {
+                        valid = false;
                         break;
-                    last_repeat_pos = i;
+                    }
+                    chars.insert(c[pos]);
                 }
+                if (!valid || chars.size() != 1) break;
+                ++t;
+            }
 
-                int repeat_len = last_repeat_pos + GROUP_KMER_SIZE;
+            int repeat_len = GROUP_KMER_SIZE + t;
+
+            for (const auto& c : group_cycles) {
                 if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
                     std::string repeat = canonical_seq(c.substr(0, repeat_len));
                     std::string spacer = canonical_seq(c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE));
