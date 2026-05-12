@@ -47,24 +47,37 @@ The image is based on `debian:bookworm-slim` and ships only the `mcaat` binary a
 
 ## Usage
 
+Exactly one input source is required — either raw reads or a pre-built graph:
+
 ```bash
+# From reads (builds the graph internally)
 mcaat --input-files <file1> [file2] [options]
+
+# From a pre-built graph (skips graph construction)
+mcaat --graph <path> [options]
 ```
+
+**Required (one of):**
 
 | Flag | Description |
 |---|---|
-| `--input-files <file1> [file2]` | One or two FASTA/FASTQ files - plain or gzipped. One file = single-end, two files = paired-end |
-| `--graph <path>` | Path to a pre-built SDBG graph folder (skips graph construction) |
-| `--ram <amount>` | Memory cap. Units: `B`, `K`, `M`, `G` (e.g. `--ram 8G`). Default: 95% of system RAM |
-| `--threads <num>` | Thread count. Default: CPU cores − 2 |
-| `--output-folder <path>` | Output directory. Default: timestamped folder `mcaat_run_YYYY-MM-DD_HH-MM-SS/` |
-| `--benchmark <file>` | File with expected CRISPR sequences (one per line) for evaluation |
-| `--cycle-max-length <int>` | Maximum cycle length to search. Default: 77 |
-| `--cycle-min-length <int>` | Minimum cycle length to search. Default: 27 |
-| `--threshold-multiplicity <int>` | Min edge multiplicity for cycle start nodes. Default: 20 |
-| `--low-abundance <true\|false>` | Enable low-abundance mode. Default: true |
-| `--settings <path>` | Key=value settings file (CLI flags override it) |
-| `--help`, `-h` | Show usage and exit |
+| `--input-files <file1> [file2]` | One or two FASTA/FASTQ files — plain or gzipped. One file = single-end, two = paired-end |
+| `--graph <path>` | Pre-built SDBG graph folder from a previous run (skips graph construction) |
+
+**Optional:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--output-folder <path>` | `mcaat_run_YYYY-MM-DD_HH-MM-SS/` | Output directory |
+| `--ram <amount>` | 95% of system RAM | Memory cap. Units: `B`, `K`, `M`, `G` (e.g. `--ram 8G`) |
+| `--threads <num>` | CPU cores − 2 | Thread count |
+| `--cycle-max-length <int>` | `77` | Maximum cycle length to search |
+| `--cycle-min-length <int>` | `27` | Minimum cycle length to search |
+| `--threshold-multiplicity <int>` | `20` | Min edge multiplicity for cycle start nodes |
+| `--low-abundance <true\|false>` | `true` | Enable low-abundance mode |
+| `--settings <path>` | — | Key=value settings file (CLI flags override it) |
+| `--benchmark <file>` | — | File with expected CRISPR sequences (one per line) for evaluation |
+| `--help`, `-h` | — | Show usage and exit |
 
 ## Output
 
