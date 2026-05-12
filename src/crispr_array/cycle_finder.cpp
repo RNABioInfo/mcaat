@@ -578,7 +578,7 @@ void CycleFinder::writeMapToFile(
                 this->settings.sdbg->GetLabel(cycle[i], seq.data());
                 std::string label(k, 'N');
                 for (size_t j = 0; j < k; ++j) {
-                    uint8_t c = seq[j];
+                    uint8_t c = seq[k - 1 - j];
                     label[j] = (c >= 1 && c <= 4) ? "ACGT"[c - 1] : 'N';
                 }
                 if (i > 0) out << ' ';
