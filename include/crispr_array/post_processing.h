@@ -144,6 +144,25 @@ private:
         return prev[n];
     }
 
+    static std::string revcomp(const std::string& s) {
+        static const char ct[256] = {
+            ['A']='T',['T']='A',['C']='G',['G']='C',
+            ['a']='T',['t']='A',['c']='G',['g']='C',['N']='N',['n']='N'
+        };
+        std::string rc(s.size(), 'N');
+        for (size_t i = 0; i < s.size(); ++i)
+            rc[s.size()-1-i] = ct[(unsigned char)s[i]];
+        return rc;
+    }
+
+    // Canonical form of a sequence: min(seq, RC(seq)).
+    // Ensures that a sequence and its reverse complement map to the same key,
+    // so the graph finding both strands does not double-count arrays.
+    static std::string canonical_seq(const std::string& s) {
+        std::string rc = revcomp(s);
+        return (s <= rc) ? s : rc;
+    }
+
     std::string spoa_consensus(const std::vector<std::pair<std::string, int>>& seq_weights) {
         if (seq_weights.empty()) return "";
         if (seq_weights.size() == 1) return seq_weights[0].first;
@@ -362,8 +381,8 @@ public:
 
             for (const auto& c : group_cycles) {
                 if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
-                    std::string repeat = c.substr(0, repeat_len);
-                    std::string spacer = c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE);
+                    std::string repeat = canonical_seq(c.substr(0, repeat_len));
+                    std::string spacer = canonical_seq(c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE));
                     if ((int)spacer.size() >= MIN_SPACER_LEN) {
                         spacer_data.push_back({spacer, repeat, c});
                     }
