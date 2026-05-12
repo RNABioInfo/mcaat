@@ -61,7 +61,7 @@ bool CycleFinder::_BackgroundCheck(uint64_t original_node, size_t repeat_multipl
 /**
  * @brief Gets the outgoing edges of a node that pass the background check.
  */
-void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set, size_t repeat_multiplicity) {
+void CycleFinder::_GetOutgoings(uint64_t node, SmallNodeSet& outgoings_set, size_t repeat_multiplicity) {
    
     int edge_outdegree = this->settings.sdbg->EdgeOutdegree(node);
     if (edge_outdegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -79,7 +79,7 @@ void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoing
 /**
  * @brief Retrieves the incoming edges of a node that pass the background check.
  */
-void CycleFinder::_GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set, size_t repeat_multiplicity) {
+void CycleFinder::_GetIncomings(uint64_t node, SmallNodeSet& incomings_set, size_t repeat_multiplicity) {
   
     int edge_indegree = this->settings.sdbg->EdgeIndegree(node);
     if (edge_indegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -96,7 +96,7 @@ void CycleFinder::_GetIncomings(uint64_t node, unordered_set<uint64_t>& incoming
 /**
  * @brief Gets the outgoing edges of a node that pass the background check.
  */
-void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set) {
+void CycleFinder::_GetOutgoings(uint64_t node, SmallNodeSet& outgoings_set) {
    
     int edge_outdegree = this->settings.sdbg->EdgeOutdegree(node);
     if (edge_outdegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -114,7 +114,7 @@ void CycleFinder::_GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoing
 /**
  * @brief Retrieves the incoming edges of a node that pass the background check.
  */
-void CycleFinder::_GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set) {
+void CycleFinder::_GetIncomings(uint64_t node, SmallNodeSet& incomings_set) {
   
     int edge_indegree = this->settings.sdbg->EdgeIndegree(node);
     if (edge_indegree == 0 || !this->settings.sdbg->IsValidEdge(node)) {
@@ -143,8 +143,8 @@ CycleFinder::CycleFinder(Settings& settings)
     this->FindApproximateCRISPRArrays();
 }
 
-vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint64_t> path, map<uint64_t, int> lock, vector<unordered_set<uint64_t>> stack, 
-                                        vector<int> backtrack_lengths) {
+vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint64_t>& path, phmap::flat_hash_map<uint64_t,int>& lock, vector<SmallNodeSet>& stack, 
+                                        vector<int>& backtrack_lengths) {
     int counter = 0;
     uint64_t current_node = start_node;
     vector<vector<uint64_t>> cycles;
@@ -156,7 +156,7 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
             break;
         }
         
-        unordered_set<uint64_t> neighbors = stack.back();
+        SmallNodeSet neighbors = stack.back();
         bool flag = true;
         for (auto neighbor : neighbors) {
             current_node = neighbor;
@@ -177,7 +177,7 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                 backtrack_lengths.push_back(this->settings.cycle_finder_settings.cycle_max_length);
                 lock[neighbor] = path.size();
                 stack.back().erase(neighbor);
-                unordered_set<uint64_t> outgoings;
+                SmallNodeSet outgoings;
                 this->_GetOutgoings(neighbor, outgoings, this->settings.sdbg->EdgeMultiplicity(start_node));
                 stack.push_back(outgoings);
                 flag = false;
@@ -198,7 +198,7 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                 vector<pair<int, int>> relax_stack;
                 relax_stack.push_back(make_pair(backtrack_length, v));
 
-                unordered_set<uint64_t> path_set(path.begin(), path.end());
+                phmap::flat_hash_set<uint64_t> path_set(path.begin(), path.end());
 
                 while (!relax_stack.empty()) {
                     int bl = relax_stack.back().first;
@@ -206,7 +206,7 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                     relax_stack.pop_back();
                     if (lock.try_emplace(u, this->settings.cycle_finder_settings.cycle_max_length).first->second < this->settings.cycle_finder_settings.cycle_max_length - bl + 1) {
                         lock[u] = this->settings.cycle_finder_settings.cycle_max_length - bl + 1;
-                        unordered_set<uint64_t> incomings;
+                        SmallNodeSet incomings;
                         this->_GetIncomings(u, incomings, this->settings.sdbg->EdgeMultiplicity(start_node));
                         for (auto w : incomings)
                             if (path_set.find(w) == path_set.end())
@@ -238,12 +238,12 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
  */
 vector<vector<uint64_t>> CycleFinder::FindCycleUtil(uint64_t start_node) {
     vector<uint64_t> path;
-    map<uint64_t, int> lock;
-    vector<unordered_set<uint64_t>> stack;
+    phmap::flat_hash_map<uint64_t, int> lock;
+    vector<SmallNodeSet> stack;
     vector<int> backtrack_lengths;
     path.push_back(start_node);
     lock[start_node] = 0;
-    unordered_set<uint64_t> outgoings;
+    SmallNodeSet outgoings;
     this->_GetOutgoings(start_node, outgoings, this->settings.sdbg->EdgeMultiplicity(start_node));
     stack.push_back(outgoings);
     backtrack_lengths.push_back(this->settings.cycle_finder_settings.cycle_max_length);
@@ -388,7 +388,7 @@ void CycleFinder::RecursiveReduction(uint64_t tip) {
             continue;
         if (!this->settings.sdbg->IsValidEdge(node))
             continue;
-        unordered_set<uint64_t> parents;
+        SmallNodeSet parents;
         this->_GetIncomings(node, parents);
         this->settings.sdbg->SetInvalidEdge(node);
         for (uint64_t parent : parents)

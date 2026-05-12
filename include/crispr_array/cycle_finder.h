@@ -20,6 +20,20 @@
 
 using namespace std;
 
+struct SmallNodeSet {
+    uint64_t nodes[4];
+    uint8_t  count = 0;
+    void insert(uint64_t n)  { nodes[count++] = n; }
+    bool empty()       const { return count == 0; }
+    void erase(uint64_t n) {
+        for (uint8_t i = 0; i < count; ++i)
+            if (nodes[i] == n) { nodes[i] = nodes[--count]; return; }
+    }
+    uint64_t*       begin()       { return nodes; }
+    uint64_t*       end()         { return nodes + count; }
+    const uint64_t* begin() const { return nodes; }
+    const uint64_t* end()   const { return nodes + count; }
+};
 
 class CycleFinder {
     private:
@@ -44,14 +58,14 @@ class CycleFinder {
         //#### HELPER FUNCTIONS FOR CYCLE ENUMERATION ####
         bool _IncomingNotEqualToCurrentNode(uint64_t node, size_t edge_indegree);
         bool _BackgroundCheck(uint64_t original_node, size_t repeat_multiplicity, uint64_t current_node);
-        void _GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set, size_t repeat_multiplicity);
-        void _GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set, size_t repeat_multiplicity);
+        void _GetOutgoings(uint64_t node, SmallNodeSet& outgoings_set, size_t repeat_multiplicity);
+        void _GetIncomings(uint64_t node, SmallNodeSet& incomings_set, size_t repeat_multiplicity);
         //#### HELPER FUNCTIONS FOR CYCLE ENUMERATION ####
 
 
         //#### HELPER FUNCTIONS FOR DLS ###
-        void _GetOutgoings(uint64_t node, unordered_set<uint64_t>& outgoings_set);
-        void _GetIncomings(uint64_t node, unordered_set<uint64_t>& incomings_set);
+        void _GetOutgoings(uint64_t node, SmallNodeSet& outgoings_set);
+        void _GetIncomings(uint64_t node, SmallNodeSet& incomings_set);
         //#### HELPER FUNCTIONS FOR DLS ####
 
     public:
@@ -72,7 +86,7 @@ class CycleFinder {
         //#### DLS ####
         string CreateFolder();
         //#### CYCLE ENUMERATION ####
-        vector<vector<uint64_t>> FindCycle(uint64_t start_node, vector<uint64_t> path, map<uint64_t, int> lock, vector<unordered_set<uint64_t>> stack, vector<int> backtrack_lengths);
+        vector<vector<uint64_t>> FindCycle(uint64_t start_node, vector<uint64_t>& path, phmap::flat_hash_map<uint64_t,int>& lock, vector<SmallNodeSet>& stack, vector<int>& backtrack_lengths);
         vector<vector<uint64_t>> FindCycleUtil(uint64_t startnode);
         //#### CYCLE ENUMERATION ####
         void MarkCycleNodesUpTo100();
