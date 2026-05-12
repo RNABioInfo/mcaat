@@ -59,6 +59,10 @@ private:
     static constexpr int MIN_REPEAT_LEN = 20;
     static constexpr int MIN_SPACER_LEN = 20;
     static constexpr double MIN_MEDIAN_SPACER_REPEAT_RATIO = 0.5;
+    // Maximum allowed similarity (0–1) between a spacer and the consensus repeat.
+    // Real CRISPR spacers are foreign DNA — completely different from the repeat.
+    // Tandem repeat false positives have spacers that look like the repeat.
+    static constexpr double MAX_SPACER_REPEAT_SIMILARITY = 0.5;
 
     struct ConsensusArray {
         std::string consensus;
@@ -232,23 +236,39 @@ private:
     }
 
     /**
-     * Returns the lexicographically smallest rotation of s.
-     * Ensures cycles from the same CRISPR array starting at different
-     * k-mer offsets all map to the same canonical form before grouping.
+     * Rotate s to start at the position of its highest-frequency GROUP_KMER_SIZE-mer
+     * as measured across all cycles (supplied via freq_map).
+     * Repeat k-mers are high-frequency (they appear in every cycle for that array).
+     * Spacer k-mers are low-frequency (appear in only the cycles containing that spacer).
+     * This guarantees the rotation always lands inside the repeat, never the spacer.
      */
-    std::string canonical_rotation(const std::string& s) {
+    std::string freq_rotation(const std::string& s,
+                              const std::unordered_map<std::string,int>& freq_map) const {
         int n = (int)s.size();
-        if (n == 0) return s;
-        int best = 0;
-        for (int i = 1; i < n; ++i) {
-            for (int k = 0; k < n; ++k) {
-                char ci = s[(i + k) % n];
-                char cb = s[(best + k) % n];
-                if (ci < cb) { best = i; break; }
-                if (ci > cb) { break; }
-            }
+        if (n < GROUP_KMER_SIZE) return s;
+        int best_pos = 0, best_freq = 0;
+        for (int i = 0; i + GROUP_KMER_SIZE <= n; ++i) {
+            auto it = freq_map.find(s.substr(i, GROUP_KMER_SIZE));
+            int f = (it != freq_map.end()) ? it->second : 0;
+            if (f > best_freq) { best_freq = f; best_pos = i; }
         }
-        return s.substr(best) + s.substr(0, best);
+        if (best_pos == 0) return s;
+        return s.substr(best_pos) + s.substr(0, best_pos);
+    }
+
+    /**
+     * Returns true if seq is a tandem repeat of a shorter unit (period ≤ len/2)
+     * with at most 15% mismatch. CRISPR repeats are not tandem repeats.
+     */
+    bool is_tandem_repeat(const std::string& seq) const {
+        int n = (int)seq.size();
+        for (int p = 2; p <= n / 2; ++p) {
+            int mismatches = 0;
+            for (int i = p; i < n; ++i)
+                if (seq[i] != seq[i % p]) ++mismatches;
+            if ((double)mismatches / n < 0.15) return true;
+        }
+        return false;
     }
 
 public:
@@ -268,22 +288,41 @@ public:
         // ==========================================================
         std::vector<std::string> cycles;
         {
-            std::ifstream in(input_path);
-            if (!in.is_open()) {
-                std::cerr << "Error: Cannot open cycles file: " << input_path << std::endl;
-                return;
-            }
-            std::string line;
-            while (std::getline(in, line)) {
-                if (!line.empty()) {
-                    line.erase(0, line.find_first_not_of(" \t\r\n"));
-                    line.erase(line.find_last_not_of(" \t\r\n") + 1);
+            // First pass: read and glue k-mers into raw sequences
+            std::vector<std::string> raw_cycles;
+            {
+                std::ifstream in(input_path);
+                if (!in.is_open()) {
+                    std::cerr << "Error: Cannot open cycles file: " << input_path << std::endl;
+                    return;
+                }
+                std::string line;
+                while (std::getline(in, line)) {
                     if (!line.empty()) {
-                        std::string glued = glue_kmers(line);
-                        if (!glued.empty()) cycles.push_back(canonical_rotation(glued));
+                        line.erase(0, line.find_first_not_of(" \t\r\n"));
+                        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+                        if (!line.empty()) {
+                            std::string glued = glue_kmers(line);
+                            if (!glued.empty()) raw_cycles.push_back(glued);
+                        }
                     }
                 }
             }
+
+            // Build global 23-mer frequency map.
+            // Repeat k-mers appear in EVERY cycle for that array (high freq).
+            // Spacer k-mers appear only in the cycles containing that specific spacer (low freq).
+            std::unordered_map<std::string,int> kmer_freq;
+            kmer_freq.reserve(raw_cycles.size() * 4);
+            for (const auto& seq : raw_cycles)
+                for (int i = 0; i + GROUP_KMER_SIZE <= (int)seq.size(); ++i)
+                    kmer_freq[seq.substr(i, GROUP_KMER_SIZE)]++;
+
+            // Second pass: rotate each cycle to start at its highest-frequency 23-mer.
+            // This reliably places the rotation start inside the repeat, never in a spacer.
+            cycles.reserve(raw_cycles.size());
+            for (const auto& seq : raw_cycles)
+                cycles.push_back(freq_rotation(seq, kmer_freq));
         }
         std::cout << "  ▸ Loaded " << cycles.size() << " cycles" << std::endl;
 
@@ -440,6 +479,17 @@ public:
 
             if (merged_entries.size() < 2) continue;
 
+            // Deduplicate spacers — identical spacers can reappear after Step 6
+            // merges separate per-variant buckets into a single group.
+            {
+                std::unordered_set<std::string> seen;
+                std::vector<std::pair<std::string,std::string>> deduped;
+                for (const auto& e : merged_entries)
+                    if (seen.insert(e.second).second) deduped.push_back(e);
+                merged_entries = std::move(deduped);
+            }
+            if (merged_entries.size() < 2) continue;
+
             // --- Front consensus via SPOA ---
             std::string front_consensus = spoa_consensus(weighted_repeats);
 
@@ -497,7 +547,34 @@ public:
                           << full_consensus.substr(0, 30) << "\n";
                 continue;
             }
+            // --- Sanity filter: repeat must not be a tandem repeat ---
+            // Low-complexity tandem repeats (e.g. GCGCGCGCGC) form valid multicycles
+            // but are not CRISPR. CRISPR repeats are complex, non-periodic sequences.
+            if (is_tandem_repeat(full_consensus)) {
+                std::cout << "  [filtered] tandem repeat: "
+                          << full_consensus.substr(0, 30) << "\n";
+                continue;
+            }
 
+            // --- Sanity filter: spacers must be different from the repeat ---
+            // In real CRISPR, spacers are foreign-DNA sequences with no similarity
+            // to the repeat. If the majority of spacers look like the repeat,
+            // this is a false positive (tandem repeat artifact or rotation error).
+            {
+                int similar = 0;
+                for (const auto& [rv, sp] : merged_entries) {
+                    int max_len = std::max((int)sp.size(), (int)full_consensus.size());
+                    int dist = edit_distance(sp, full_consensus, max_len);
+                    double sim = 1.0 - (double)dist / max_len;
+                    if (sim > MAX_SPACER_REPEAT_SIMILARITY) ++similar;
+                }
+                if (similar > (int)merged_entries.size() / 2) {
+                    std::cout << "  [filtered] spacers too similar to repeat (" << similar
+                              << "/" << merged_entries.size() << "): "
+                              << full_consensus.substr(0, 30) << "\n";
+                    continue;
+                }
+            }
             // --- Sanity filter: median spacer / repeat ratio ---
             std::vector<int> spacer_lens;
             for (const auto& [rv, sp] : merged_entries)
