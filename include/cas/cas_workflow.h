@@ -21,9 +21,9 @@ enum class SearchDirection {
 
 struct CasWorkflowParams {
     int FIRST_GENE_MIN_DIST = 50;
-    int FIRST_GENE_MAX_DIST = 1000;
-    int MAX_START_CANDIDATES = 5000;
-    int BEAM_WIDTH = 50;
+    int FIRST_GENE_MAX_DIST = 2500;
+    int MAX_START_CANDIDATES = 50000;
+    int BEAM_WIDTH = 100;
     double MIN_NORMALIZED_SCORE = 0.2;  // bits per HMM position; rejects random matches
     bool allow_exploratory = true;  // If false, stop when rule-guided search fails (no Phase 2)
 };
@@ -124,10 +124,14 @@ struct TypeHypothesisResult {
     double total_score = 0.0;
     int mandatory_found = 0;
     int total_genes = 0;
+    int db_count = 1;  // Propagated from CasTypeRule for log-prior scoring
     
     double CassetteScore() const {
-        // Prioritize: mandatory genes found, then total score
-        return mandatory_found * 1000.0 + total_score;
+        // Matches live scoring in score_candidates lambda:
+        // mandatory_found dominates; total_genes breaks ties; log-prior favours common types
+        return mandatory_found * 1000.0
+             + total_genes    *   10.0
+             + std::log(static_cast<double>(db_count) + 1.0);
     }
 };
 

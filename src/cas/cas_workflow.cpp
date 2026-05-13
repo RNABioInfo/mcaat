@@ -54,7 +54,7 @@ void CasWorkflow::ApplySensitivityMode(bool enabled) {
     const bool preserve_exploratory = params_.allow_exploratory;
 
     params_.FIRST_GENE_MIN_DIST = 0;
-    params_.FIRST_GENE_MAX_DIST = 1000;
+    params_.FIRST_GENE_MAX_DIST = 2500;
     params_.MAX_START_CANDIDATES = 60000;
     params_.BEAM_WIDTH = 100;
     params_.MIN_NORMALIZED_SCORE = 0.2;
@@ -573,8 +573,16 @@ std::vector<StartCodonCandidate> CasWorkflow::FindStartCodonCandidates(
             if (offset >= 0) {
                 int bp_dist = dist + offset;
                 if (bp_dist >= min_dist && bp_dist <= max_dist) {
-                    // Skip expensive ORF check - let HMM scoring filter garbage
-                    candidates.push_back({node, bp_dist, offset});
+                    // Lightweight ORF check: reject candidates that hit a stop codon
+                    // within the first 150 bp (~50 aa) — minimum sensible Cas gene size.
+                    // EstimateORFLength max_search=300 keeps this cheap (greedy, no full BFS).
+                    constexpr int MIN_ORF_BP = 150;
+                    int orf_len = (direction == SearchDirection::DOWNSTREAM)
+                        ? EstimateORFLength(node, offset, 300)
+                        : EstimateORFLengthReverse(node, offset, 300);
+                    if (orf_len >= MIN_ORF_BP) {
+                        candidates.push_back({node, bp_dist, offset, orf_len});
+                    }
                 }
             }
         }
@@ -621,8 +629,13 @@ std::vector<StartCodonCandidate> CasWorkflow::FindStartCodonCandidatesFromNode(
             int offset = GetStartCodonOffset(node);
             
             if (offset >= 0) {
-                // Skip expensive ORF check - let HMM scoring filter garbage
-                candidates.push_back({node, dist + offset, offset});
+                constexpr int MIN_ORF_BP = 120;
+                int orf_len = (direction == SearchDirection::DOWNSTREAM)
+                    ? EstimateORFLength(node, offset, 300)
+                    : EstimateORFLengthReverse(node, offset, 300);
+                if (orf_len >= MIN_ORF_BP) {
+                    candidates.push_back({node, dist + offset, offset, orf_len});
+                }
             }
         }
         
@@ -650,19 +663,21 @@ std::vector<StartCodonCandidate> CasWorkflow::FindStartCodonCandidatesFromNode(
 }
 
 // PROGRESSIVE DEPTH: Quick shallow scan to reject non-promising candidates
-// Returns best normalized score found in first SHALLOW_DEPTH_BP bases
-// This is ~10x faster than full BeamSearch and filters out 80%+ of misses
+// Returns best normalized score found in the first shallow window.
+// Window = max(120 bp, 60% of profile length in bp) so that proteins whose
+// conserved domain sits past position ~40 aa are not prematurely pruned.
 double CasWorkflow::ScoreStartNodeShallow(
     uint64_t start_node, int start_codon_offset,
     size_t profile_index, SearchDirection direction) {
-    constexpr int SHALLOW_DEPTH_BP = 120;  // ~40 amino acids - enough to see signal
-    
     const Profile* hmm = GetProfile(profile_index);
     if (!hmm) return 0.0;
-    
+
+    // Scale with profile length: scan at least 60% of the model before deciding
+    const int shallow_depth = std::max(120, hmm->GetLength() * 3 * 3 / 5);  // aa→bp, 60%
+
     CasGeneDetector detector(sdbg_, hmm);
     auto paths = detector.BeamSearchAminoAcids(
-        start_node, params_.BEAM_WIDTH, SHALLOW_DEPTH_BP, start_codon_offset,
+        start_node, params_.BEAM_WIDTH, shallow_depth, start_codon_offset,
         direction);
     
     double best_score = 0.0;
