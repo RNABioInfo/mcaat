@@ -57,7 +57,7 @@ void CasWorkflow::ApplySensitivityMode(bool enabled) {
     params_.FIRST_GENE_MAX_DIST = 1000;
     params_.MAX_START_CANDIDATES = 60000;
     params_.BEAM_WIDTH = 100;
-    params_.MIN_NORMALIZED_SCORE = 0.15;
+    params_.MIN_NORMALIZED_SCORE = 0.2;
     params_.allow_exploratory = false;
 
     tuning_.first_gene_search_max_bp = 10000;
@@ -968,13 +968,13 @@ DetectedCasGene CasWorkflow::ScoreStartNodeWithFirstGeneProfilesDownstream(
     
     // For DOWNSTREAM: pre-filter with shallow scan before full HMM
     for (size_t profile_idx : first_gene_profile_indices_) {
-        // Quick shallow scan first
-        double shallow_score = ScoreStartNodeShallow(
-            start_node, start_codon_offset, profile_idx, direction);
-        
-        // Skip if shallow scan shows no signal at all
-        if (shallow_score < shallow_threshold) {
-            continue;  // Reject - no signal
+        // Quick shallow scan first (skip for short profiles where N-terminus may lack signal)
+        if (profiles_[profile_idx].leng >= 200) {
+            double shallow_score = ScoreStartNodeShallow(
+                start_node, start_codon_offset, profile_idx, direction);
+            if (shallow_score < shallow_threshold) {
+                continue;  // Reject - no signal
+            }
         }
         
         // Passed shallow filter - do full HMM scan
@@ -1124,7 +1124,7 @@ std::vector<DetectedCasGene> CasWorkflow::DetectCasGenes(uint64_t repeat_node) {
     // Deduplicate: keep best per family
     std::map<std::string, DetectedCasGene> best_per_family;
     for (const auto& r : results) {
-        if (r.is_complete && r.normalized_score >= params_.MIN_NORMALIZED_SCORE) {
+        if (r.normalized_score >= (r.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
             auto it = best_per_family.find(r.gene_family);
             if (it == best_per_family.end() || r.normalized_score > it->second.normalized_score) {
                 best_per_family[r.gene_family] = r;
@@ -1213,7 +1213,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
             auto result = ScoreStartNodeWithProfile(
                 c.node, c.distance, c.offset, profile_idx, direction, true);
 
-            if (result.is_complete && result.normalized_score >= params_.MIN_NORMALIZED_SCORE) {
+            if (result.normalized_score >= (result.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
                 result.gene_family = ExtractGeneFamily(profile.filename);
                 if (result.normalized_score > local_best.normalized_score) {
                     local_best = result;
@@ -1226,7 +1226,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
     std::vector<DetectedCasGene> first_gene_hypotheses;
     first_gene_hypotheses.reserve(best_by_profile.size());
     for (const auto& hit : best_by_profile) {
-        if (hit.is_complete && hit.normalized_score >= params_.MIN_NORMALIZED_SCORE) {
+        if (hit.normalized_score >= (hit.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
             first_gene_hypotheses.push_back(hit);
         }
     }
@@ -1260,14 +1260,14 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                 auto fresult = ScoreStartNodeWithProfile(
                     hypothesis.start_node, hypothesis.distance_from_repeat, start_offset,
                     profile_idx, direction, true);
-                if (fresult.is_complete) {
+                if (fresult.is_complete || fresult.normalized_score >= 0.5) {
                     fresult.gene_family = hypothesis.gene_family;
                     family_results[f] = fresult;
                 }
             }
 
             for (const auto& fresult : family_results) {
-                if (fresult.is_complete && fresult.normalized_score > hypothesis.normalized_score) {
+                if ((fresult.is_complete || fresult.normalized_score >= 0.5) && fresult.normalized_score > hypothesis.normalized_score) {
                     hypothesis = fresult;
                 }
             }
@@ -1279,7 +1279,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
         }
     }
 
-    if (!gene1.is_complete || gene1.normalized_score < params_.MIN_NORMALIZED_SCORE) {
+    if (gene1.normalized_score < (gene1.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
         cassette.stop_reason_code = "NO_NEXT_GENE";
         return cassette;
     }
@@ -1494,8 +1494,9 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
             for (const auto* cptr : profile_candidates) {
                 if (found_good_gene.load(std::memory_order_relaxed)) break;
                 
-                double shallow_score = ScoreStartNodeShallow(
-                    cptr->node, cptr->offset, profile_idx, direction);
+                bool skip_shallow = (profiles_[profile_idx].leng < 200);
+                double shallow_score = skip_shallow ? tuning_.shallow_threshold :
+                    ScoreStartNodeShallow(cptr->node, cptr->offset, profile_idx, direction);
                 
                 if (shallow_score >= tuning_.shallow_threshold) {
                     const auto& c = *cptr;
@@ -1504,7 +1505,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                     auto result = ScoreStartNodeWithProfile(
                         c.node, global_dist, c.offset, profile_idx, direction, true);
                     
-                    if (result.is_complete && result.normalized_score >= params_.MIN_NORMALIZED_SCORE) {
+                    if (result.normalized_score >= (result.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
                         result.gene_family = family;
                         std::lock_guard<std::mutex> lock(best_mutex);
                         if (result.normalized_score > best_gene.normalized_score) {
@@ -1523,12 +1524,12 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
         std::cout << "  DEBUG Phase1 result: best_gene.is_complete=" << best_gene.is_complete
                   << " score=" << best_gene.normalized_score << std::endl;
         
-        if (best_gene.is_complete) {
+        if (best_gene.is_complete || best_gene.normalized_score >= 0.5) {
             next_gene = best_gene;
         }
         
         // FAMILY REFINEMENT if we found something
-        if (next_gene.is_complete && next_gene.normalized_score >= params_.MIN_NORMALIZED_SCORE) {
+        if (next_gene.normalized_score >= (next_gene.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
             
             auto family_it = family_to_profiles_.find(next_gene.gene_family);
             if (family_it != family_to_profiles_.end() && family_it->second.size() > 1) {
@@ -1548,14 +1549,14 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                         next_gene.start_node, next_gene.distance_from_repeat, 
                         start_offset,
                         pidx, direction, true);
-                    if (result.is_complete) {
+                    if (result.is_complete || result.normalized_score >= 0.5) {
                         result.gene_family = next_gene.gene_family;
                         family_results[f] = result;
                     }
                 }
                 
                 for (const auto& result : family_results) {
-                    if (result.is_complete && result.normalized_score > next_gene.normalized_score) {
+                    if ((result.is_complete || result.normalized_score >= 0.5) && result.normalized_score > next_gene.normalized_score) {
                         next_gene = result;
                     }
                 }
@@ -1567,7 +1568,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
         // Uses profile-major approach - tests ALL remaining families
         // ---------------------------------------------------------------------
         if (skip_phase1 || (params_.allow_exploratory &&
-            (!next_gene.is_complete || next_gene.normalized_score < params_.MIN_NORMALIZED_SCORE))) {
+            (next_gene.normalized_score < (next_gene.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)))) {
             
             std::cout << "  DEBUG: Entering Phase 2 (skip_phase1=" << skip_phase1 
                       << " allow_exploratory=" << params_.allow_exploratory << ")" << std::endl;
@@ -1667,7 +1668,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                     auto result = ScoreStartNodeWithProfile(
                         c.node, global_dist, c.offset, profile_idx, direction, true);
                     
-                    if (result.is_complete && result.normalized_score >= params_.MIN_NORMALIZED_SCORE) {
+                    if (result.normalized_score >= (result.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
                         result.gene_family = family;
                         result.is_putative = true;
                         if (result.normalized_score > local_best_p2.normalized_score) {
@@ -1680,7 +1681,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                     }
                 }
 
-                if (local_best_p2.is_complete) {
+                if (local_best_p2.is_complete || local_best_p2.normalized_score >= 0.5) {
                     std::lock_guard<std::mutex> lock(p2_mutex);
                     if (local_best_p2.normalized_score > best_p2.normalized_score) {
                         best_p2 = local_best_p2;
@@ -1688,7 +1689,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                 }
             }
             
-            if (best_p2.is_complete && best_p2.normalized_score > next_gene.normalized_score) {
+            if ((best_p2.is_complete || best_p2.normalized_score >= 0.5) && best_p2.normalized_score > next_gene.normalized_score) {
                 next_gene = best_p2;
             }
         }
@@ -1696,7 +1697,7 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
         // ---------------------------------------------------------------------
         // Add gene if found, otherwise stop
         // ---------------------------------------------------------------------
-        if (!next_gene.is_complete || next_gene.normalized_score < params_.MIN_NORMALIZED_SCORE) {
+        if (next_gene.normalized_score < (next_gene.is_complete ? params_.MIN_NORMALIZED_SCORE : 0.5)) {
             std::cout << "  DEBUG: No gene found (is_complete=" << next_gene.is_complete 
                       << " score=" << next_gene.normalized_score << ")" << std::endl;
             cassette.stop_reason_code = "NO_NEXT_GENE";

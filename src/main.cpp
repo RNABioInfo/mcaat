@@ -49,7 +49,7 @@ struct CasDetectConfig {
     std::string output_dir;       // where CAS_Systems_*.txt are written
     std::string profiles_dir;     // path to CasFinder-main/profiles/
     std::string rules_csv;        // path to mcaat/docs/_rules.csv
-    double  min_score       = 0.3;
+    double  min_score       = 0.2;
     int     beam_width      = 50;
     int     intergenic_max  = 2000;
     int     intergenic_min  = -24;

@@ -98,9 +98,9 @@ Each `CRISPR_Arrays_N.txt` file has a short header followed by one block per arr
 
 >Array_1  spacers=8
 ATCGATCGATCGATCGATCGATCG
-        --------------------    AACCCGGTTAATCGATCG
-        --------------------    TTGGCCAATCGATCGATC
-        ATCGATCGATCGATCTATCG    GGAATTCCAATCGATCGA   ← repeat variant
+        --------------------    AACCCGGTTAATCGATCGTTTCGAGC
+        --------------------    TTGGCCAATCGATCGATCAAAACGGG
+        ATCGATCGATCGATCTATCG    GGAATTCCAATCGATCGAATACCCAC   ← repeat variant
 ```
 
 The consensus repeat sequence is on its own line. Each spacer entry shows the repeat variant (or dashes when it matches the consensus exactly) followed by the spacer sequence.

@@ -24,7 +24,7 @@ struct CasWorkflowParams {
     int FIRST_GENE_MAX_DIST = 1000;
     int MAX_START_CANDIDATES = 5000;
     int BEAM_WIDTH = 50;
-    double MIN_NORMALIZED_SCORE = 0.3;  // bits per HMM position; rejects random matches
+    double MIN_NORMALIZED_SCORE = 0.2;  // bits per HMM position; rejects random matches
     bool allow_exploratory = true;  // If false, stop when rule-guided search fails (no Phase 2)
 };
 
