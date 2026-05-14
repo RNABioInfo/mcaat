@@ -310,7 +310,7 @@ public:
 
 private:
     struct WorkflowTuning {
-        int first_gene_search_max_bp = 5000;
+        int first_gene_search_max_bp = 8000;
         int bfs_max_candidates = 10000;
         int max_cassette_bp = 30000;
         int intergenic_min_bp = -24;
@@ -319,7 +319,7 @@ private:
         int first_gene_bins = 20;
         int profile_window_count = 50;
         double shallow_threshold = 0.05;
-        double phase1_high_confidence = 0.6;
+        double phase1_high_confidence = 1.2;
         double phase2_high_confidence = 0.85;
     };
 
@@ -367,6 +367,15 @@ private:
     int EstimateORFLength(uint64_t start_node, int start_offset, int max_search);
     int EstimateORFLengthReverse(uint64_t stop_node, int stop_offset, int max_search);
     bool IsProfileCompatibleWithDistance(const HMMProfiles::ProfileSize& profile, int distance_from_repeat, SearchDirection direction);
+
+    // Returns the acceptable incomplete-alignment score threshold for a profile.
+    // Large profiles (LENG > 500) get a lower threshold: banded Viterbi often
+    // drifts on multi-domain proteins and fails to consume the full HMM.
+    double PartialScoreThreshold(size_t profile_index) const {
+        if (profile_index < profiles_.size() && profiles_[profile_index].leng > 500)
+            return 0.3;
+        return 0.5;
+    }
     
     std::vector<StartCodonCandidate> FindStartCodonCandidates(
         uint64_t repeat_node, int min_dist, int max_dist, int max_candidates,
