@@ -8,7 +8,7 @@
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
   <a href="https://hub.docker.com/r/feeka94/mcaat"><img src="https://img.shields.io/docker/v/feeka94/mcaat?label=Docker%20Hub&color=2496ED" alt="Docker Hub"/></a>
   <a href="https://hub.docker.com/r/feeka94/mcaat"><img src="https://img.shields.io/docker/pulls/feeka94/mcaat" alt="Docker Pulls"/></a>
-  <a href="https://github.com/RNABioInfo/mcaat/releases"><img src="https://img.shields.io/github/v/release/feeka94/mcaat" alt="GitHub Release"/></a>
+  <a href="https://github.com/RNABioInfo/mcaat/releases"><img src="https://img.shields.io/github/v/release/RNABioInfo/mcaat" alt="GitHub Release"/></a>
 </p>
 
 ****
