@@ -2,14 +2,15 @@
   <img src="icon.png?v=2" alt="MCAAT" width="330"/>
 </p>
 
-# metagenomic CRISPR analysis tool - MCAAT v1.0.0
-
 <p align="center">
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
   <a href="https://hub.docker.com/r/feeka94/mcaat"><img src="https://img.shields.io/docker/v/feeka94/mcaat?label=Docker%20Hub&color=2496ED" alt="Docker Hub"/></a>
   <a href="https://hub.docker.com/r/feeka94/mcaat"><img src="https://img.shields.io/docker/pulls/feeka94/mcaat" alt="Docker Pulls"/></a>
   <a href="https://github.com/RNABioInfo/mcaat/releases"><img src="https://img.shields.io/github/v/release/RNABioInfo/mcaat" alt="GitHub Release"/></a>
 </p>
+
+# metagenomic CRISPR analysis tool - MCAAT v1.0.0
+
 
 ****
 Finds CRISPR arrays in raw, un-assembled metagenomic reads. Builds a succinct de Bruijn graph and detects multicycles - the structural signature of CRISPR repeat-spacer arrays - without any prior assembly step.
