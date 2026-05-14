@@ -343,6 +343,7 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "  --cycle-min-length <int>        Minimum cycle length  [default: 27]\n"
                  << "  --threshold-multiplicity <int>  Edge multiplicity cutoff  [default: 20]\n"
                  << "  --low-abundance <true|false>    Low-abundance mode  [default: true]\n"
+                 << "  --autoclean <true|false>         Remove intermediate files after run  [default: true]\n"
                  << "  --benchmark <file>              Expected sequences for evaluation\n"
                  << "  --settings <path>               Key=value settings file (CLI overrides)\n"
                  << "  --help, -h                      Show this message\n\n";
@@ -471,6 +472,14 @@ Settings parse_arguments(int argc, char* argv[]) {
                 settings.cycle_finder_settings.low_abundance = (value == "1" || value == "true" || value == "yes");
             } else {
                 throw runtime_error("Error: Missing value for --low-abundance");
+            }
+        } else if (arg == "--autoclean") {
+            if (++i < argc) {
+                string value = argv[i];
+                std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+                settings.autoclean = (value == "1" || value == "true" || value == "yes");
+            } else {
+                throw runtime_error("Error: Missing value for --autoclean");
             }
         }
     }
@@ -811,7 +820,11 @@ int main(int argc, char** argv) {
     cout << "      done in " << fixed << setprecision(1) << step_elapsed(t0) << " s\n\n";
 
     cout << "[4/4] Cleaning up...\n";
-    step_cleanup(settings);
+    if (settings.autoclean) {
+        step_cleanup(settings);
+    } else {
+        cout << "  ▸ Intermediate files kept (autoclean=false)\n";
+    }
 
     double total = step_elapsed(t_start);
     cout << "\nDone in " << fixed << setprecision(1) << total << " s\n"

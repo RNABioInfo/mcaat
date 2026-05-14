@@ -29,6 +29,7 @@ struct Settings {
     std::string cycles_folder; // Folder for cycle data
     std::string output_file; // Path to the main output file
     std::string benchmark_file;
+    bool autoclean = true; // Remove intermediate graph/cycle files after a run
     // Sdbg
 
     struct CycleFinderSettings {
@@ -131,6 +132,7 @@ struct Settings {
     // cycle-min-length=27
     // threshold-multiplicity=20
     // low-abundance=true
+    // autoclean=true
     bool LoadFromFile(const std::string& path) {
         std::ifstream file(path);
         if (!file.is_open()) {
@@ -220,6 +222,11 @@ struct Settings {
             else if (key == "low-abundance") {
                 std::transform(val.begin(), val.end(), val.begin(), ::tolower);
                 this->cycle_finder_settings.low_abundance = (val == "true" || val == "1" || val == "yes");
+            }
+            else if (key == "autoclean") {
+                std::string v = val;
+                std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+                this->autoclean = (v == "true" || v == "1" || v == "yes");
             }
             else if (key == "spacer-min-length") { this->dna_sequence_settings.spacer_min_length = stoi(val); }
             else if (key == "spacer-max-length") { this->dna_sequence_settings.spacer_max_length = stoi(val); }

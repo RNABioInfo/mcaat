@@ -89,6 +89,7 @@ mcaat --graph <path> [options]
 | `--cycle-min-length <int>` | `27` | Minimum cycle length to search |
 | `--threshold-multiplicity <int>` | `20` | Min edge multiplicity for cycle start nodes |
 | `--low-abundance <true\|false>` | `true` | Enable low-abundance mode |
+| `--autoclean <true\|false>` | `true` | Remove intermediate graph/cycle files after run. Set to `false` to keep them |
 | `--settings <path>` | — | Key=value settings file (CLI flags override it) |
 | `--help`, `-h` | — | Show usage and exit |
 
@@ -131,6 +132,7 @@ cycle-max-length=77
 cycle-min-length=27
 threshold-multiplicity=20
 low-abundance=true
+autoclean=true
 ```
 
 `input-files` accepts one or two paths separated by spaces, commas, or semicolons.
