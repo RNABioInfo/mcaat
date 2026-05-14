@@ -4,6 +4,16 @@
 
 # metagenomic CRISPR analysis tool - MCAAT v1.0.0
 
+<p align="center">
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
+  <a href="https://hub.docker.com/r/feeka94/mcaat"><img src="https://img.shields.io/docker/v/feeka94/mcaat?label=Docker%20Hub&color=2496ED" alt="Docker Hub"/></a>
+  <a href="https://hub.docker.com/r/feeka94/mcaat"><img src="https://img.shields.io/docker/pulls/feeka94/mcaat" alt="Docker Pulls"/></a>
+  <a href="https://github.com/feeka94/mcaat/releases"><img src="https://img.shields.io/github/v/release/feeka94/mcaat" alt="GitHub Release"/></a>
+</p>
+
+> [!NOTE]
+> 
+
 ****
 Finds CRISPR arrays in raw, un-assembled metagenomic reads. Builds a succinct de Bruijn graph and detects multicycles - the structural signature of CRISPR repeat-spacer arrays - without any prior assembly step.
 
@@ -34,6 +44,12 @@ Optional flags:
 ```
 
 ### Docker
+
+> [!NOTE]
+> A pre-built image is available on [Docker Hub](https://hub.docker.com/r/feeka94/mcaat) — no manual dependency setup required.
+> ```bash
+> docker pull feeka94/mcaat:1.0.0
+> ```
 
 ```bash
 docker build -t mcaat .
