@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     git \
     gettext \
     zlib1g-dev \
+    libbz2-dev \
     libomp-dev \
     libpthread-stubs0-dev \
     && rm -rf /var/lib/apt/lists/*
