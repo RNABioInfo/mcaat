@@ -25,7 +25,7 @@ Outperforms assembly-based workflows and other assembly-free CRISPR detectors on
 ## Build
 
 ```bash
-git clone --recurse-submodules https://github.com/feeka94/mcaat.git
+git clone --recurse-submodules https://github.com/RNABioInfo/mcaat.git
 cd mcaat
 
 chmod +x ./install.sh
@@ -145,5 +145,5 @@ autoclean=true
 
 If you use MCAAT please cite: https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558
 
-Contact: fikrat.talibli@ibmg.uni-stuttgart.de
+Contact: Please write an issue on our GitHub page if any problems occur.
 
