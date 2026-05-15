@@ -61,6 +61,8 @@ The image is based on `debian:bookworm-slim` and ships only the `mcaat` binary a
 
 ## Usage
 
+Detailed usage of the tool is outlined: [rnabioinfo.github.io/mcaat](https://rnabioinfo.github.io/mcaat/)
+
 Exactly one input source is required — either raw reads or a pre-built graph:
 
 ```bash
