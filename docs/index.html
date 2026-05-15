@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MCAAT — Manual</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sidebar-w: 230px;
+      --accent:    #2563eb;
+      --code-bg:   #1e1e2e;
+      --code-fg:   #cdd6f4;
+      --border:    #e2e8f0;
+      --text:      #1e293b;
+      --muted:     #64748b;
+      --bg:        #ffffff;
+      --nav-bg:    #eef1f5;
+      --nav-fg:    #475569;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--bg);
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ─────────────────────────────── */
+    nav {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--nav-bg);
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      overflow-y: auto;
+      padding-bottom: 2rem;
+    }
+    .nav-brand {
+      padding: 1.6rem 1.5rem 1.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+     .nav-brand h1 { font-size: 1rem; font-weight: 700; color: var(--text); letter-spacing: 0.04em; }
+    .nav-brand span { font-size: 0.72rem; color: var(--muted); }
+
+    .nav-group {
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em;
+      color: #94a3b8; font-weight: 700; padding: 1.2rem 1.5rem 0.35rem;
+    }
+    nav a {
+      display: block; padding: 0.38rem 1.5rem; color: var(--nav-fg);
+      text-decoration: none; font-size: 0.82rem;
+      border-left: 3px solid transparent;
+      transition: color 0.12s, border-color 0.12s, background 0.12s;
+    }
+    nav a:hover, nav a.active {
+      color: var(--accent); border-left-color: var(--accent);
+      background: #eff6ff;
+    }
+
+    /* ── Main ────────────────────────────────── */
+    main {
+      margin-left: var(--sidebar-w);
+      max-width: 860px;
+      padding: 3rem 3.5rem 5rem;
+      width: 100%;
+    }
+
+    /* ── Page header ─────────────────────────── */
+    .page-header {
+      margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border);
+    }
+    .page-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .page-header .subtitle {
+      color: var(--muted); font-size: 0.92rem; line-height: 1.65;
+      margin-bottom: 1.1rem; max-width: 620px;
+    }
+    .badges a { margin-right: 0.35rem; display: inline-block; }
+    .badges img { height: 20px; vertical-align: middle; }
+
+    /* ── Sections ────────────────────────────── */
+    section { margin-bottom: 3rem; scroll-margin-top: 1.5rem; }
+    section h2 {
+      font-size: 1.2rem; font-weight: 600; margin-bottom: 1.2rem;
+      padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+    }
+    section h3 {
+      font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--muted); margin: 1.8rem 0 0.7rem;
+    }
+
+    p { line-height: 1.75; margin-bottom: 0.8rem; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Code ────────────────────────────────── */
+    pre {
+      background: var(--code-bg); color: var(--code-fg); border-radius: 8px;
+      padding: 1.1rem 1.4rem; overflow-x: auto; font-size: 0.8rem;
+      line-height: 1.65; margin: 0.9rem 0;
+    }
+    code { font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace; }
+    :not(pre) > code {
+      background: #f1f5f9; color: #1d4ed8;
+      padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.84em;
+    }
+
+    /* ── Decision cards ──────────────────────── */
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+    .card {
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.1rem 1.2rem;
+    }
+    .card h4 { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .card p  { font-size: 0.84rem; color: var(--muted); line-height: 1.6; margin: 0; }
+    .card.rec { border-color: var(--accent); background: #eff6ff; }
+    .card.rec h4 { color: var(--accent); }
+
+    /* ── Tuning rows ─────────────────────────── */
+    .tune-list { display: flex; flex-direction: column; gap: 0.9rem; margin: 1rem 0; }
+    .tune-item {
+      padding: 0.9rem 1rem;
+      background: #f8fafc; border-radius: 8px; border: 1px solid var(--border);
+    }
+    .tune-item .tune-header { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+    .tune-item code { font-size: 0.8rem; color: #1d4ed8; }
+    .tune-item .default { font-size: 0.72rem; color: var(--muted); }
+    .tune-item .guidance { font-size: 0.84rem; line-height: 1.65; color: var(--text); }
+
+    /* ── Tables ──────────────────────────────── */
+    .table-wrap { overflow-x: auto; margin: 0.8rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.855rem; }
+    th {
+      text-align: left; padding: 0.55rem 0.9rem; background: #f8fafc;
+      border-bottom: 2px solid var(--border); font-weight: 600; color: var(--muted);
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    td { padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.6; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Callout ─────────────────────────────── */
+    .note {
+      background: #eff6ff; border-left: 4px solid var(--accent);
+      border-radius: 0 6px 6px 0; padding: 0.85rem 1rem;
+      font-size: 0.875rem; margin: 1rem 0; color: #1e40af;
+    }
+    .note strong { font-weight: 600; }
+    .note a { color: var(--accent); }
+    .note pre { margin-top: 0.6rem; background: #1e3a5f; color: #bfdbfe; }
+
+    .tip {
+      background: #f0fdf4; border-left: 4px solid #16a34a;
+      border-radius: 0 6px 6px 0; padding: 0.85rem 1rem;
+      font-size: 0.875rem; margin: 1rem 0; color: #15803d;
+    }
+    .tip strong { font-weight: 600; }
+
+    /* ── Annotated output ────────────────────── */
+    .annotated { display: flex; gap: 0; margin: 1rem 0; }
+    .annotated pre { flex: 1; border-radius: 8px 0 0 8px; margin: 0; min-width: 0; }
+    .ann-labels {
+      background: #f8fafc; border: 1px solid var(--border); border-left: none;
+      border-radius: 0 8px 8px 0; min-width: 180px;
+      display: flex; flex-direction: column; justify-content: space-around;
+      padding: 1.1rem 1rem;
+    }
+    .ann-labels span {
+      font-size: 0.75rem; color: var(--muted); line-height: 1.4;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .ann-labels span::before { content: "←"; color: var(--accent); font-weight: 700; }
+
+    /* ── File tree ───────────────────────────── */
+    .tree {
+      font-family: "SF Mono", Consolas, monospace; font-size: 0.82rem;
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem 1.4rem; line-height: 1.9;
+    }
+    .tree .dir { color: var(--accent); font-weight: 600; }
+    .tree .comment { color: var(--muted); }
+
+    /* ── Footer ──────────────────────────────── */
+    footer {
+      margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+      font-size: 0.82rem; color: var(--muted);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 760px) {
+      nav { display: none; }
+      main { margin-left: 0; padding: 2rem 1.4rem 4rem; }
+      .cards { grid-template-columns: 1fr; }
+      .tune-item { display: block; }
+      .annotated { flex-direction: column; }
+      .annotated pre { border-radius: 8px 8px 0 0; }
+      .ann-labels { border-radius: 0 0 8px 8px; border-left: 1px solid var(--border); border-top: none; }
+    }
+  </style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <div class="nav-brand">
+    <h1>MCAAT</h1>
+    <span>v1.0.0 &nbsp;·&nbsp; Manual</span>
+  </div>
+
+  <span class="nav-group">Get Started</span>
+  <a href="#quickstart">Quick Start</a>
+  <a href="#install">Installation</a>
+
+  <span class="nav-group">Running</span>
+  <a href="#your-data">Your Data</a>
+  <a href="#tuning">Tuning Parameters</a>
+  <a href="#settings">Settings File</a>
+
+  <span class="nav-group">Results</span>
+  <a href="#output">Reading the Output</a>
+  <a href="#next-steps">Next Steps</a>
+
+  <span class="nav-group">Project</span>
+  <a href="#citation">Citation</a>
+</nav>
+
+<main>
+
+  <header class="page-header">
+    <h1>MCAAT — User Manual</h1>
+    <p class="subtitle">
+      MCAAT finds CRISPR arrays directly in raw metagenomic reads — no assembly required.
+      It builds a de Bruijn graph from your reads and detects the cyclic repeat-spacer pattern that defines a CRISPR array.
+    </p>
+    <div class="badges">
+      <a href="https://www.gnu.org/licenses/gpl-3.0">
+        <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="GPL v3"/>
+      </a>
+      <a href="https://hub.docker.com/r/feeka94/mcaat">
+        <img src="https://img.shields.io/docker/v/feeka94/mcaat?label=Docker%20Hub&color=2496ED" alt="Docker Hub"/>
+      </a>
+      <a href="https://hub.docker.com/r/feeka94/mcaat">
+        <img src="https://img.shields.io/docker/pulls/feeka94/mcaat" alt="Docker Pulls"/>
+      </a>
+      <a href="https://github.com/RNABioInfo/mcaat/releases">
+        <img src="https://img.shields.io/github/v/release/RNABioInfo/mcaat" alt="GitHub Release"/>
+      </a>
+    </div>
+  </header>
+
+
+  <!-- ── Quick Start ───────────────────────────── -->
+  <section id="quickstart">
+    <h2>Quick Start</h2>
+    <p>Pull the image and point it at your reads. This is the full workflow for most users.</p>
+<pre><code>docker pull feeka94/mcaat:1.0.0
+
+docker run --rm -v $(pwd):/data feeka94/mcaat:1.0.0 \
+  --input-files /data/reads_R1.fastq.gz /data/reads_R2.fastq.gz \
+  --output-folder /data/results</code></pre>
+
+    <p>
+      When it finishes, open <code>results/CRISPR_Arrays_1.txt</code>.
+      Each block in that file is one detected CRISPR array with its spacers.
+      See <a href="#output">Reading the Output</a> for how to interpret it.
+    </p>
+  </section>
+
+
+  <!-- ── Installation ──────────────────────────── -->
+  <section id="install">
+    <h2>Installation</h2>
+
+    <div class="cards">
+      <div class="card rec">
+        <h4>Docker <span style="font-weight:400;font-size:0.8rem;">(recommended)</span></h4>
+        <p>No dependencies to install. Works on any machine without manual setup.<br><a href="https://hub.docker.com/r/feeka94/mcaat" style="font-size:0.82rem;">hub.docker.com/r/feeka94/mcaat</a></p>
+      </div>
+      <div class="card">
+        <h4>Build from source</h4>
+        <p>Use this on HPC clusters without Docker, or if you need to modify the binary. Requires CMake ≥ 3.12, C++17, zlib, OpenMP, BZip2.</p>
+      </div>
+    </div>
+
+    <h3>Build from source</h3>
+<pre><code>git clone --recurse-submodules https://github.com/feeka94/mcaat.git
+cd mcaat
+chmod +x ./install.sh
+./install.sh              # binary → build/mcaat
+./install.sh --install    # also copies to system path</code></pre>
+
+    <div class="note">
+      <strong>Submodules are required.</strong> If you cloned without <code>--recurse-submodules</code>, run <code>git submodule update --init --recursive</code> before building.
+    </div>
+  </section>
+
+
+  <!-- ── Your Data ─────────────────────────────── -->
+  <section id="your-data">
+    <h2>Your Data</h2>
+
+    <p>MCAAT accepts FASTQ files, plain or gzip-compressed. Pass one file for single-end reads, two files for paired-end.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Situation</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Paired-end (typical Illumina run)</td>
+            <td><code>--input-files R1.fastq.gz R2.fastq.gz</code></td>
+          </tr>
+          <tr>
+            <td>Single-end or merged reads</td>
+            <td><code>--input-files reads.fastq.gz</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Paired-end mode is preferred. Providing both files gives the graph builder more k-mer coverage across read pairs, which improves detection in lower-depth samples.
+    </p>
+  </section>
+
+
+  <!-- ── Tuning ─────────────────────────────────── -->
+  <section id="tuning">
+    <h2>Tuning Parameters</h2>
+
+    <p>
+      The defaults work for most metagenomic datasets. You only need to change parameters if you are seeing unexpected results — too many hits, too few, or arrays that look truncated.
+    </p>
+
+    <div class="tune-list">
+
+      <div class="tune-item">
+        <div class="tune-header">
+          <code>--cycle-min-length</code>
+          <code>--cycle-max-length</code>
+          <span class="default">default: 27 / 77</span>
+        </div>
+        <div class="guidance">
+          These define the size of cycles the graph searches for — roughly the combined length of one repeat and one spacer.
+          CRISPR repeats are typically 23–47 bp and spacers 26–72 bp.
+          The defaults cover the vast majority of known CRISPR systems.
+          Only tighten these if you know your target organism's CRISPR type and want to reduce noise.
+        </div>
+      </div>
+
+      <div class="tune-item">
+        <div class="tune-header">
+          <code>--threshold-multiplicity</code>
+          <span class="default">default: 20</span>
+        </div>
+        <div class="guidance">
+          Controls how many times a k-mer must appear in the reads before it is considered as a cycle start point.
+          Think of it as a depth filter: low-coverage datasets will miss real arrays if this is too high.
+          <strong>Lower it</strong> (e.g. 5–10) if your sequencing depth is &lt;10×, or if the CRISPR host is a rare community member and you are getting zero hits.
+          <strong>Raise it</strong> (e.g. 30–50) on deep datasets to cut false positives.
+        </div>
+      </div>
+
+      <div class="tune-item">
+        <div class="tune-header">
+          <code>--low-abundance</code>
+          <span class="default">default: true</span>
+        </div>
+        <div class="guidance">Enables a detection mode for metagenomes where the CRISPR-carrying organism is a minor fraction of the community. Leave it on for any environmental or gut metagenome. Set it to <code>false</code> only if you are running on a pure culture or a highly enriched sample where the target organism dominates.</div>
+      </div>
+
+      <div class="tune-item">
+        <div class="tune-header">
+          <code>--ram</code>
+          <span class="default">default: 95% of system RAM</span>
+        </div>
+        <div class="guidance">MCAAT builds the entire de Bruijn graph in memory. On a shared HPC node, set this explicitly to stay within your allocated memory quota. Use suffixed values: <code>8G</code>, <code>64G</code>, <code>128G</code>. The graph typically needs roughly 4–8 bytes per unique k-mer in your dataset.</div>
+      </div>
+
+      <div class="tune-item">
+        <div class="tune-header">
+          <code>--threads</code>
+          <span class="default">default: CPU cores − 2</span>
+        </div>
+        <div class="guidance">
+          On a laptop, the default is fine.
+          On an HPC node, set this to the number of cores you have allocated,
+          otherwise MCAAT will try to use all physical cores on the node
+          and compete with other jobs.
+        </div>
+      </div>
+
+      <div class="tune-item">
+        <div class="tune-header">
+          <code>--autoclean</code>
+          <span class="default">default: true</span>
+        </div>
+        <div class="guidance">After a run, MCAAT removes the intermediate <code>graph/</code> and <code>cycles/</code> directories. Set to <code>false</code> to keep them — useful if you plan to inspect the graph or re-run detection with different parameters on the same dataset without rebuilding the graph.</div>
+      </div>
+  </section>
+
+
+
+
+  <!-- ── Settings File ─────────────────────────── -->
+  <section id="settings">
+    <h2>Settings File</h2>
+
+    <p>
+      For repeated runs, store your parameters in a <code>key=value</code> file
+      instead of typing long command lines. Pass it with <code>--settings</code>.
+      Any flag you also pass on the command line overrides the file value.
+    </p>
+
+<pre><code>input-files=/data/R1.fastq.gz /data/R2.fastq.gz
+output-folder=results/run_1
+ram=128G
+threads=26
+threshold-multiplicity=15
+low-abundance=true
+autoclean=true</code></pre>
+
+<pre><code>mcaat --settings run.conf</code></pre>
+
+    <p><code>input-files</code> accepts one or two paths separated by spaces, commas, or semicolons.</p>
+  </section>
+
+
+  <!-- ── Output ────────────────────────────────── -->
+  <section id="output">
+    <h2>Reading the Output</h2>
+
+    <div class="tree">
+      <span class="dir">results/</span><br>
+      ├── CRISPR_Arrays_1.txt &nbsp;<span class="comment">← your results are here</span><br>
+      ├── <span class="dir">graph/</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">← succinct de Bruijn graph files</span><br>
+      └── <span class="dir">cycles/</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">← raw cycle data, not needed for typical use</span>
+    </div>
+
+    <p style="margin-top: 1rem;">
+      If many arrays are detected, output is split into numbered files:
+      <code>CRISPR_Arrays_1.txt</code>, <code>CRISPR_Arrays_2.txt</code>, etc.
+      The header of each file tells you the total count.
+    </p>
+
+    <h3>Structure of an array block</h3>
+
+<pre><code>&gt;Array_1  spacers=8
+ATCGATCGATCGATCGATCGATCG
+        --------------------    AACCCGGTTAATCGATCGTTTCGAGC
+        --------------------    TTGGCCAATCGATCGATCAAAACGGG
+        ATCGATCGATCGATCTATCG    GGAATTCCAATCGATCGAATACCCAC</code></pre>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Element</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>&gt;Array_1  spacers=8</code></td>
+            <td>Array identifier. The spacer count is a rough proxy for how long this organism has been exposed to phage — more spacers means more recorded encounters.</td>
+          </tr>
+          <tr>
+            <td>First sequence line</td>
+            <td>The consensus repeat sequence for this array. All spacers in one array share the same repeat, which is how MCAAT groups them.</td>
+          </tr>
+          <tr>
+            <td>Left column (dashes or sequence)</td>
+            <td>
+              The repeat variant for this spacer row.
+              Dashes mean it matches the consensus exactly.
+              A sequence here means this particular repeat copy differs slightly — this is normal and expected at the leader end of an array, where newly acquired spacers sit.
+            </td>
+          </tr>
+          <tr>
+            <td>Right column</td>
+            <td>The spacer sequence itself. Each spacer represents one acquired target — typically a phage or mobile element sequence.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+
+  <!-- ── Next Steps ─────────────────────────────── -->
+  <section id="next-steps">
+    <h2>Next Steps</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Goal</th><th>How</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Identify what the spacers target</td>
+            <td>BLAST each spacer against viral databases (e.g. NCBI nr, IMG/VR, PHASTER). A hit tells you what phage or MGE this organism has been exposed to.</td>
+          </tr>
+          <tr>
+            <td>Find the PAM site</td>
+            <td>Map spacers back to your reads or a reference genome to locate the protospacer. The flanking sequence at the 3′ end is the PAM.</td>
+          </tr>
+          <tr>
+            <td>Classify the CRISPR system type</td>
+            <td>Use the repeat sequence as input to CRISPRdb or CasFinder to identify the Cas subtype (I, II, III, etc.).</td>
+          </tr>
+          <tr>
+            <td>Re-run with adjusted sensitivity</td>
+            <td>See <a href="#reuse">Reusing the Graph</a> — rebuild only the cycle detection, not the graph.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+
+  <!-- ── Citation ──────────────────────────────── -->
+  <section id="citation">
+    <h2>Citation</h2>
+    <div class="note">
+      <a href="https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558">
+        https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558
+      </a>
+    </div>
+  </section>
+
+
+  <footer>
+    <a href="https://github.com/RNABioInfo/mcaat/issues">Please write an issue on our GitHub page if any problems occur.</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/RNABioInfo/mcaat">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://hub.docker.com/r/feeka94/mcaat">Docker Hub</a>
+    &nbsp;·&nbsp;
+    GPL-3.0
+  </footer>
+
+</main>
+
+<script>
+  const sections = document.querySelectorAll("section[id]");
+  const links    = document.querySelectorAll("nav a");
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove("active"));
+        const a = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+        if (a) a.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-25% 0px -65% 0px" });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
