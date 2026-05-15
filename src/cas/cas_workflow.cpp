@@ -558,46 +558,70 @@ std::vector<StartCodonCandidate> CasWorkflow::FindStartCodonCandidates(
     std::vector<StartCodonCandidate> candidates;
     std::set<uint64_t> visited;
     std::queue<std::pair<uint64_t, int>> q;
-    
+
     q.push({repeat_node, 0});
     visited.insert(repeat_node);
-    
-    while (!q.empty() && static_cast<int>(candidates.size()) < max_candidates) {
+
+    // Distance-stratified BFS: divide [min_dist, max_dist] into N_BINS equal
+    // slices and cap each bin independently.  This prevents the common failure
+    // mode in metagenomics graphs where ATG codons from many co-assembled
+    // genomes saturate a flat candidate cap within the first few hundred bp,
+    // leaving the far distance bins — where the actual cas genes often reside —
+    // completely unexplored.
+    //
+    // We stop when every bin has reached max_per_bin, OR when a node-visit
+    // budget (MAX_NODES) is exhausted.  MAX_NODES is set to 50 × max_candidates
+    // so the total work scales with the caller's budget, but the BFS now
+    // distributes that budget evenly over the full search range.
+    const int N_BINS       = 50;
+    const int range        = std::max(1, max_dist - min_dist);
+    const int max_per_bin  = std::max(1, max_candidates / N_BINS);
+    const int MAX_NODES    = max_candidates * 50;
+
+    std::vector<int> bin_fill(N_BINS, 0);
+    int full_bins    = 0;      // bins that have reached max_per_bin
+    int nodes_visited = 0;
+
+    while (!q.empty() && full_bins < N_BINS && nodes_visited < MAX_NODES) {
         auto [node, dist] = q.front();
         q.pop();
-        
+        ++nodes_visited;
+
         if (dist <= max_dist) {
-            // Both directions now search for START codons
             int offset = GetStartCodonOffset(node);
-            
+
             if (offset >= 0) {
                 int bp_dist = dist + offset;
                 if (bp_dist >= min_dist && bp_dist <= max_dist) {
-                    // Lightweight ORF check: reject candidates that hit a stop codon
-                    // within the first 150 bp (~50 aa) — minimum sensible Cas gene size.
-                    // EstimateORFLength max_search=300 keeps this cheap (greedy, no full BFS).
-                    constexpr int MIN_ORF_BP = 150;
-                    int orf_len = (direction == SearchDirection::DOWNSTREAM)
-                        ? EstimateORFLength(node, offset, 300)
-                        : EstimateORFLengthReverse(node, offset, 300);
-                    if (orf_len >= MIN_ORF_BP) {
-                        candidates.push_back({node, bp_dist, offset, orf_len});
+                    int bin = std::min(N_BINS - 1,
+                                      (bp_dist - min_dist) * N_BINS / range);
+                    if (bin_fill[bin] < max_per_bin) {
+                        constexpr int MIN_ORF_BP = 150;
+                        int orf_len = (direction == SearchDirection::DOWNSTREAM)
+                            ? EstimateORFLength(node, offset, 300)
+                            : EstimateORFLengthReverse(node, offset, 300);
+                        if (orf_len >= MIN_ORF_BP) {
+                            candidates.push_back({node, bp_dist, offset, orf_len});
+                            ++bin_fill[bin];
+                            if (bin_fill[bin] == max_per_bin) {
+                                ++full_bins;
+                            }
+                        }
                     }
                 }
             }
         }
-        
+
         if (dist < max_dist) {
             uint64_t edges[4];
             int edge_count;
-            
-            // Direction-aware edge selection
+
             if (direction == SearchDirection::DOWNSTREAM) {
                 edge_count = sdbg_.OutgoingEdges(node, edges);
             } else {
                 edge_count = sdbg_.IncomingEdges(node, edges);
             }
-            
+
             for (int i = 0; i < edge_count; ++i) {
                 if (sdbg_.IsValidEdge(edges[i]) && !visited.count(edges[i])
                     && (cycle_nodes_.empty() || !cycle_nodes_[edges[i]])) {

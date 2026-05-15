@@ -57,7 +57,7 @@ struct MultiProfileResult {
 
 class CasGeneDetector {
 public:
-    static constexpr int BAND_WIDTH = 64;  // States above/below diagonal
+    static constexpr int BAND_WIDTH = 128;  // States above/below diagonal
     static constexpr double DEFAULT_MIN_NORMALIZED_SCORE = 0.05;  // For early termination
     
     CasGeneDetector(SDBG& sdbg);

@@ -310,13 +310,13 @@ public:
 
 private:
     struct WorkflowTuning {
-        int first_gene_search_max_bp = 8000;
+        int first_gene_search_max_bp = 15000;
         int bfs_max_candidates = 10000;
         int max_cassette_bp = 30000;
         int intergenic_min_bp = -24;
         int intergenic_max_bp = 2000;
         int max_genes = 10;
-        int first_gene_bins = 20;
+        int first_gene_bins = 50;
         int profile_window_count = 50;
         double shallow_threshold = 0.05;
         double phase1_high_confidence = 1.2;
@@ -372,8 +372,11 @@ private:
     // Large profiles (LENG > 500) get a lower threshold: banded Viterbi often
     // drifts on multi-domain proteins and fails to consume the full HMM.
     double PartialScoreThreshold(size_t profile_index) const {
-        if (profile_index < profiles_.size() && profiles_[profile_index].leng > 500)
-            return 0.3;
+        if (profile_index < profiles_.size()) {
+            size_t leng = profiles_[profile_index].leng;
+            if (leng > 800) return 0.25;
+            if (leng > 500) return 0.30;
+        }
         return 0.5;
     }
     
