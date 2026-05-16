@@ -20,11 +20,11 @@ enum class SearchDirection {
 };
 
 struct CasWorkflowParams {
-    int FIRST_GENE_MIN_DIST = 50;
+    int FIRST_GENE_MIN_DIST = 0;
     int FIRST_GENE_MAX_DIST = 2500;
     int MAX_START_CANDIDATES = 50000;
     int BEAM_WIDTH = 100;
-    double MIN_NORMALIZED_SCORE = 0.2;  // bits per HMM position; rejects random matches
+    double MIN_NORMALIZED_SCORE = 0.15;  // bits per HMM position; rejects random matches
     bool allow_exploratory = true;  // If false, stop when rule-guided search fails (no Phase 2)
 };
 
@@ -83,6 +83,43 @@ inline std::string ExtractGeneFamily(const std::string& profile_name) {
     return base;
 }
 
+// Extract subtype tags embedded in a profile filename.
+// Examples:
+//   "csm3gr7_III-A_III-D_2.hmm" -> {"III-A", "III-D"}
+//   "cas8a1_I-A_1.hmm"           -> {"I-A"}
+//   "cas9_II-A_3.hmm"            -> {"II-A"}
+//   "cas12k_V-K_1.hmm"           -> {"V-K"}
+//   "cas3_I_1.hmm"               -> {} (generic, no subtype)
+// Recognised pattern per token: [IVX]+-[A-Z] (e.g. I-A, III-D, V-K).
+inline std::set<std::string> ExtractSubtypeTags(const std::string& profile_name) {
+    std::set<std::string> tags;
+    std::string name = profile_name;
+    size_t ext_pos = name.rfind(".hmm");
+    if (ext_pos != std::string::npos) name = name.substr(0, ext_pos);
+
+    size_t pos = 0;
+    while (pos < name.size()) {
+        size_t next = name.find('_', pos);
+        std::string tok = (next == std::string::npos)
+                              ? name.substr(pos)
+                              : name.substr(pos, next - pos);
+        size_t dash = tok.find('-');
+        if (dash != std::string::npos && dash > 0 && dash + 1 < tok.size()) {
+            bool prefix_ok = true;
+            for (size_t i = 0; i < dash; ++i) {
+                char c = tok[i];
+                if (c != 'I' && c != 'V' && c != 'X') { prefix_ok = false; break; }
+            }
+            bool suffix_ok = (dash + 1 == tok.size() - 1)
+                          && tok[dash + 1] >= 'A' && tok[dash + 1] <= 'Z';
+            if (prefix_ok && suffix_ok) tags.insert(tok);
+        }
+        if (next == std::string::npos) break;
+        pos = next + 1;
+    }
+    return tags;
+}
+
 struct DetectedCasGene {
     std::string profile_name;
     std::string gene_family;     // Base family for dedup: Cas1, Cas3, Cas8a1...
@@ -128,10 +165,10 @@ struct TypeHypothesisResult {
     
     double CassetteScore() const {
         // Matches live scoring in score_candidates lambda:
-        // mandatory_found dominates; total_genes breaks ties; log-prior favours common types
+        // mandatory_found dominates; total_genes breaks ties; 50*log-prior favours common types
         return mandatory_found * 1000.0
              + total_genes    *   10.0
-             + std::log(static_cast<double>(db_count) + 1.0);
+             + 50.0 * std::log(static_cast<double>(db_count) + 1.0);
     }
 };
 
@@ -312,10 +349,13 @@ private:
     struct WorkflowTuning {
         int first_gene_search_max_bp = 15000;
         int bfs_max_candidates = 10000;
-        int max_cassette_bp = 30000;
-        int intergenic_min_bp = -24;
-        int intergenic_max_bp = 2000;
-        int max_genes = 10;
+        // Relaxed cassette geometry: tRNAs / IS elements / HD-domain inserts
+        // can push real operon gaps above the old 2 kbp ceiling, and compact
+        // archaeal operons routinely overlap by ~80 bp.
+        int max_cassette_bp = 60000;
+        int intergenic_min_bp = -100;
+        int intergenic_max_bp = 5000;
+        int max_genes = 12;
         int first_gene_bins = 50;
         int profile_window_count = 50;
         double shallow_threshold = 0.05;
@@ -371,13 +411,49 @@ private:
     // Returns the acceptable incomplete-alignment score threshold for a profile.
     // Large profiles (LENG > 500) get a lower threshold: banded Viterbi often
     // drifts on multi-domain proteins and fails to consume the full HMM.
+    // Highly divergent signature subunits (cas8a, cas8c, cas9, cas10d, csc1,
+    // csc2, cas12k) get the most lenient threshold: these families have very
+    // low conservation per HMM position even on true homologs.
     double PartialScoreThreshold(size_t profile_index) const {
         if (profile_index < profiles_.size()) {
-            size_t leng = profiles_[profile_index].leng;
-            if (leng > 800) return 0.25;
-            if (leng > 500) return 0.30;
+            const auto& prof = profiles_[profile_index];
+            // Per-family override (extracted lazily from the filename)
+            std::string fam = ExtractGeneFamily(prof.filename);
+            // Divergent large subunits and Class-2 effectors
+            static const std::set<std::string> divergent_families = {
+                "cas8a", "cas8a1", "cas8a2", "cas8a3", "cas8a4", "cas8a5",
+                "cas8a6", "cas8a7", "cas8a8", "cas8a9",
+                "cas8b", "cas8b1", "cas8b2", "cas8b3", "cas8b4", "cas8b5",
+                "cas8b6", "cas8b7", "cas8b8", "cas8b9", "cas8b10", "cas8b11",
+                "cas8b12", "cas8b13",
+                "cas8c", "cas8e", "cas8f", "cas8u1", "cas8u2",
+                "cas9", "cas10", "cas10d", "cas12k",
+                "csc1", "csc1gr5", "csc2", "csc2gr7",
+                "csm5", "csm5gr7", "csx10gr5", "csx19"
+            };
+            if (divergent_families.count(fam)) return 0.10;
+            size_t leng = prof.leng;
+            if (leng > 800) return 0.20;
+            if (leng > 500) return 0.25;
         }
-        return 0.5;
+        return 0.40;
+    }
+
+    // Soft AA-length tolerance: hard-reject only if the alignment is wildly
+    // out of bounds; near-miss alignments are returned with a demoted score
+    // so the cassette walk does not abort on a single short/long gene.
+    // Returns 1.0 if AA length is fully in bounds, a multiplicative penalty
+    // in (0,1) if borderline, and 0.0 if it should be rejected outright.
+    double AALengthPenalty(size_t profile_index, int aa_len) const {
+        if (profile_index >= profiles_.size()) return 1.0;
+        const auto& prof = profiles_[profile_index];
+        int lo = prof.min_aa;
+        int hi = prof.max_aa;
+        if (aa_len >= lo && aa_len <= hi) return 1.0;
+        // Hard reject: <50% of min or >150% of max
+        if (aa_len < lo / 2 || aa_len > (hi * 3) / 2) return 0.0;
+        // Borderline: demote by 15%
+        return 0.85;
     }
     
     std::vector<StartCodonCandidate> FindStartCodonCandidates(

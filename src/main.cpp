@@ -49,12 +49,12 @@ struct CasDetectConfig {
     std::string output_dir;       // where CAS_Systems_*.txt are written
     std::string profiles_dir;     // path to CasFinder-main/profiles/
     std::string rules_csv;        // path to mcaat/docs/_rules.csv
-    double  min_score       = 0.2;
+    double  min_score       = 0.15;
     int     beam_width      = 50;
-    int     intergenic_max  = 2000;
-    int     intergenic_min  = -24;
-    int     max_cassette_bp = 30000;
-    int     max_genes       = 10;
+    int     intergenic_max  = 5000;
+    int     intergenic_min  = -100;
+    int     max_cassette_bp = 60000;
+    int     max_genes       = 12;
     bool    sensitivity     = false;
 };
 
@@ -130,12 +130,12 @@ static int run_detect_cas_genes(int argc, char** argv) {
                 "Config keys (--config file):\n"
                 "  profiles-dir=<path>         same as --profiles-dir\n"
                 "  rules-csv=<path>            same as --rules-csv\n"
-                "  min-normalized-score=0.3    Minimum HMM score per position (bits)\n"
+                "  min-normalized-score=0.15   Minimum HMM score per position (bits)\n"
                 "  beam-width=50               Beam width for graph traversal\n"
-                "  intergenic-max=2000         Max intergenic gap (bp)\n"
-                "  intergenic-min=-24          Min intergenic gap (bp, negative allows overlaps)\n"
-                "  max-cassette-bp=30000       Max cassette span (bp)\n"
-                "  max-genes=10                Max genes per cassette\n"
+                "  intergenic-max=5000         Max intergenic gap (bp)\n"
+                "  intergenic-min=-100         Min intergenic gap (bp, negative allows overlaps)\n"
+                "  max-cassette-bp=60000       Max cassette span (bp)\n"
+                "  max-genes=12                Max genes per cassette\n"
                 "  sensitivity=false           Enable sensitivity mode (lower thresholds)\n\n";
             return 0;
         } else {

@@ -254,8 +254,16 @@ void CasWorkflow::BuildFirstGeneIndex() {
             auto it = family_to_profiles_.find(family);
             
             if (it != family_to_profiles_.end()) {
+                // Ubiquitous adaptation / accessory genes (cas1/2/3/4/6, rt, wyl, ...)
+                // belong to nearly every type. Mapping them to every type's candidate
+                // list unfocuses Phase 1 (expected_families balloons) and biases the
+                // first-detected family to add no real information. Keep them as valid
+                // first-gene seeds for BFS but do NOT use them to nominate candidate
+                // type indices.
+                const bool is_multi_model = MULTI_MODEL_FAMILIES.count(family) > 0;
                 for (size_t idx : it->second) {
                     first_gene_set.insert(idx);
+                    if (is_multi_model) continue;
                     // Track which types this gene can indicate (avoid duplicates)
                     auto& types = first_gene_to_types_[idx];
                     if (std::find(types.begin(), types.end(), type_class) == types.end()) {
@@ -1202,8 +1210,8 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
     
     DetectedCasGene gene1;
     size_t original_profile_index = SIZE_MAX;
-    constexpr size_t FIRST_GENE_TOP_K = 10;
-    
+    // FIRST_GENE_TOP_K is declared below where the stratified selection happens.
+
     // STEP 1: First gene search (profile-parallel)
     // IMPORTANT: avoid a single huge serial BFS over [min..5000], which bottlenecks on one core.
     // Each profile searches only its own expected distance window in parallel.
@@ -1275,8 +1283,23 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
             return a.normalized_score > b.normalized_score;
         });
 
-    if (first_gene_hypotheses.size() > FIRST_GENE_TOP_K) {
-        first_gene_hypotheses.resize(FIRST_GENE_TOP_K);
+    // Stratified TOP-K: keep up to PER_FAMILY hits per gene family, plus an
+    // overall cap. The old flat top-10 was dominated by adaptation genes
+    // (cas1/2/3) and crowded out signature genes (cas8e, cas9, cas12k, cas8c, ...)
+    // which is the main reason I-E and Class-2 systems were severely under-detected.
+    constexpr size_t FIRST_GENE_TOP_K = 20;
+    constexpr size_t PER_FAMILY = 3;
+    {
+        std::vector<DetectedCasGene> kept;
+        kept.reserve(std::min(FIRST_GENE_TOP_K, first_gene_hypotheses.size()));
+        std::map<std::string, size_t> family_count;
+        for (const auto& h : first_gene_hypotheses) {
+            if (kept.size() >= FIRST_GENE_TOP_K) break;
+            if (family_count[h.gene_family] >= PER_FAMILY) continue;
+            family_count[h.gene_family]++;
+            kept.push_back(h);
+        }
+        first_gene_hypotheses = std::move(kept);
     }
 
     std::cout << "  DEBUG: first-gene hypotheses after scoring="
@@ -1323,16 +1346,22 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
         return cassette;
     }
 
-    // Post-output length validation: verify amino acid length vs profile bounds
+    // Post-output length validation: verify amino acid length vs profile bounds.
+    // Soft policy: only hard-reject when extremely out of bounds; otherwise demote
+    // the score and continue (banded Viterbi often truncates long multi-domain proteins).
     if (gene1.profile_index < profiles_.size()) {
         int aa_len = static_cast<int>(gene1.amino_acids.size());
-        const auto& prof = profiles_[gene1.profile_index];
-        if (aa_len < prof.min_aa || aa_len > prof.max_aa) {
+        double pen = AALengthPenalty(gene1.profile_index, aa_len);
+        if (pen == 0.0) {
+            const auto& prof = profiles_[gene1.profile_index];
             std::cout << "  WARNING: Gene1 " << gene1.gene_family
-                      << " AA length " << aa_len << " outside profile bounds ["
+                      << " AA length " << aa_len << " wildly outside profile bounds ["
                       << prof.min_aa << "," << prof.max_aa << "] - rejected" << std::endl;
             cassette.stop_reason_code = "NO_NEXT_GENE";
             return cassette;
+        }
+        if (pen < 1.0) {
+            gene1.normalized_score *= pen;
         }
     }
 
@@ -1743,16 +1772,22 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
             break;
         }
 
-        // Post-output length validation: verify amino acid length vs profile bounds
+        // Post-output length validation: verify amino acid length vs profile bounds.
+        // Soft policy: only hard-skip when extremely out of bounds, and do NOT abort
+        // the entire cassette walk - just drop this gene and try the next iteration.
         if (next_gene.profile_index < profiles_.size()) {
             int aa_len = static_cast<int>(next_gene.amino_acids.size());
-            const auto& prof = profiles_[next_gene.profile_index];
-            if (aa_len < prof.min_aa || aa_len > prof.max_aa) {
+            double pen = AALengthPenalty(next_gene.profile_index, aa_len);
+            if (pen == 0.0) {
+                const auto& prof = profiles_[next_gene.profile_index];
                 std::cout << "  WARNING: Gene " << next_gene.gene_family
-                          << " AA length " << aa_len << " outside profile bounds ["
-                          << prof.min_aa << "," << prof.max_aa << "] - skipped" << std::endl;
-                cassette.stop_reason_code = "AA_LENGTH_FAIL";
+                          << " AA length " << aa_len << " wildly outside profile bounds ["
+                          << prof.min_aa << "," << prof.max_aa << "] - skipped (cassette continues)" << std::endl;
+                cassette.stop_reason_code = "NO_NEXT_GENE";
                 break;
+            }
+            if (pen < 1.0) {
+                next_gene.normalized_score *= pen;
             }
         }
 
@@ -1808,9 +1843,27 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
     }
 
     // Final type determination - score all candidate types and pick best.
-    // Score = mandatory_matches * 1000 + total_matches * 10 + log(db_count+1)
-    // The log-prior term breaks ties in favour of more prevalent types in CRISPRCasDB.
+    // Score = mandatory*1000 + subtype_tag_bonus + total*10 + 50*log(db_count+1)
+    //  - mandatory_matches dominates structural recognition
+    //  - subtype_tag_bonus exploits subtype tags embedded in profile filenames
+    //    (e.g. "csm3gr7_III-A_III-D" boosts both III-A and III-D), which is the
+    //    only signal that distinguishes III-A vs III-D and III-B vs III-C since
+    //    those pairs share identical gene families
+    //  - total_matches breaks ties next
+    //  - 50*log(db_count+1) is a meaningful prior favouring prevalent subtypes
     if (cassette.detected_type.empty()) {
+        auto subtype_bonus_for = [&](const std::string& type_class) {
+            double bonus = 0.0;
+            for (const auto& g : cassette.genes) {
+                if (g.profile_index >= profiles_.size()) continue;
+                auto tags = ExtractSubtypeTags(profiles_[g.profile_index].filename);
+                if (tags.count(type_class)) {
+                    bonus += 100.0 * std::max(0.0, g.normalized_score);
+                }
+            }
+            return bonus;
+        };
+
         auto score_candidates = [&](const std::vector<size_t>& indices) -> bool {
             double best_score = -1.0;
             size_t best_idx   = 0;
@@ -1819,8 +1872,9 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                 const auto& rule = type_rules_[type_idx];
                 if (mandatory_matches >= rule.min_mandatory && total_matches >= rule.min_genes) {
                     double sc = mandatory_matches * 1000.0
+                              + subtype_bonus_for(rule.type_class)
                               + total_matches     *   10.0
-                              + std::log(static_cast<double>(rule.db_count) + 1.0);
+                              + 50.0 * std::log(static_cast<double>(rule.db_count) + 1.0);
                     if (sc > best_score) {
                         best_score = sc;
                         best_idx   = type_idx;
