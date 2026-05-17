@@ -25,7 +25,7 @@ struct CasWorkflowParams {
     int MAX_START_CANDIDATES = 50000;
     int BEAM_WIDTH = 100;
     double MIN_NORMALIZED_SCORE = 0.15;  // bits per HMM position; rejects random matches
-    bool allow_exploratory = true;  // If false, stop when rule-guided search fails (no Phase 2)
+    bool allow_exploratory = false;  // If false, stop when rule-guided search fails (no Phase 2)
 };
 
 // Extract base gene family from profile name for deduplication
@@ -349,13 +349,14 @@ private:
     struct WorkflowTuning {
         int first_gene_search_max_bp = 15000;
         int bfs_max_candidates = 10000;
-        // Relaxed cassette geometry: tRNAs / IS elements / HD-domain inserts
-        // can push real operon gaps above the old 2 kbp ceiling, and compact
-        // archaeal operons routinely overlap by ~80 bp.
-        int max_cassette_bp = 60000;
+        // Cassette geometry: keep gaps tight (2 kbp) to avoid roping in
+        // neighbouring operons, but allow a slightly larger overall span and
+        // mild overlap so HD-domain inserts and compact archaeal operons aren't
+        // truncated.
+        int max_cassette_bp = 40000;
         int intergenic_min_bp = -100;
-        int intergenic_max_bp = 5000;
-        int max_genes = 12;
+        int intergenic_max_bp = 2000;
+        int max_genes = 10;
         int first_gene_bins = 50;
         int profile_window_count = 50;
         double shallow_threshold = 0.05;
