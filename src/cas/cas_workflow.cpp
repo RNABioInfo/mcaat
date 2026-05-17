@@ -292,6 +292,28 @@ void CasWorkflow::BuildFirstGeneIndex() {
     if (first_gene_profile_indices_.empty()) {
         std::cerr << "ERROR: No first-gene profiles loaded! Detection will fail!\n";
     }
+
+    // OPTIMIZATION: Build first-gene REPRESENTATIVES — one (longest) profile per
+    // family. Phase 1 first-gene scan iterates these (~80 profiles) instead of
+    // all first-gene profiles (~500). The winner is then refined via the
+    // family-refinement pass below, so accuracy is preserved.
+    {
+        std::map<std::string, size_t> best_per_family;  // family -> profile_idx with longest LENG
+        for (size_t idx : first_gene_profile_indices_) {
+            std::string fam = ExtractGeneFamily(profiles_[idx].filename);
+            auto it = best_per_family.find(fam);
+            if (it == best_per_family.end() || profiles_[idx].leng > profiles_[it->second].leng) {
+                best_per_family[fam] = idx;
+            }
+        }
+        first_gene_representatives_.clear();
+        first_gene_representatives_.reserve(best_per_family.size());
+        for (const auto& [fam, idx] : best_per_family) {
+            first_gene_representatives_.push_back({idx, fam});
+        }
+        std::cout << "  first-gene representatives: " << first_gene_representatives_.size()
+                  << " families (was " << first_gene_profile_indices_.size() << " profiles)\n";
+    }
     
     // Pre-load first-gene profiles for fast Phase 1 detection
     for (size_t idx : first_gene_profile_indices_) {
@@ -739,6 +761,33 @@ DetectedCasGene CasWorkflow::ScoreStartNodeWithProfile(
     if (!skip_distance_check && !IsProfileCompatibleWithDistance(profiles_[profile_index], distance_from_repeat, direction)) {
         return result;  // Profile too long for available space
     }
+
+    // OPTIMIZATION: thread-local score cache. Eliminates redundant HMM
+    // computations across overlapping search windows + family refinement
+    // re-scoring the same (start_node, profile_index, offset).
+    // Thread-local avoids OMP lock contention; redundancy across threads is
+    // rare because each parallel-for splits profiles disjointly.
+    // Key encodes direction in the high bit of offset to keep upstream/downstream separate.
+    using CacheKey = std::tuple<uint64_t, size_t, int>;
+    int dir_offset = start_codon_offset | (direction == SearchDirection::UPSTREAM ? 0x4000 : 0);
+    thread_local std::unordered_map<uint64_t,
+        std::unordered_map<size_t, std::unordered_map<int, DetectedCasGene>>> tls_cache;
+    {
+        auto it1 = tls_cache.find(start_node);
+        if (it1 != tls_cache.end()) {
+            auto it2 = it1->second.find(profile_index);
+            if (it2 != it1->second.end()) {
+                auto it3 = it2->second.find(dir_offset);
+                if (it3 != it2->second.end()) {
+                    // Return cached result but re-stamp distance_from_repeat
+                    // (it may differ between calls — it's an output annotation, not scoring input).
+                    DetectedCasGene cached = it3->second;
+                    cached.distance_from_repeat = distance_from_repeat;
+                    return cached;
+                }
+            }
+        }
+    }
     
     // NOTE: ORF length check removed - caller should pre-compute and filter
     // This avoids expensive BFS inside the hot parallel loop
@@ -772,6 +821,9 @@ DetectedCasGene CasWorkflow::ScoreStartNodeWithProfile(
             for (const auto& aa : path.amino_acids) result.amino_acids += aa;
         }
     }
+
+    // Store in thread-local cache for reuse
+    tls_cache[start_node][profile_index][dir_offset] = result;
     
     return result;
 }
@@ -1218,7 +1270,8 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
     int global_search_min = params_.FIRST_GENE_MIN_DIST;
     int global_search_max = tuning_.first_gene_search_max_bp;
 
-    std::cout << " (" << first_gene_profile_indices_.size() << " first-gene profiles)..." << std::flush;
+    std::cout << " (" << first_gene_representatives_.size() << " first-gene reps, "
+              << first_gene_profile_indices_.size() << " profiles)..." << std::flush;
 
     // =========================================================================
     // OPTIMIZATION: Single BFS to find ALL candidates, then filter per profile
@@ -1232,11 +1285,13 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
             return a.distance < b.distance;
         });
 
-    std::vector<DetectedCasGene> best_by_profile(first_gene_profile_indices_.size());
+    // OPTIMIZATION: Scan ONLY one representative per family in Phase 1.
+    // The winning family is refined to its best variant in the loop below.
+    std::vector<DetectedCasGene> best_by_profile(first_gene_representatives_.size());
 
     #pragma omp parallel for schedule(dynamic)
-    for (size_t pi = 0; pi < first_gene_profile_indices_.size(); ++pi) {
-        size_t profile_idx = first_gene_profile_indices_[pi];
+    for (size_t pi = 0; pi < first_gene_representatives_.size(); ++pi) {
+        size_t profile_idx = first_gene_representatives_[pi].first;
         const auto& profile = profiles_[profile_idx];
 
         // FIRST GENE: Distance from repeat is INDEPENDENT of gene length!
@@ -1314,11 +1369,32 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
             int start_offset = GetStartCodonOffset(hypothesis.start_node);
             if (start_offset < 0) start_offset = 0;
 
-            std::vector<DetectedCasGene> family_results(family_it->second.size());
+            // OPTIMIZATION: LENG-compatibility prefilter. Skip family variants
+            // whose [min_bp, max_bp] range is incompatible with the observed
+            // gene length (>30% off on either end). This is biggest for big
+            // families: cas8b (13 variants), cas8a (9 variants).
+            const int observed_bp = hypothesis.gene_length;
+            std::vector<size_t> compat_variants;
+            compat_variants.reserve(family_it->second.size());
+            for (size_t profile_idx : family_it->second) {
+                const auto& prof = profiles_[profile_idx];
+                int lo = static_cast<int>(prof.min_bp * 0.7);
+                int hi = static_cast<int>(prof.max_bp * 1.3);
+                if (observed_bp >= lo && observed_bp <= hi) {
+                    compat_variants.push_back(profile_idx);
+                }
+            }
+            // Always keep the source profile (already a complete hit)
+            if (std::find(compat_variants.begin(), compat_variants.end(),
+                          hypothesis_source_profile_index) == compat_variants.end()) {
+                compat_variants.push_back(hypothesis_source_profile_index);
+            }
+
+            std::vector<DetectedCasGene> family_results(compat_variants.size());
 
             #pragma omp parallel for schedule(dynamic)
-            for (size_t f = 0; f < family_it->second.size(); ++f) {
-                size_t profile_idx = family_it->second[f];
+            for (size_t f = 0; f < compat_variants.size(); ++f) {
+                size_t profile_idx = compat_variants[f];
                 auto fresult = ScoreStartNodeWithProfile(
                     hypothesis.start_node, hypothesis.distance_from_repeat, start_offset,
                     profile_idx, direction, true);
@@ -1468,10 +1544,16 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
         for (const auto& fam : expected_families) {
             auto it = family_to_profiles_.find(fam);
             if (it != family_to_profiles_.end() && !it->second.empty()) {
-                // Include ALL profiles for the family, not just the first
+                // OPTIMIZATION: One representative (longest LENG) per family.
+                // Phase 1 only needs to know IF a family hits at a candidate site;
+                // the family-refinement pass at the winning site (further below)
+                // picks the best variant. This avoids re-scoring all 13 cas8b
+                // variants at every BFS candidate.
+                size_t best_idx = it->second[0];
                 for (size_t idx : it->second) {
-                    representative_profiles.push_back({idx, fam});
+                    if (profiles_[idx].leng > profiles_[best_idx].leng) best_idx = idx;
                 }
+                representative_profiles.push_back({best_idx, fam});
             }
         }
 
@@ -1605,13 +1687,31 @@ CasCassette CasWorkflow::DetectCassette(uint64_t repeat_node, SearchDirection di
                 // Get the actual start codon offset within the node
                 int start_offset = GetStartCodonOffset(next_gene.start_node);
                 if (start_offset < 0) start_offset = 0;  // Fallback
-                
+
+                // OPTIMIZATION: LENG-compatibility prefilter (same as gene1 refinement).
+                const int observed_bp = next_gene.gene_length;
+                const size_t source_pidx = next_gene.profile_index;
+                std::vector<size_t> compat_variants;
+                compat_variants.reserve(family_it->second.size());
+                for (size_t pidx : family_it->second) {
+                    const auto& prof = profiles_[pidx];
+                    int lo = static_cast<int>(prof.min_bp * 0.7);
+                    int hi = static_cast<int>(prof.max_bp * 1.3);
+                    if (observed_bp >= lo && observed_bp <= hi) {
+                        compat_variants.push_back(pidx);
+                    }
+                }
+                if (source_pidx != SIZE_MAX &&
+                    std::find(compat_variants.begin(), compat_variants.end(), source_pidx) == compat_variants.end()) {
+                    compat_variants.push_back(source_pidx);
+                }
+
                 // Use the already-found start node directly (no re-search needed)
-                std::vector<DetectedCasGene> family_results(family_it->second.size());
+                std::vector<DetectedCasGene> family_results(compat_variants.size());
                 
                 #pragma omp parallel for schedule(dynamic)
-                for (size_t f = 0; f < family_it->second.size(); ++f) {
-                    size_t pidx = family_it->second[f];
+                for (size_t f = 0; f < compat_variants.size(); ++f) {
+                    size_t pidx = compat_variants[f];
                     // Score at the SAME start node with correct offset
                     auto result = ScoreStartNodeWithProfile(
                         next_gene.start_node, next_gene.distance_from_repeat, 
