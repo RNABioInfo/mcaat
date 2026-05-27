@@ -18,6 +18,7 @@
 #include <ctime>
 #include "spoa/spoa.hpp"
 #include "core/settings.h"
+#include "core/array_to_nodes.h"
 
 namespace fs = std::filesystem;
 
@@ -41,8 +42,11 @@ private:
     static constexpr int TAIL_KMER_SIZE = 22;
     static constexpr int MAX_LINES_PER_FILE = 10000;
 
-    // SPOA merge parameters
+    // SPOA merge parameters (kept for tail validation)
     static constexpr int MAX_EDIT_DIST = 4;
+
+    // Repeat merge: minimum node-set overlap fraction to consider two repeats rotations of each other
+    static constexpr double REPEAT_NODE_OVERLAP_THRESH = 0.85;
 
     // Tail detection parameters
     static constexpr int MAX_TAIL_SCAN = 40;
@@ -77,6 +81,76 @@ private:
         std::string repeat;
         std::string cycle;
     };
+
+    // Given a start_node group from settings.cycles, find the ordered repeat node path:
+    // - repeat nodes = nodes appearing in >= 85% of cycles in the group
+    // - firstnode = repeat node with all incoming from outside the repeat set (spacer->repeat entry)
+    // - lastnode  = repeat node with all outgoing to outside the repeat set (repeat->spacer exit)
+    // - path = firstnode -> ... -> lastnode traversed within the repeat set
+    std::vector<uint64_t> FindOrderedRepeatPath(uint64_t start_node) {
+        if (!settings.sdbg) return {};
+        auto it = settings.cycles.find(start_node);
+        if (it == settings.cycles.end()) return {};
+        const auto& cycle_vec = it->second;
+        int total = (int)cycle_vec.size();
+        if (total == 0) return {};
+
+        // Count how many cycles each node appears in
+        std::unordered_map<uint64_t, int> node_count;
+        for (const auto& cycle : cycle_vec)
+            for (uint64_t node : cycle)
+                node_count[node]++;
+
+        // Nodes in >= 85% of cycles = repeat set
+        int threshold = (int)std::ceil(0.85 * total);
+        std::unordered_set<uint64_t> repeat_set;
+        for (const auto& [node, count] : node_count)
+            if (count >= threshold) repeat_set.insert(node);
+
+        if (repeat_set.empty()) return {};
+
+        // firstnode: all incoming edges come from outside repeat_set
+        // lastnode:  all outgoing edges go outside repeat_set
+        uint64_t first = SDBG::kNullID, last = SDBG::kNullID;
+        for (uint64_t node : repeat_set) {
+            int indeg = settings.sdbg->EdgeIndegree(node);
+            bool is_first = true;
+            if (indeg > 0) {
+                std::vector<uint64_t> inc(indeg);
+                settings.sdbg->IncomingEdges(node, inc.data());
+                for (uint64_t in : inc)
+                    if (repeat_set.count(in)) { is_first = false; break; }
+            }
+            if (is_first) first = node;
+
+            uint64_t out[4];
+            int outdeg = settings.sdbg->OutgoingEdges(node, out);
+            bool is_last = true;
+            for (int i = 0; i < outdeg; ++i)
+                if (repeat_set.count(out[i])) { is_last = false; break; }
+            if (is_last) last = node;
+        }
+
+        if (first == SDBG::kNullID) return {};
+
+        // Walk firstnode -> lastnode within repeat_set
+        std::vector<uint64_t> path;
+        std::unordered_set<uint64_t> visited;
+        uint64_t cur = first;
+        while (cur != SDBG::kNullID && repeat_set.count(cur) && !visited.count(cur)) {
+            path.push_back(cur);
+            visited.insert(cur);
+            if (cur == last) break;
+            uint64_t out[4];
+            int outdeg = settings.sdbg->OutgoingEdges(cur, out);
+            uint64_t next = SDBG::kNullID;
+            for (int i = 0; i < outdeg; ++i)
+                if (repeat_set.count(out[i]) && !visited.count(out[i])) { next = out[i]; break; }
+            cur = next;
+        }
+
+        return path;
+    }
 
     std::vector<int> parent;
 
@@ -461,9 +535,47 @@ public:
             if (px != py) rep_parent[px] = py;
         };
 
+        // Build inverted index: node_id -> start_node keys that own cycles containing it.
+        // Used to map each repeat sequence back to its settings.cycles group.
+        std::unordered_map<uint64_t, uint64_t> node_to_start;
+        for (const auto& [start, cycle_vec] : settings.cycles)
+            for (const auto& cycle : cycle_vec)
+                for (uint64_t node : cycle)
+                    node_to_start.emplace(node, start);  // first writer wins; good enough
+
+        // For each repeat, find its canonical ordered path via FindOrderedRepeatPath.
+        // Look up the start_node by mapping the repeat's first SDBG node through the index.
+        std::vector<std::vector<uint64_t>> repeat_node_paths(nr);
+        if (settings.sdbg) {
+            for (int i = 0; i < nr; ++i) {
+                auto seq_nodes = SequenceToNodePath(all_repeats[i], *settings.sdbg);
+                if (seq_nodes.empty()) continue;
+                auto it = node_to_start.find(seq_nodes[0]);
+                if (it == node_to_start.end()) continue;
+                repeat_node_paths[i] = FindOrderedRepeatPath(it->second);
+            }
+        }
+
+        // Two repeats merge iff their ordered paths are cyclic rotations of each other
+        // with >= REPEAT_NODE_OVERLAP_THRESH positional agreement.
+        auto rotation_overlap = [&](const std::vector<uint64_t>& a,
+                                    const std::vector<uint64_t>& b) -> double {
+            if (a.empty() || b.empty()) return 0.0;
+            const auto& shorter = (a.size() <= b.size()) ? a : b;
+            const auto& longer  = (a.size() <= b.size()) ? b : a;
+            int best = 0;
+            for (size_t offset = 0; offset < longer.size(); ++offset) {
+                int matches = 0;
+                for (size_t i = 0; i < shorter.size(); ++i)
+                    if (shorter[i] == longer[(offset + i) % longer.size()]) ++matches;
+                best = std::max(best, matches);
+            }
+            return (double)best / (double)shorter.size();
+        };
+
         for (int i = 0; i < nr; ++i) {
             for (int j = i + 1; j < nr; ++j) {
-                if (edit_distance(all_repeats[i], all_repeats[j], MAX_EDIT_DIST) <= MAX_EDIT_DIST)
+                if (rotation_overlap(repeat_node_paths[i], repeat_node_paths[j]) >= REPEAT_NODE_OVERLAP_THRESH)
                     rep_unite(i, j);
             }
         }

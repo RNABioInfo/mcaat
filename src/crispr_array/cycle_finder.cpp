@@ -556,6 +556,7 @@ int CycleFinder::FindApproximateCRISPRArrays()
 
     const std::string cycles_path = this->settings.output_folder + "/cycles.txt";
     this->writeMapToFile(this->results, cycles_path);
+    this->settings.cycles = this->results;
 
     return cumulative;
 }

@@ -47,6 +47,9 @@ struct Settings {
 
     SDBG* sdbg = nullptr; // Pointer to the SDBG graph
 
+    // Cycles collected by CycleFinder: start_node -> list of cycles (each cycle = ordered node IDs)
+    std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>> cycles;
+
     Settings() {
         // Defaults are intentionally empty so parse_arguments can apply
         // a timestamp-based default only if neither CLI nor settings file specify the output folder.
