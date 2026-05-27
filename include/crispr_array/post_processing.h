@@ -527,13 +527,21 @@ public:
                 continue;
             }
 
+            // Deduplicate spacers within this array
+            {
+                std::unordered_set<std::string> seen_sp;
+                std::vector<std::pair<std::string, std::string>> deduped;
+                for (const auto& entry : merged_entries)
+                    if (seen_sp.insert(entry.second).second)
+                        deduped.push_back(entry);
+                merged_entries = std::move(deduped);
+            }
+
             consensus_arrays.push_back({full_consensus, merged_entries});
 
             std::vector<std::string> spacers;
-            std::unordered_set<std::string> seen_sp;
             for (const auto& [rv, sp] : merged_entries)
-                if (seen_sp.insert(sp).second)
-                    spacers.push_back(sp);
+                spacers.push_back(sp);
             crispr_arrays[full_consensus] = spacers;
         }
 
