@@ -511,11 +511,72 @@ public:
                 ++it;
         }
 
-        std::cout << "  ▸ Arrays before merge: " << repeat_to_spacers.size() << std::endl;
+        std::cout << "  ▸ Arrays before dedup: " << repeat_to_spacers.size() << std::endl;
 
         // ==========================================================
-        // Step 6: Cluster similar repeats by edit distance,
-        //         SPOA consensus on front repeats
+        // Step 6: Remove redundant repeat groups.
+        // If a group's repeat node path shares >= REPEAT_NODE_OVERLAP_THRESH
+        // of its nodes with a larger group (more spacers), discard it.
+        // ==========================================================
+        if (settings.sdbg) {
+            // Inverted index: node_id -> one start_node that owns it
+            std::unordered_map<uint64_t, uint64_t> node_to_start;
+            for (const auto& [start, cycle_vec] : settings.cycles)
+                for (const auto& cycle : cycle_vec)
+                    for (uint64_t node : cycle)
+                        node_to_start.emplace(node, start);
+
+            // Get ordered repeat path for each repeat string
+            auto get_path = [&](const std::string& rep) -> std::vector<uint64_t> {
+                auto seq_nodes = SequenceToNodePath(rep, *settings.sdbg);
+                if (seq_nodes.empty()) return {};
+                auto it = node_to_start.find(seq_nodes[0]);
+                if (it == node_to_start.end()) return {};
+                return FindOrderedRepeatPath(it->second);
+            };
+
+            // Collect repeats sorted by spacer count descending (largest group first)
+            std::vector<std::string> sorted_reps;
+            for (const auto& [rep, _] : repeat_to_spacers)
+                sorted_reps.push_back(rep);
+            std::sort(sorted_reps.begin(), sorted_reps.end(),
+                [&](const std::string& a, const std::string& b){
+                    return repeat_to_spacers[a].size() > repeat_to_spacers[b].size();
+                });
+
+            // Build node sets for already-kept repeats; discard those that are subsets
+            std::vector<std::unordered_set<uint64_t>> kept_node_sets;
+            std::unordered_set<std::string> to_remove;
+
+            for (const auto& rep : sorted_reps) {
+                auto path = get_path(rep);
+                std::unordered_set<uint64_t> node_set(path.begin(), path.end());
+
+                bool redundant = false;
+                for (const auto& kept_set : kept_node_sets) {
+                    if (node_set.empty() || kept_set.empty()) continue;
+                    int common = 0;
+                    for (uint64_t n : node_set)
+                        if (kept_set.count(n)) ++common;
+                    double overlap = (double)common / (double)node_set.size();
+                    if (overlap >= REPEAT_NODE_OVERLAP_THRESH) { redundant = true; break; }
+                }
+
+                if (redundant)
+                    to_remove.insert(rep);
+                else
+                    kept_node_sets.push_back(std::move(node_set));
+            }
+
+            for (const auto& rep : to_remove)
+                repeat_to_spacers.erase(rep);
+
+            std::cout << "  ▸ Removed " << to_remove.size()
+                      << " redundant groups, " << repeat_to_spacers.size() << " remaining" << std::endl;
+        }
+
+        // ==========================================================
+        // Step 7: Each surviving repeat is its own independent array
         // ==========================================================
         std::vector<std::string> all_repeats;
         for (const auto& [rep, _] : repeat_to_spacers)
@@ -523,71 +584,14 @@ public:
 
         int nr = (int)all_repeats.size();
 
-        std::vector<int> rep_parent(nr);
-        std::iota(rep_parent.begin(), rep_parent.end(), 0);
-
-        std::function<int(int)> rep_find = [&](int x) -> int {
-            if (rep_parent[x] != x) rep_parent[x] = rep_find(rep_parent[x]);
-            return rep_parent[x];
-        };
-        auto rep_unite = [&](int x, int y) {
-            int px = rep_find(x), py = rep_find(y);
-            if (px != py) rep_parent[px] = py;
-        };
-
-        // Build inverted index: node_id -> start_node keys that own cycles containing it.
-        // Used to map each repeat sequence back to its settings.cycles group.
-        std::unordered_map<uint64_t, uint64_t> node_to_start;
-        for (const auto& [start, cycle_vec] : settings.cycles)
-            for (const auto& cycle : cycle_vec)
-                for (uint64_t node : cycle)
-                    node_to_start.emplace(node, start);  // first writer wins; good enough
-
-        // For each repeat, find its canonical ordered path via FindOrderedRepeatPath.
-        // Look up the start_node by mapping the repeat's first SDBG node through the index.
-        std::vector<std::vector<uint64_t>> repeat_node_paths(nr);
-        if (settings.sdbg) {
-            for (int i = 0; i < nr; ++i) {
-                auto seq_nodes = SequenceToNodePath(all_repeats[i], *settings.sdbg);
-                if (seq_nodes.empty()) continue;
-                auto it = node_to_start.find(seq_nodes[0]);
-                if (it == node_to_start.end()) continue;
-                repeat_node_paths[i] = FindOrderedRepeatPath(it->second);
-            }
-        }
-
-        // Two repeats merge iff their ordered paths are cyclic rotations of each other
-        // with >= REPEAT_NODE_OVERLAP_THRESH positional agreement.
-        auto rotation_overlap = [&](const std::vector<uint64_t>& a,
-                                    const std::vector<uint64_t>& b) -> double {
-            if (a.empty() || b.empty()) return 0.0;
-            const auto& shorter = (a.size() <= b.size()) ? a : b;
-            const auto& longer  = (a.size() <= b.size()) ? b : a;
-            int best = 0;
-            for (size_t offset = 0; offset < longer.size(); ++offset) {
-                int matches = 0;
-                for (size_t i = 0; i < shorter.size(); ++i)
-                    if (shorter[i] == longer[(offset + i) % longer.size()]) ++matches;
-                best = std::max(best, matches);
-            }
-            return (double)best / (double)shorter.size();
-        };
-
-        for (int i = 0; i < nr; ++i) {
-            for (int j = i + 1; j < nr; ++j) {
-                if (rotation_overlap(repeat_node_paths[i], repeat_node_paths[j]) >= REPEAT_NODE_OVERLAP_THRESH)
-                    rep_unite(i, j);
-            }
-        }
-
         std::unordered_map<int, std::vector<int>> repeat_clusters;
         for (int i = 0; i < nr; ++i)
-            repeat_clusters[rep_find(i)].push_back(i);
+            repeat_clusters[i] = {i};
 
-        std::cout << "  ▸ Repeat groups (post-SPOA merge): " << repeat_clusters.size() << std::endl;
+        std::cout << "  ▸ Repeat groups: " << repeat_clusters.size() << std::endl;
 
         // ==========================================================
-        // Step 7: Per consensus group — front SPOA + validated tail SPOA
+        // Step 7: Per repeat group — front SPOA + validated tail SPOA
         // ==========================================================
         consensus_arrays.clear();
         crispr_arrays.clear();
