@@ -58,9 +58,6 @@ private:
     static constexpr int MAX_REPEAT_LEN = 55;
     static constexpr int MIN_REPEAT_LEN = 20;
     static constexpr int MIN_SPACER_LEN = 20;
-
-    // Cycle normalization: fraction of cycles a node must appear in to be a repeat node
-    static constexpr double REPEAT_NODE_THRESH = 0.85;
     static constexpr double MIN_MEDIAN_SPACER_REPEAT_RATIO = 0.5;
     // Maximum allowed similarity (0–1) between a spacer and the consensus repeat.
     // Real CRISPR spacers are foreign DNA — completely different from the repeat.
@@ -293,33 +290,6 @@ private:
         return false;
     }
 
-    /**
-     * Decode a path of SDBG node IDs into a DNA string.
-     * First node contributes all k characters; each subsequent node contributes
-     * the last character of its k-mer (the new extension by one base).
-     * buf must be pre-sized to at least sdbg->k(); it is reused across calls.
-     */
-    std::string NodePathToSequence(const std::vector<uint64_t>& path, std::vector<uint8_t>& buf) {
-        if (!settings.sdbg || path.empty()) return "";
-        const uint32_t k = settings.sdbg->k();
-        buf.resize(k);
-        std::string result;
-        result.reserve(k + path.size() - 1);
-        for (size_t i = 0; i < path.size(); ++i) {
-            settings.sdbg->GetLabel(path[i], buf.data());
-            if (i == 0) {
-                for (uint32_t j = 0; j < k; ++j) {
-                    uint8_t c = buf[j];
-                    result += (c >= 1 && c <= 4) ? "ACGT"[c - 1] : 'N';
-                }
-            } else {
-                uint8_t c = buf[k - 1];
-                result += (c >= 1 && c <= 4) ? "ACGT"[c - 1] : 'N';
-            }
-        }
-        return result;
-    }
-
 public:
     explicit PostProcessor(Settings& s) : settings(s) {}
 
@@ -372,157 +342,45 @@ public:
         std::cout << "  ▸ Loaded " << cycles.size() << " cycles" << std::endl;
 
         // ==========================================================
-        // Step 2: Cycle normalization via node-level repeat identification.
-        // For each start-node group in settings.cycles:
-        //   1. Count node occurrences across cycles → repeat_set (≥ REPEAT_NODE_THRESH)
-        //   2. firstnode = repeat node with all incoming from outside repeat_set
-        //      lastnode  = repeat node with all outgoing to  outside repeat_set
-        //   3. Walk firstnode → lastnode within repeat_set → ordered repeat path
-        //   4. Decode repeat sequence and per-cycle spacer sequences.
-        // Precise spacer deduplication (exact string) is applied within each group.
+        // ORIGINAL Step 2: Group by first 23-mer
+        // ==========================================================
+        std::unordered_map<std::string, std::vector<std::string>> groups;
+        for (const auto& seq : cycles) {
+            if ((int)seq.size() >= GROUP_KMER_SIZE)
+                groups[seq.substr(0, GROUP_KMER_SIZE)].push_back(seq);
+        }
+        std::cout << "  ▸ Grouped into " << groups.size() << " repeat groups" << std::endl;
+
+        // ==========================================================
+        // Step 3 & 4: Unanimous extend, extract spacers
         // ==========================================================
         std::vector<SpacerData> spacer_data;
 
-        if (settings.sdbg && !settings.cycles.empty()) {
-            const uint32_t k = settings.sdbg->k();
-            std::vector<uint8_t> lbuf(k);
-
-            for (const auto& [start_node, cycle_vec] : settings.cycles) {
-                int total = (int)cycle_vec.size();
-                if (total < 2) continue;
-
-                // Count node occurrences
-                std::unordered_map<uint64_t, int> node_count;
-                for (const auto& cycle : cycle_vec)
-                    for (uint64_t node : cycle)
-                        node_count[node]++;
-
-                // Repeat set: nodes present in ≥ REPEAT_NODE_THRESH fraction of cycles
-                int threshold = (int)std::ceil(REPEAT_NODE_THRESH * total);
-                std::unordered_set<uint64_t> repeat_set;
-                for (const auto& [node, cnt] : node_count)
-                    if (cnt >= threshold) repeat_set.insert(node);
-
-                if (repeat_set.empty()) continue;
-
-                // Find firstnode (all incoming from outside repeat_set)
-                // and lastnode (all outgoing to outside repeat_set)
-                uint64_t first = SDBG::kNullID, last = SDBG::kNullID;
-                for (uint64_t node : repeat_set) {
-                    uint64_t nbrs[4];
-                    int indeg = settings.sdbg->IncomingEdges(node, nbrs);
-                    bool from_outside = true;
-                    for (int i = 0; i < indeg; ++i)
-                        if (repeat_set.count(nbrs[i])) { from_outside = false; break; }
-                    if (from_outside) first = node;
-
-                    int outdeg = settings.sdbg->OutgoingEdges(node, nbrs);
-                    bool to_outside = true;
-                    for (int i = 0; i < outdeg; ++i)
-                        if (repeat_set.count(nbrs[i])) { to_outside = false; break; }
-                    if (to_outside) last = node;
-                }
-
-                if (first == SDBG::kNullID) continue;
-
-                // Walk firstnode → lastnode within repeat_set
-                std::vector<uint64_t> repeat_path;
-                {
-                    std::unordered_set<uint64_t> visited;
-                    uint64_t cur = first;
-                    while (cur != SDBG::kNullID && repeat_set.count(cur) && !visited.count(cur)) {
-                        repeat_path.push_back(cur);
-                        visited.insert(cur);
-                        if (cur == last) break;
-                        uint64_t nbrs[4];
-                        int outdeg = settings.sdbg->OutgoingEdges(cur, nbrs);
-                        uint64_t next = SDBG::kNullID;
-                        for (int i = 0; i < outdeg; ++i)
-                            if (repeat_set.count(nbrs[i]) && !visited.count(nbrs[i]))
-                                { next = nbrs[i]; break; }
-                        cur = next;
-                    }
-                }
-
-                if (repeat_path.empty()) continue;
-
-                std::string repeat_seq = NodePathToSequence(repeat_path, lbuf);
-                if ((int)repeat_seq.size() < MIN_REPEAT_LEN || (int)repeat_seq.size() > MAX_REPEAT_LEN)
-                    continue;
-
-                // Extract spacer from each cycle: nodes after the repeat path
-                // Precise spacer deduplication: exact string set per group
-                std::unordered_set<std::string> seen_spacers;
-                for (const auto& cycle : cycle_vec) {
-                    // Locate firstnode in this cycle
-                    size_t rstart = SIZE_MAX;
-                    for (size_t i = 0; i < cycle.size(); ++i)
-                        if (cycle[i] == first) { rstart = i; break; }
-                    if (rstart == SIZE_MAX) continue;
-
-                    // Collect nodes after the repeat path until the next repeat node
-                    std::vector<uint64_t> spacer_nodes;
-                    size_t pos = (rstart + repeat_path.size()) % cycle.size();
-                    int safety = 0;
-                    while (!repeat_set.count(cycle[pos]) && safety < (int)cycle.size()) {
-                        spacer_nodes.push_back(cycle[pos]);
-                        pos = (pos + 1) % cycle.size();
-                        ++safety;
-                    }
-
-                    if (spacer_nodes.empty()) continue;
-
-                    std::string spacer_seq = NodePathToSequence(spacer_nodes, lbuf);
-                    if ((int)spacer_seq.size() < MIN_SPACER_LEN) continue;
-
-                    // Exact dedup within this group
-                    if (seen_spacers.insert(spacer_seq).second)
-                        spacer_data.push_back({spacer_seq, repeat_seq, ""});
-                }
-            }
-            std::cout << "  ▸ Cycle normalization: " << spacer_data.size()
-                      << " spacers from " << settings.cycles.size() << " groups" << std::endl;
-
-        } else {
-            // Fallback: sequence-level grouping + unanimous extension
-            // ==========================================================
-            // Step 2 (fallback): Group by first 23-mer
-            // ==========================================================
-            std::unordered_map<std::string, std::vector<std::string>> groups;
-            for (const auto& seq : cycles) {
-                if ((int)seq.size() >= GROUP_KMER_SIZE)
-                    groups[seq.substr(0, GROUP_KMER_SIZE)].push_back(seq);
-            }
-            std::cout << "  ▸ Grouped into " << groups.size() << " repeat groups" << std::endl;
-
-            // ==========================================================
-            // Steps 3 & 4 (fallback): Unanimous extend, extract spacers
-            // ==========================================================
-            for (const auto& [kmer, group_cycles] : groups) {
-                int t = 0;
-                while (true) {
-                    std::unordered_set<char> chars;
-                    bool valid = true;
-                    for (const auto& c : group_cycles) {
-                        int pos = GROUP_KMER_SIZE + t;
-                        if (pos >= (int)c.size() - TAIL_KMER_SIZE) {
-                            valid = false;
-                            break;
-                        }
-                        chars.insert(c[pos]);
-                    }
-                    if (!valid || chars.size() != 1) break;
-                    ++t;
-                }
-
-                int repeat_len = GROUP_KMER_SIZE + t;
-
+        for (const auto& [kmer, group_cycles] : groups) {
+            int t = 0;
+            while (true) {
+                std::unordered_set<char> chars;
+                bool valid = true;
                 for (const auto& c : group_cycles) {
-                    if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
-                        std::string repeat = c.substr(0, repeat_len);
-                        std::string spacer = c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE);
-                        if ((int)spacer.size() >= MIN_SPACER_LEN)
-                            spacer_data.push_back({spacer, repeat, c});
+                    int pos = GROUP_KMER_SIZE + t;
+                    if (pos >= (int)c.size() - TAIL_KMER_SIZE) {
+                        valid = false;
+                        break;
+                    }
+                    chars.insert(c[pos]);
+                }
+                if (!valid || chars.size() != 1) break;
+                ++t;
+            }
+
+            int repeat_len = GROUP_KMER_SIZE + t;
+
+            for (const auto& c : group_cycles) {
+                if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
+                    std::string repeat = c.substr(0, repeat_len);
+                    std::string spacer = c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE);
+                    if ((int)spacer.size() >= MIN_SPACER_LEN) {
+                        spacer_data.push_back({spacer, repeat, c});
                     }
                 }
             }

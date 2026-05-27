@@ -145,10 +145,13 @@ Filters::Filters(SDBG& sdbg, std::unordered_map<uint64_t, std::vector<std::vecto
                 if (start < all_cycles_togehter.size()) {
                     spacers_temp.push_back(all_cycles_togehter.substr(start));
                 }
+                std::unordered_set<string> seen_spacers;
                 for (const auto& spacer : spacers_temp) {
                     if (spacer.size() < 23 || spacer.size() > 50)
                         continue;
-                    spacers.push_back(spacer.substr(0, spacer.size()));
+                    if (!seen_spacers.insert(spacer).second)
+                        continue;
+                    spacers.push_back(spacer);
                     number_of_spacers++;
                 }
                 if (spacers.size() < 2) {
