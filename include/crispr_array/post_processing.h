@@ -37,7 +37,7 @@ private:
     Settings& settings;
 
     static constexpr int GROUP_KMER_SIZE = 23;
-    static constexpr int DEDUP_KMER_SIZE = 23;
+    static constexpr int DEDUP_KMER_SIZE = 37;
     static constexpr int TAIL_KMER_SIZE = 22;
     static constexpr int MAX_LINES_PER_FILE = 10000;
 
@@ -536,6 +536,19 @@ public:
                 } else {
                     tail_consensus.clear();
                 }
+            }
+
+            if (merged_entries.size() < 2) continue;
+
+            // Remove exact duplicate spacers
+            {
+                std::unordered_set<std::string> seen;
+                std::vector<std::pair<std::string, std::string>> deduped;
+                for (const auto& entry : merged_entries) {
+                    if (seen.insert(entry.second).second)
+                        deduped.push_back(entry);
+                }
+                merged_entries = std::move(deduped);
             }
 
             if (merged_entries.size() < 2) continue;
