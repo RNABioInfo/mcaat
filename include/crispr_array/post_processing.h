@@ -569,8 +569,10 @@ public:
             consensus_arrays.push_back({full_consensus, merged_entries});
 
             std::vector<std::string> spacers;
+            std::unordered_set<std::string> seen_sp;
             for (const auto& [rv, sp] : merged_entries)
-                spacers.push_back(sp);
+                if (seen_sp.insert(sp).second)
+                    spacers.push_back(sp);
             crispr_arrays[full_consensus] = spacers;
         }
 
