@@ -256,6 +256,109 @@ static int run_detect_cas_genes(int argc, char** argv) {
     return 0;
 }
 
+// ── phage-curate subcommand ───────────────────────────────────────────────────
+
+static int run_phage_curate(int argc, char** argv) {
+    std::string arrays_dir, graph_path, output_dir;
+    int beam_width = 50;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "--arrays" || arg == "-a") && i + 1 < argc) {
+            arrays_dir = argv[++i];
+        } else if ((arg == "--graph" || arg == "-g") && i + 1 < argc) {
+            graph_path = argv[++i];
+        } else if ((arg == "--output" || arg == "--output-folder") && i + 1 < argc) {
+            output_dir = argv[++i];
+        } else if (arg == "--beam-width" && i + 1 < argc) {
+            beam_width = std::stoi(argv[++i]);
+        } else if (arg == "--help" || arg == "-h") {
+            std::cout <<
+                "\nUsage: mcaat phage-curate --arrays <dir> --graph <path> [options]\n\n"
+                "Required:\n"
+                "  --arrays <dir>         Folder with CRISPR_Arrays_*.txt\n"
+                "  --graph  <path>        SDBG graph directory or prefix\n\n"
+                "Optional:\n"
+                "  --output <dir>         Output directory  [default: same as --arrays]\n"
+                "  --beam-width <n>       Beam width  [default: 50]\n\n";
+            return 0;
+        } else {
+            std::cerr << "Unknown argument: " << arg << "\n";
+            return 1;
+        }
+    }
+
+    if (arrays_dir.empty())  throw std::runtime_error("phage-curate: --arrays is required");
+    if (graph_path.empty())  throw std::runtime_error("phage-curate: --graph is required");
+    if (output_dir.empty())  output_dir = arrays_dir;
+
+    fs::create_directories(output_dir);
+
+    std::cout << "\nMCAAT  phage-curate\n\n"
+              << "  ▸ Arrays      " << arrays_dir << "\n"
+              << "  ▸ Graph       " << graph_path << "\n"
+              << "  ▸ Output      " << output_dir << "\n"
+              << "  ▸ Beam width  " << beam_width << "\n\n";
+
+    auto t_start = std::chrono::high_resolution_clock::now();
+    auto elapsed = [&]() {
+        return std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - t_start).count();
+    };
+
+    // ── 1. Load graph ───────────────────────────────────────────────────────
+    std::cout << "[1/3] Loading graph...\n";
+    SDBG sdbg;
+    {
+        std::string load_path = fs::is_directory(graph_path)
+            ? graph_path + "/graph"
+            : graph_path;
+        sdbg.LoadFromFile(load_path.c_str());
+        std::cout << "      " << sdbg.size() << " nodes  k=" << sdbg.k()
+                  << "  (" << std::fixed << std::setprecision(1) << elapsed() << " s)\n\n";
+    }
+
+    // ── 2. Map CRISPR arrays to graph ───────────────────────────────────────
+    std::cout << "[2/3] Mapping arrays to graph...\n";
+    auto filtered = BuildFilteredArraysFromDir(arrays_dir, sdbg);
+    if (filtered.empty()) {
+        std::cout << "  No arrays found in " << arrays_dir << " — nothing to do.\n\n";
+        return 0;
+    }
+    std::cout << "      " << filtered.size() << " arrays mapped"
+              << "  (" << std::fixed << std::setprecision(1) << elapsed() << " s)\n\n";
+
+    // Build repeat_to_spacer_nodes and cycles from FilteredArrays
+    std::map<uint64_t, std::vector<std::vector<uint64_t>>> repeat_to_spacer_nodes;
+    std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>> cycles_map;
+    for (const auto& fa : filtered) {
+        if (fa.repeat_path.empty() || fa.spacer_node_paths.empty()) continue;
+        uint64_t key = fa.repeat_path[0];
+        for (const auto& sp : fa.spacer_node_paths)
+            repeat_to_spacer_nodes[key].push_back(sp);
+        cycles_map[key] = repeat_to_spacer_nodes[key];
+    }
+
+    // ── 3. Isolate protospacer paths ────────────────────────────────────────
+    std::cout << "[3/3] Isolating protospacers and running beam search...\n";
+    IsolateProtospacers isolator(sdbg, repeat_to_spacer_nodes);
+    auto protospacer_nodes = isolator.getProtospacerNodes();
+    auto grouped_paths = isolator.DepthLimitedPathsFromInToOut(
+        protospacer_nodes.first, protospacer_nodes.second, 50, 1);
+    std::cout << "      isolation done  (" << std::fixed << std::setprecision(1) << elapsed() << " s)\n";
+
+    PhageCurator curator(sdbg, grouped_paths, cycles_map);
+
+    std::string contiguous_out = (fs::path(output_dir) / "ContiguousPaths.fasta").string();
+    std::string quality_out    = (fs::path(output_dir) / "QualityPaths.fasta").string();
+
+    curator.FindContiguousPathsFromGroupedPaths(2500, contiguous_out, beam_width);
+    curator.FindQualityPathsBeamSearchFromGroupedPaths(3000, 3010, quality_out, beam_width);
+
+    std::cout << "\nOutput: " << output_dir << "\n\n";
+    return 0;
+}
+
 // ── standard MCAAT helpers (unchanged) ───────────────────────────────────────
 
 using namespace std;
@@ -771,6 +874,15 @@ int main(int argc, char** argv) {
     if (argc >= 2 && std::string(argv[1]) == "detect-cas-genes") {
         try {
             return run_detect_cas_genes(argc - 1, argv + 1);
+        } catch (const std::exception& e) {
+            std::cerr << "\nError: " << e.what() << "\n\n";
+            return 1;
+        }
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "phage-curate") {
+        try {
+            return run_phage_curate(argc - 1, argv + 1);
         } catch (const std::exception& e) {
             std::cerr << "\nError: " << e.what() << "\n\n";
             return 1;
