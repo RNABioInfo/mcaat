@@ -447,6 +447,10 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "  --threshold-multiplicity <int>  Edge multiplicity cutoff  [default: 20]\n"
                  << "  --low-abundance <true|false>    Low-abundance mode  [default: true]\n"
                  << "  --autoclean <true|false>         Remove intermediate files after run  [default: true]\n"
+                 << "  --min-spacer-len <int>           Minimum spacer length  [default: 23]\n"
+                 << "  --max-spacer-len <int>           Maximum spacer length  [default: 50]\n"
+                 << "  --min-repeat-len <int>           Minimum repeat length  [default: 23]\n"
+                 << "  --max-repeat-len <int>           Maximum repeat length  [default: 55]\n"
                  << "  --benchmark <file>              Expected sequences for evaluation\n"
                  << "  --settings <path>               Key=value settings file (CLI overrides)\n"
                  << "  --help, -h                      Show this message\n\n";
@@ -584,6 +588,26 @@ Settings parse_arguments(int argc, char* argv[]) {
             } else {
                 throw runtime_error("Error: Missing value for --autoclean");
             }
+        } else if (arg == "--min-spacer-len") {
+            if (++i < argc) {
+                try { settings.dna_sequence_settings.spacer_min_length = stoi(argv[i]); }
+                catch (...) { throw runtime_error("Error: Invalid value for --min-spacer-len: " + string(argv[i])); }
+            } else { throw runtime_error("Error: Missing value for --min-spacer-len"); }
+        } else if (arg == "--max-spacer-len") {
+            if (++i < argc) {
+                try { settings.dna_sequence_settings.spacer_max_length = stoi(argv[i]); }
+                catch (...) { throw runtime_error("Error: Invalid value for --max-spacer-len: " + string(argv[i])); }
+            } else { throw runtime_error("Error: Missing value for --max-spacer-len"); }
+        } else if (arg == "--min-repeat-len") {
+            if (++i < argc) {
+                try { settings.dna_sequence_settings.repeat_min_length = stoi(argv[i]); }
+                catch (...) { throw runtime_error("Error: Invalid value for --min-repeat-len: " + string(argv[i])); }
+            } else { throw runtime_error("Error: Missing value for --min-repeat-len"); }
+        } else if (arg == "--max-repeat-len") {
+            if (++i < argc) {
+                try { settings.dna_sequence_settings.repeat_max_length = stoi(argv[i]); }
+                catch (...) { throw runtime_error("Error: Invalid value for --max-repeat-len: " + string(argv[i])); }
+            } else { throw runtime_error("Error: Missing value for --max-repeat-len"); }
         }
     }
     // If settings file provided input_files, allow it as equivalent to CLI --input-files
@@ -909,6 +933,43 @@ int main(int argc, char** argv) {
     auto step_elapsed = [](chrono::high_resolution_clock::time_point t0) {
         return chrono::duration<double>(chrono::high_resolution_clock::now() - t0).count();
     };
+
+    // Write parameters.json
+    {
+        auto jstr = [](const std::string& s) -> std::string {
+            std::string out = "\"";
+            for (char c : s) {
+                if (c == '"')  out += "\\\"";
+                else if (c == '\\') out += "\\\\";
+                else out += c;
+            }
+            return out + "\"";
+        };
+        std::ofstream pj((fs::path(settings.output_folder) / "parameters.json").string());
+        pj << "{\n"
+           << "  \"input_files\": "         << jstr(settings.input_files)   << ",\n"
+           << "  \"graph_input\": "         << jstr(settings.graph_input)   << ",\n"
+           << "  \"output_folder\": "       << jstr(settings.output_folder) << ",\n"
+           << "  \"graph_folder\": "        << jstr(settings.graph_folder)  << ",\n"
+           << "  \"cycles_folder\": "       << jstr(settings.cycles_folder) << ",\n"
+           << "  \"output_file\": "         << jstr(settings.output_file)   << ",\n"
+           << "  \"ram_gb\": "              << std::fixed << std::setprecision(2) << settings.ram << ",\n"
+           << "  \"threads\": "             << settings.threads << ",\n"
+           << "  \"autoclean\": "           << (settings.autoclean ? "true" : "false") << ",\n"
+           << "  \"cycle_finder\": {\n"
+           << "    \"threshold_multiplicity\": " << settings.cycle_finder_settings.threshold_multiplicity << ",\n"
+           << "    \"cycle_min_length\": "       << settings.cycle_finder_settings.cycle_min_length << ",\n"
+           << "    \"cycle_max_length\": "       << settings.cycle_finder_settings.cycle_max_length << ",\n"
+           << "    \"low_abundance\": "          << (settings.cycle_finder_settings.low_abundance ? "true" : "false") << "\n"
+           << "  },\n"
+           << "  \"dna_sequence\": {\n"
+           << "    \"spacer_min_length\": " << settings.dna_sequence_settings.spacer_min_length << ",\n"
+           << "    \"spacer_max_length\": " << settings.dna_sequence_settings.spacer_max_length << ",\n"
+           << "    \"repeat_min_length\": " << settings.dna_sequence_settings.repeat_min_length << ",\n"
+           << "    \"repeat_max_length\": " << settings.dna_sequence_settings.repeat_max_length << "\n"
+           << "  }\n"
+           << "}\n";
+    }
 
     SDBG sdbg;
     auto t0 = chrono::high_resolution_clock::now();

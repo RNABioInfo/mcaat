@@ -42,7 +42,7 @@ struct Settings {
         int spacer_min_length = 23; // Minimum length of a spacer
         int spacer_max_length = 50; // Maximum length of a spacer
         int repeat_min_length = 23; // Minimum length of a repeat
-        int repeat_max_length = 50; // Maximum length of a repeat
+        int repeat_max_length = 55; // Maximum length of a repeat
     } dna_sequence_settings;
 
     SDBG* sdbg = nullptr; // Pointer to the SDBG graph

@@ -54,10 +54,7 @@ private:
     // Tail validation: max edit distance between tail_consensus and front_consensus prefix
     static constexpr int MAX_TAIL_PREFIX_EDIT_DIST = 2;
 
-    // Sanity filters
-    static constexpr int MAX_REPEAT_LEN = 55;
-    static constexpr int MIN_REPEAT_LEN = 20;
-    static constexpr int MIN_SPACER_LEN = 20;
+    // Sanity filters (defaults live in Settings::dna_sequence_settings; user-adjustable via CLI)
     static constexpr double MIN_MEDIAN_SPACER_REPEAT_RATIO = 0.5;
     // Maximum allowed similarity (0–1) between a spacer and the consensus repeat.
     // Real CRISPR spacers are foreign DNA — completely different from the repeat.
@@ -379,7 +376,8 @@ public:
                 if ((int)c.size() > repeat_len + TAIL_KMER_SIZE) {
                     std::string repeat = c.substr(0, repeat_len);
                     std::string spacer = c.substr(repeat_len, c.size() - repeat_len - TAIL_KMER_SIZE);
-                    if ((int)spacer.size() >= MIN_SPACER_LEN) {
+                    if ((int)spacer.size() >= settings.dna_sequence_settings.spacer_min_length &&
+                        (int)spacer.size() <= settings.dna_sequence_settings.spacer_max_length) {
                         spacer_data.push_back({spacer, repeat, c});
                     }
                 }
@@ -505,10 +503,11 @@ public:
             std::string full_consensus = tail_consensus + front_consensus;
 
             // --- Sanity filter: repeat length ---
-            if ((int)full_consensus.size() > MAX_REPEAT_LEN ||
-                (int)full_consensus.size() < MIN_REPEAT_LEN) {
+            if ((int)full_consensus.size() > settings.dna_sequence_settings.repeat_max_length ||
+                (int)full_consensus.size() < settings.dna_sequence_settings.repeat_min_length) {
                 std::cout << "  [filtered] repeat len=" << full_consensus.size()
-                          << "bp (allowed " << MIN_REPEAT_LEN << "–" << MAX_REPEAT_LEN << "): "
+                          << "bp (allowed " << settings.dna_sequence_settings.repeat_min_length
+                          << "–" << settings.dna_sequence_settings.repeat_max_length << "): "
                           << full_consensus.substr(0, 30) << "\n";
                 continue;
             }
