@@ -440,57 +440,18 @@ public:
         std::cout << "  ▸ Arrays before merge: " << repeat_to_spacers.size() << std::endl;
 
         // ==========================================================
-        // Step 6: Cluster similar repeats by edit distance,
-        //         SPOA consensus on front repeats
-        // ==========================================================
-        std::vector<std::string> all_repeats;
-        for (const auto& [rep, _] : repeat_to_spacers)
-            all_repeats.push_back(rep);
-
-        int nr = (int)all_repeats.size();
-
-        std::vector<int> rep_parent(nr);
-        std::iota(rep_parent.begin(), rep_parent.end(), 0);
-
-        std::function<int(int)> rep_find = [&](int x) -> int {
-            if (rep_parent[x] != x) rep_parent[x] = rep_find(rep_parent[x]);
-            return rep_parent[x];
-        };
-        auto rep_unite = [&](int x, int y) {
-            int px = rep_find(x), py = rep_find(y);
-            if (px != py) rep_parent[px] = py;
-        };
-
-        for (int i = 0; i < nr; ++i) {
-            for (int j = i + 1; j < nr; ++j) {
-                if (edit_distance(all_repeats[i], all_repeats[j], MAX_EDIT_DIST) <= MAX_EDIT_DIST)
-                    rep_unite(i, j);
-            }
-        }
-
-        std::unordered_map<int, std::vector<int>> repeat_clusters;
-        for (int i = 0; i < nr; ++i)
-            repeat_clusters[rep_find(i)].push_back(i);
-
-        std::cout << "  ▸ Repeat groups (post-SPOA merge): " << repeat_clusters.size() << std::endl;
-
-        // ==========================================================
-        // Step 7: Per consensus group — front SPOA + validated tail SPOA
+        // Step 7: Per repeat — front SPOA + validated tail SPOA
         // ==========================================================
         consensus_arrays.clear();
         crispr_arrays.clear();
 
-        for (const auto& [croot, rep_indices] : repeat_clusters) {
+        for (const auto& [rep, spacers_list] : repeat_to_spacers) {
             std::vector<std::pair<std::string, int>> weighted_repeats;
             std::vector<std::pair<std::string, std::string>> merged_entries;
 
-            for (int ri : rep_indices) {
-                const std::string& rep = all_repeats[ri];
-                const auto& spacers = repeat_to_spacers[rep];
-                weighted_repeats.emplace_back(rep, (int)spacers.size());
-                for (const auto& sp : spacers)
-                    merged_entries.emplace_back(rep, sp);
-            }
+            weighted_repeats.emplace_back(rep, (int)spacers_list.size());
+            for (const auto& sp : spacers_list)
+                merged_entries.emplace_back(rep, sp);
 
             if (merged_entries.size() < 2) continue;
 
