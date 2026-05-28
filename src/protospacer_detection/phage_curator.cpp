@@ -425,8 +425,8 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                 const int remaining_bp = max_total_bp - spacer_bp;
                 if (remaining_bp <= 0) continue;
 
-                // Split budget evenly; convert bp to node count
-                const int half_nodes = std::max(1, (remaining_bp / 2 - k + 1));
+                // Each side contributes half_nodes extra bp: seq = spacer_bp + 2*half_nodes
+                const int half_nodes = std::max(1, remaining_bp / 2);
                 const int half_nodes_min = std::max(1, half_nodes / 2);
 
                 const double start_mult = sdbg.EdgeMultiplicity(path.front());
