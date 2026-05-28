@@ -429,20 +429,26 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                 const int half_nodes = std::max(1, remaining_bp / 2);
                 const int half_nodes_min = std::max(1, half_nodes / 2);
 
-                const double start_mult = sdbg.EdgeMultiplicity(path.front());
-                double min_mult = std::max(1.0, 0.1 * start_mult);
-                double max_mult = 5.0 * start_mult;
-                if (max_mult < min_mult) max_mult = min_mult * 50.0;
+                auto make_mult_range = [&](uint64_t node, double& mn, double& mx) {
+                    double m = sdbg.EdgeMultiplicity(node);
+                    mn = std::max(1.0, 0.1 * m);
+                    mx = 5.0 * m;
+                    if (mx < mn) mx = mn * 50.0;
+                };
+
+                double bk_min, bk_max, fw_min, fw_max;
+                make_mult_range(path.front(), bk_min, bk_max);
+                make_mult_range(path.back(),  fw_min, fw_max);
 
                 // Backward from path.front()
                 auto back_paths = BeamSearchBackwardAvoiding(
                     path.front(), half_nodes_min, half_nodes,
-                    cycle_nodes, beam_width, min_mult, max_mult);
+                    cycle_nodes, beam_width, bk_min, bk_max);
 
                 // Forward from path.back()
                 auto fwd_paths = BeamSearchPathsAvoiding(
                     path.back(), half_nodes_min, half_nodes,
-                    cycle_nodes, beam_width, min_mult, max_mult, nullptr);
+                    cycle_nodes, beam_width, fw_min, fw_max, nullptr);
 
                 if (back_paths.empty() && fwd_paths.empty()) continue;
 
