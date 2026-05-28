@@ -311,7 +311,7 @@ static int run_phage_curate(int argc, char** argv) {
     SDBG sdbg;
     {
         std::string load_path = fs::is_directory(graph_path)
-            ? graph_path + "/graph"
+            ? (fs::path(graph_path) / "graph").string()
             : graph_path;
         sdbg.LoadFromFile(load_path.c_str());
         std::cout << "      " << sdbg.size() << " nodes  k=" << sdbg.k()
