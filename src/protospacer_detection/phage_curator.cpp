@@ -418,6 +418,103 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
     int path_count = 0;
     const int k = static_cast<int>(sdbg.k());
 
+    auto make_mult_range = [&](uint64_t node, double& mn, double& mx) {
+        double m = sdbg.EdgeMultiplicity(node);
+        mn = std::max(1.0, 0.1 * m);
+        mx = 5.0 * m;
+        if (mx < mn) mx = mn * 50.0;
+    };
+
+    auto valid_extension_node = [&](uint64_t node,
+                                    const std::set<uint64_t>& visited,
+                                    double min_mult,
+                                    double max_mult) {
+        if (node == SDBG::kNullID || node >= sdbg.size()) return false;
+        if (!sdbg.IsValidEdge(node)) return false;
+        if (visited.find(node) != visited.end()) return false;
+        if (cycle_nodes.find(node) != cycle_nodes.end()) return false;
+        const double mult = sdbg.EdgeMultiplicity(node);
+        return mult > 1.0 && mult >= min_mult && mult <= max_mult;
+    };
+
+    auto extend_backward = [&](uint64_t start,
+                               int budget,
+                               double min_mult,
+                               double max_mult,
+                               const std::vector<uint64_t>& spacer_path) {
+        std::vector<uint64_t> result{start};
+        std::set<uint64_t> visited(spacer_path.begin(), spacer_path.end());
+        uint64_t current = start;
+
+        while (budget > 0) {
+            uint64_t best = SDBG::kNullID;
+            const uint64_t simple = sdbg.PrevSimplePathEdge(current);
+            if (valid_extension_node(simple, visited, min_mult, max_mult)) {
+                best = simple;
+            } else {
+                uint64_t neighbors[4] = {0, 0, 0, 0};
+                const int count = sdbg.IncomingEdges(current, neighbors);
+                if (count <= 0) break;
+                double best_mult = -1.0;
+                for (int i = 0; i < std::min(count, 4); ++i) {
+                    const uint64_t candidate = neighbors[i];
+                    if (!valid_extension_node(candidate, visited, min_mult, max_mult)) continue;
+                    const double mult = sdbg.EdgeMultiplicity(candidate);
+                    if (mult > best_mult) {
+                        best_mult = mult;
+                        best = candidate;
+                    }
+                }
+            }
+
+            if (best == SDBG::kNullID) break;
+            result.push_back(best);
+            visited.insert(best);
+            current = best;
+            --budget;
+        }
+        return result;
+    };
+
+    auto extend_forward = [&](uint64_t start,
+                              int budget,
+                              double min_mult,
+                              double max_mult,
+                              const std::vector<uint64_t>& spacer_path) {
+        std::vector<uint64_t> result{start};
+        std::set<uint64_t> visited(spacer_path.begin(), spacer_path.end());
+        uint64_t current = start;
+
+        while (budget > 0) {
+            uint64_t best = SDBG::kNullID;
+            const uint64_t simple = sdbg.NextSimplePathEdge(current);
+            if (valid_extension_node(simple, visited, min_mult, max_mult)) {
+                best = simple;
+            } else {
+                uint64_t neighbors[4] = {0, 0, 0, 0};
+                const int count = sdbg.OutgoingEdges(current, neighbors);
+                if (count <= 0) break;
+                double best_mult = -1.0;
+                for (int i = 0; i < std::min(count, 4); ++i) {
+                    const uint64_t candidate = neighbors[i];
+                    if (!valid_extension_node(candidate, visited, min_mult, max_mult)) continue;
+                    const double mult = sdbg.EdgeMultiplicity(candidate);
+                    if (mult > best_mult) {
+                        best_mult = mult;
+                        best = candidate;
+                    }
+                }
+            }
+
+            if (best == SDBG::kNullID) break;
+            result.push_back(best);
+            visited.insert(best);
+            current = best;
+            --budget;
+        }
+        return result;
+    };
+
     for (const auto& [group_id, cycle_map] : grouped_paths) {
         for (const auto& [cycle_id, paths_vec] : cycle_map) {
             for (const auto& path : paths_vec) {
@@ -427,13 +524,6 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                 const int remaining_bp = max_total_bp - spacer_bp;
                 if (remaining_bp <= 0) continue;
 
-                auto make_mult_range = [&](uint64_t node, double& mn, double& mx) {
-                    double m = sdbg.EdgeMultiplicity(node);
-                    mn = std::max(1.0, 0.1 * m);
-                    mx = 5.0 * m;
-                    if (mx < mn) mx = mn * 50.0;
-                };
-
                 double bk_min, bk_max, fw_min, fw_max;
                 make_mult_range(path.front(), bk_min, bk_max);
                 make_mult_range(path.back(),  fw_min, fw_max);
@@ -441,19 +531,11 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                 const int left_budget = remaining_bp / 2;
                 const int right_budget = remaining_bp - left_budget;
 
-                auto back_paths = BeamSearchBackwardAvoiding(
-                    path.front(), left_budget, left_budget,
-                    cycle_nodes, beam_width, bk_min, bk_max);
+                auto bp = extend_backward(path.front(), left_budget, bk_min, bk_max, path);
+                const int unused_left = std::max(0, left_budget - (static_cast<int>(bp.size()) - 1));
+                auto fp = extend_forward(path.back(), right_budget + unused_left, fw_min, fw_max, path);
 
-                auto fwd_paths = BeamSearchPathsAvoiding(
-                    path.back(), right_budget, right_budget,
-                    cycle_nodes, beam_width, fw_min, fw_max, nullptr);
-
-                if (back_paths.empty() || fwd_paths.empty()) continue;
-
-                const std::vector<uint64_t> empty_stub;
-                const auto& bp = back_paths.empty() ? empty_stub : back_paths[0];
-                const auto& fp = fwd_paths.empty()  ? empty_stub : fwd_paths[0];
+                if (bp.size() <= 1 || fp.size() <= 1) continue;
 
                 std::vector<uint64_t> combined;
                 if (bp.size() > 1) {
