@@ -353,8 +353,11 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchBackwardAvoiding(
 
         const int MAX_EDGE_COUNT = 4;
         uint64_t neighbors[MAX_EDGE_COUNT] = {0,0,0,0};
-        sdbg.IncomingEdges(v, neighbors);
-        const int n_iter = std::min(indegree, MAX_EDGE_COUNT);
+        const int flag = sdbg.IncomingEdges(v, neighbors);
+        if (flag == -1) {
+            continue;
+        }
+        const int n_iter = std::min(flag, MAX_EDGE_COUNT);
 
         for (int i = 0; i < n_iter; ++i) {
             const uint64_t neighbor = neighbors[i];
@@ -446,17 +449,7 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                     path.back(), right_budget, right_budget,
                     cycle_nodes, beam_width, fw_min, fw_max, nullptr);
 
-                if (back_paths.empty() && !fwd_paths.empty()) {
-                    fwd_paths = BeamSearchPathsAvoiding(
-                        path.back(), remaining_bp, remaining_bp,
-                        cycle_nodes, beam_width, fw_min, fw_max, nullptr);
-                } else if (!back_paths.empty() && fwd_paths.empty()) {
-                    back_paths = BeamSearchBackwardAvoiding(
-                        path.front(), remaining_bp, remaining_bp,
-                        cycle_nodes, beam_width, bk_min, bk_max);
-                }
-
-                if (back_paths.empty() && fwd_paths.empty()) continue;
+                if (back_paths.empty() || fwd_paths.empty()) continue;
 
                 const std::vector<uint64_t> empty_stub;
                 const auto& bp = back_paths.empty() ? empty_stub : back_paths[0];
