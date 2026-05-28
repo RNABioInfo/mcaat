@@ -420,14 +420,9 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
             for (const auto& path : paths_vec) {
                 if (path.empty()) continue;
 
-                // Spacer sequence length in bp
                 const int spacer_bp = k - 1 + static_cast<int>(path.size());
                 const int remaining_bp = max_total_bp - spacer_bp;
                 if (remaining_bp <= 0) continue;
-
-                // Each side contributes half_nodes extra bp: seq = spacer_bp + 2*half_nodes
-                const int half_nodes = std::max(1, remaining_bp / 2);
-                const int half_nodes_min = std::max(1, half_nodes / 2);
 
                 auto make_mult_range = [&](uint64_t node, double& mn, double& mx) {
                     double m = sdbg.EdgeMultiplicity(node);
@@ -440,27 +435,34 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                 make_mult_range(path.front(), bk_min, bk_max);
                 make_mult_range(path.back(),  fw_min, fw_max);
 
-                // Backward from path.front()
+                const int left_budget = remaining_bp / 2;
+                const int right_budget = remaining_bp - left_budget;
+
                 auto back_paths = BeamSearchBackwardAvoiding(
-                    path.front(), half_nodes_min, half_nodes,
+                    path.front(), left_budget, left_budget,
                     cycle_nodes, beam_width, bk_min, bk_max);
 
-                // Forward from path.back()
                 auto fwd_paths = BeamSearchPathsAvoiding(
-                    path.back(), half_nodes_min, half_nodes,
+                    path.back(), right_budget, right_budget,
                     cycle_nodes, beam_width, fw_min, fw_max, nullptr);
+
+                if (back_paths.empty() && !fwd_paths.empty()) {
+                    fwd_paths = BeamSearchPathsAvoiding(
+                        path.back(), remaining_bp, remaining_bp,
+                        cycle_nodes, beam_width, fw_min, fw_max, nullptr);
+                } else if (!back_paths.empty() && fwd_paths.empty()) {
+                    back_paths = BeamSearchBackwardAvoiding(
+                        path.front(), remaining_bp, remaining_bp,
+                        cycle_nodes, beam_width, bk_min, bk_max);
+                }
 
                 if (back_paths.empty() && fwd_paths.empty()) continue;
 
-                // Use first best of each (or empty stub)
                 const std::vector<uint64_t> empty_stub;
                 const auto& bp = back_paths.empty() ? empty_stub : back_paths[0];
                 const auto& fp = fwd_paths.empty()  ? empty_stub : fwd_paths[0];
 
-                // Assemble combined node path:
-                // reverse(bp[1:]) + path + fp[1:]
                 std::vector<uint64_t> combined;
-                // incoming: bp[0]=path.front(), bp[1..]=going left; reverse to get left-to-right
                 if (bp.size() > 1) {
                     for (int i = static_cast<int>(bp.size()) - 1; i >= 1; --i)
                         combined.push_back(bp[i]);
@@ -476,6 +478,8 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                 std::string seq = _FetchFirstNode(combined.front());
                 for (size_t i = 1; i < combined.size(); ++i)
                     seq += _FetchNodeLastBase(combined[i]);
+
+                if (static_cast<int>(seq.size()) > max_total_bp) continue;
 
                 out << ">contiguous_path_" << path_count << "\n" << seq << "\n";
                 ++path_count;
