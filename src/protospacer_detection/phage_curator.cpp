@@ -425,8 +425,7 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
 
     std::map<std::string, std::vector<std::string>> consensus_map;
     const int k = static_cast<int>(sdbg.k());
-    struct PhageResult { std::string header; std::string seq; double score; };
-    std::vector<PhageResult> results;
+    int path_count = 0;
 
     auto make_mult_range = [&](uint64_t node, double& mn, double& mx) {
         double m = sdbg.EdgeMultiplicity(node);
@@ -565,24 +564,16 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
                     seq += _FetchNodeLastBase(combined[i]);
 
                 if (static_cast<int>(seq.size()) > max_total_bp) continue;
+                if (static_cast<int>(seq.size()) <= 500) continue;
 
                 const std::string spacer_label = _ReconstructPath(path);
-                double score = 0.0;
-                for (uint64_t n : combined) score += sdbg.EdgeMultiplicity(n);
-                score /= static_cast<double>(combined.size());
-                results.push_back({"phage_excerpt_" + spacer_label, seq, score});
+                out << ">phage_excerpt_" << spacer_label << "\n" << seq << "\n";
+                ++path_count;
             }
         }
     }
 
-    if (!results.empty()) {
-        const auto best = std::max_element(results.begin(), results.end(),
-            [](const PhageResult& a, const PhageResult& b) { return a.score < b.score; });
-        out << ">" << best->header << "\n" << best->seq << "\n";
-        std::cout << "\nSaved 1 contiguous path (argmax) in " << filename << std::endl;
-    } else {
-        std::cout << "\nNo contiguous paths found." << std::endl;
-    }
+    std::cout << "\nSaved " << path_count << " contiguous paths in " << filename << std::endl;
     out.close();
     return consensus_map;
 }
@@ -599,8 +590,7 @@ PhageCurator::FindQualityPathsBeamSearchFromGroupedPaths(int min_length, int max
 
     std::map<std::string, std::vector<std::string>> consensus_map;
 
-    struct PhageResult { std::string header; std::string seq; double score; };
-    std::vector<PhageResult> results;
+    int path_count = 0;
 
     struct counts {
         int first;
@@ -647,35 +637,51 @@ PhageCurator::FindQualityPathsBeamSearchFromGroupedPaths(int min_length, int max
 
                 if (bw_paths.empty() || fw_paths.empty()) continue;
 
-                auto best_bw = GetTopPathsFromBeamPaths(bw_paths, static_cast<int>(bk_max), static_cast<int>(bk_min), 1);
-                auto best_fw = GetTopPathsFromBeamPaths(fw_paths, static_cast<int>(fw_max), static_cast<int>(fw_min), 1);
+                // Enumerate all bw×fw stitched combinations
+                struct Candidate { std::string seq; double score; };
+                std::vector<Candidate> candidates;
+                candidates.reserve(bw_paths.size() * fw_paths.size());
 
-                if (best_bw.empty() || best_fw.empty()) continue;
+                for (const auto& bw : bw_paths) {
+                    for (const auto& fw : fw_paths) {
+                        std::vector<uint64_t> combined;
+                        combined.reserve(bw.size() + static_cast<size_t>(spacer_len) + fw.size());
+                        for (int i = static_cast<int>(bw.size()) - 1; i >= 1; --i)
+                            combined.push_back(bw[i]);
+                        for (uint64_t n : path)
+                            combined.push_back(n);
+                        for (size_t i = 1; i < fw.size(); ++i)
+                            combined.push_back(fw[i]);
+                        if (combined.empty()) continue;
 
-                const auto& bw = best_bw[0];
-                const auto& fw = best_fw[0];
+                        double score = 0.0;
+                        for (uint64_t n : combined) score += sdbg.EdgeMultiplicity(n);
+                        score /= static_cast<double>(combined.size());
 
-                // Stitch: reversed(bw[1:]) + spacer_path + fw[1:]
-                std::vector<uint64_t> combined;
-                combined.reserve(bw.size() + static_cast<size_t>(spacer_len) + fw.size());
-                for (int i = static_cast<int>(bw.size()) - 1; i >= 1; --i)
-                    combined.push_back(bw[i]);
-                for (uint64_t n : path)
-                    combined.push_back(n);
-                for (size_t i = 1; i < fw.size(); ++i)
-                    combined.push_back(fw[i]);
+                        std::string seq = _FetchFirstNode(combined.front());
+                        for (size_t i = 1; i < combined.size(); ++i)
+                            seq += _FetchNodeLastBase(combined[i]);
 
-                if (combined.empty()) continue;
+                        candidates.push_back({std::move(seq), score});
+                    }
+                }
 
-                std::string result_path = _FetchFirstNode(combined.front());
-                for (size_t i = 1; i < combined.size(); ++i)
-                    result_path += _FetchNodeLastBase(combined[i]);
+                // Sort descending by score, keep top 50
+                std::sort(candidates.begin(), candidates.end(),
+                    [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+                if (candidates.size() > 50) candidates.resize(50);
+
+                // Argmax among those with length > 500
+                const Candidate* best = nullptr;
+                for (const auto& c : candidates) {
+                    if (static_cast<int>(c.seq.size()) <= 500) continue;
+                    if (!best || c.score > best->score) best = &c;
+                }
+                if (!best) continue;
 
                 const std::string spacer_label = _ReconstructPath(path);
-                double score = 0.0;
-                for (uint64_t n : combined) score += sdbg.EdgeMultiplicity(n);
-                score /= static_cast<double>(combined.size());
-                results.push_back({"phage_excerpt_" + spacer_label, result_path, score});
+                out << ">phage_excerpt_" << spacer_label << "\n" << best->seq << "\n";
+                ++path_count;
             }
         }
 
@@ -686,14 +692,7 @@ PhageCurator::FindQualityPathsBeamSearchFromGroupedPaths(int min_length, int max
         consensus_map[group_id_str] = quality_paths;
     }
 
-    if (!results.empty()) {
-        const auto best = std::max_element(results.begin(), results.end(),
-            [](const PhageResult& a, const PhageResult& b) { return a.score < b.score; });
-        out << ">" << best->header << "\n" << best->seq << "\n";
-        std::cout << "\nSaved 1 quality path (argmax) in " << filename << std::endl;
-    } else {
-        std::cout << "\nNo quality paths found." << std::endl;
-    }
+    std::cout << "\nSaved " << path_count << " quality paths in " << filename << std::endl;
     out.close();
     return consensus_map;
 }
