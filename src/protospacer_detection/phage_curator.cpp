@@ -176,7 +176,7 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchPathsAvoiding(
 
     // Initial multiplicity check
     const double initial_mult = sdbg.EdgeMultiplicity(start);
-    if (initial_mult <= 1.0 || initial_mult < min_mult || initial_mult > max_mult) {
+    if (initial_mult < min_mult || initial_mult > max_mult) {
         return all_paths;
     }
 
@@ -241,7 +241,7 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchPathsAvoiding(
 
             // Multiplicity guard
             const double mult = sdbg.EdgeMultiplicity(neighbor);
-            if (mult <= 1.0 || mult < min_mult || mult > max_mult) {
+            if (mult < min_mult || mult > max_mult) {
                 continue;
             }
 
@@ -271,7 +271,7 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchPathsAvoiding(
                 }
                 // Multiplicity check
                 const double next_mult = sdbg.EdgeMultiplicity(next);
-                if (next_mult <= 1.0 || next_mult < min_mult || next_mult > max_mult) {
+                if (next_mult < min_mult || next_mult > max_mult) {
                     break;
                 }
 
@@ -325,7 +325,7 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchBackwardAvoiding(
     size_t unique_id = 0;
 
     const double initial_mult = sdbg.EdgeMultiplicity(start);
-    if (initial_mult <= 1.0 || initial_mult < min_mult || initial_mult > max_mult)
+    if (initial_mult < min_mult || initial_mult > max_mult)
         return all_paths;
 
     path_pool.push_back({start});
@@ -366,7 +366,7 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchBackwardAvoiding(
             if (forbidden.find(neighbor) != forbidden.end()) continue;
 
             const double mult = sdbg.EdgeMultiplicity(neighbor);
-            if (mult <= 1.0 || mult < min_mult || mult > max_mult) continue;
+            if (mult < min_mult || mult > max_mult) continue;
 
             std::vector<uint64_t> new_path = path_ref;
             new_path.push_back(neighbor);
@@ -382,7 +382,7 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchBackwardAvoiding(
                 if (std::find(new_path.begin(), new_path.end(), prev) != new_path.end()) break;
                 if (forbidden.find(prev) != forbidden.end()) break;
                 const double pm = sdbg.EdgeMultiplicity(prev);
-                if (pm <= 1.0 || pm < min_mult || pm > max_mult) break;
+                if (pm < min_mult || pm > max_mult) break;
                 new_path.push_back(prev);
                 const int nd = static_cast<int>(new_path.size()) - 1;
                 new_score = (new_score * (nd - 1) + pm) / static_cast<double>(nd);
@@ -434,7 +434,7 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
         if (visited.find(node) != visited.end()) return false;
         if (cycle_nodes.find(node) != cycle_nodes.end()) return false;
         const double mult = sdbg.EdgeMultiplicity(node);
-        return mult > 1.0 && mult >= min_mult && mult <= max_mult;
+        return mult >= 1.0 && mult >= min_mult && mult <= max_mult;
     };
 
     auto extend_backward = [&](uint64_t start,
