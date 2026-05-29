@@ -350,10 +350,10 @@ static int run_phage_curate(int argc, char** argv) {
     PhageCurator curator(sdbg, grouped_paths, cycles_map);
 
     std::string contiguous_out = (fs::path(output_dir) / "ContiguousPaths.fasta").string();
-    std::string quality_out    = (fs::path(output_dir) / "QualityPaths.fasta").string();
+    //std::string quality_out    = (fs::path(output_dir) / "QualityPaths.fasta").string();
 
     curator.FindContiguousPathsFromGroupedPaths(2500, contiguous_out, beam_width);
-    curator.FindQualityPathsBeamSearchFromGroupedPaths(3000, 3010, quality_out, beam_width);
+    // curator.FindQualityPathsBeamSearchFromGroupedPaths(3000, 3010, quality_out, beam_width);
 
     std::cout << "\nOutput: " << output_dir << "\n\n";
     return 0;

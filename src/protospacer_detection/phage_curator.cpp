@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <limits>
 #include <cassert>
+#include <cmath>
 #include <mutex>
 
 // ---------- tiny helpers (do not change logic) ----------
@@ -189,9 +190,9 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchPathsAvoiding(
     while (!beam_set.empty()) {
         // Pop best
         const auto it = beam_set.begin();
-        const double score = it->first;
         const size_t id = it->second;
         beam_set.erase(it);
+        const double score = score_pool[id]; // raw avg_mult, not length-weighted key
 
         // Do NOT bind a reference to an element of a growing vector; use index each time.
         const std::vector<uint64_t>& path_ref = path_pool[id];
@@ -229,8 +230,11 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchPathsAvoiding(
         for (int i = 0; i < n_iter; ++i) {
             const uint64_t neighbor = neighbors[i];
 
+            // Re-index: path_pool may have reallocated after emplace_back in a prior iteration
+            const std::vector<uint64_t>& cur_path = path_pool[id];
+
             // Cycle check (on current path)
-            if (std::find(path_ref.begin(), path_ref.end(), neighbor) != path_ref.end()) {
+            if (std::find(cur_path.begin(), cur_path.end(), neighbor) != cur_path.end()) {
                 continue;
             }
 
@@ -246,7 +250,7 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchPathsAvoiding(
             }
 
             // Copy base path to avoid dangling references upon vector growth
-            std::vector<uint64_t> new_path = path_ref;
+            std::vector<uint64_t> new_path = cur_path;
             new_path.push_back(neighbor);
 
             double new_score = (score * std::max(0, current_depth) + mult) /
@@ -283,11 +287,12 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchPathsAvoiding(
 
             // Append new entries atomically to the pools
             const size_t new_id = unique_id++;
+            const double length_factor = std::sqrt(static_cast<double>(new_path.size()));
             path_pool.emplace_back(std::move(new_path));
             current_pool.push_back(current);
             score_pool.push_back(new_score);
 
-            beam_set.insert({new_score, new_id});
+            beam_set.insert({new_score * length_factor, new_id});
 
             // Prune the lowest score if over beam width
             if (beam_width > 0 && beam_set.size() > static_cast<size_t>(beam_width)) {
@@ -335,9 +340,9 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchBackwardAvoiding(
 
     while (!beam_set.empty()) {
         const auto it = beam_set.begin();
-        const double score = it->first;
         const size_t id = it->second;
         beam_set.erase(it);
+        const double score = score_pool[id]; // raw avg_mult, not length-weighted key
 
         const std::vector<uint64_t>& path_ref = path_pool[id];
         const uint64_t v = current_pool[id];
@@ -362,13 +367,16 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchBackwardAvoiding(
         for (int i = 0; i < n_iter; ++i) {
             const uint64_t neighbor = neighbors[i];
 
-            if (std::find(path_ref.begin(), path_ref.end(), neighbor) != path_ref.end()) continue;
+            // Re-index: path_pool may have reallocated after emplace_back in a prior iteration
+            const std::vector<uint64_t>& cur_path = path_pool[id];
+
+            if (std::find(cur_path.begin(), cur_path.end(), neighbor) != cur_path.end()) continue;
             if (forbidden.find(neighbor) != forbidden.end()) continue;
 
             const double mult = sdbg.EdgeMultiplicity(neighbor);
             if (mult < min_mult || mult > max_mult) continue;
 
-            std::vector<uint64_t> new_path = path_ref;
+            std::vector<uint64_t> new_path = cur_path;
             new_path.push_back(neighbor);
             double new_score = (score * std::max(0, current_depth) + mult) /
                                static_cast<double>(std::max(1, current_depth + 1));
@@ -390,10 +398,11 @@ std::vector<std::vector<uint64_t>> PhageCurator::BeamSearchBackwardAvoiding(
             }
 
             const size_t new_id = unique_id++;
+            const double length_factor = std::sqrt(static_cast<double>(new_path.size()));
             path_pool.push_back(std::move(new_path));
             score_pool.push_back(new_score);
             current_pool.push_back(current);
-            beam_set.insert({new_score, new_id});
+            beam_set.insert({new_score * length_factor, new_id});
 
             if (beam_width > 0 && beam_set.size() > static_cast<size_t>(beam_width)) {
                 auto prune = beam_set.end(); --prune;
@@ -415,8 +424,9 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
     }
 
     std::map<std::string, std::vector<std::string>> consensus_map;
-    int path_count = 0;
     const int k = static_cast<int>(sdbg.k());
+    struct PhageResult { std::string header; std::string seq; double score; };
+    std::vector<PhageResult> results;
 
     auto make_mult_range = [&](uint64_t node, double& mn, double& mx) {
         double m = sdbg.EdgeMultiplicity(node);
@@ -556,13 +566,23 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
 
                 if (static_cast<int>(seq.size()) > max_total_bp) continue;
 
-                out << ">contiguous_path_" << path_count << "\n" << seq << "\n";
-                ++path_count;
+                const std::string spacer_label = _ReconstructPath(path);
+                double score = 0.0;
+                for (uint64_t n : combined) score += sdbg.EdgeMultiplicity(n);
+                score /= static_cast<double>(combined.size());
+                results.push_back({"phage_excerpt_" + spacer_label, seq, score});
             }
         }
     }
 
-    std::cout << "\nSaved " << path_count << " contiguous paths in " << filename << std::endl;
+    if (!results.empty()) {
+        const auto best = std::max_element(results.begin(), results.end(),
+            [](const PhageResult& a, const PhageResult& b) { return a.score < b.score; });
+        out << ">" << best->header << "\n" << best->seq << "\n";
+        std::cout << "\nSaved 1 contiguous path (argmax) in " << filename << std::endl;
+    } else {
+        std::cout << "\nNo contiguous paths found." << std::endl;
+    }
     out.close();
     return consensus_map;
 }
@@ -570,6 +590,7 @@ PhageCurator::FindContiguousPathsFromGroupedPaths(int max_total_bp, const std::s
 // New function using beam search, mirroring FindQualityPathsDLSFromGroupedPaths
 std::map<std::string, std::vector<std::string>>
 PhageCurator::FindQualityPathsBeamSearchFromGroupedPaths(int min_length, int max_length, const std::string& filename, int beam_width) {
+    (void)min_length; // budget is split from max_length; min_length not used per-side
     std::ofstream out(filename, std::ios::app);  // Append mode to add to file
     if (!out) {
         std::cerr << "Error opening file: " << filename << std::endl;
@@ -577,7 +598,9 @@ PhageCurator::FindQualityPathsBeamSearchFromGroupedPaths(int min_length, int max
     }
 
     std::map<std::string, std::vector<std::string>> consensus_map;
-    int path_count = 0;
+
+    struct PhageResult { std::string header; std::string seq; double score; };
+    std::vector<PhageResult> results;
 
     struct counts {
         int first;
@@ -598,41 +621,61 @@ PhageCurator::FindQualityPathsBeamSearchFromGroupedPaths(int min_length, int max
             for (const auto& path : paths_vec) {
                 counts_by_nodes.third += 1;
 
-                if (path.empty()) continue; // guard
+                if (path.empty()) continue;
 
-                // Start from last node as in original code
-                const uint64_t start = path.back();
+                const int spacer_len = static_cast<int>(path.size());
+                const int remaining = max_length - spacer_len;
+                if (remaining <= 0) continue;
 
-                // min/max multiplicity window around start
-                double min_mult = 0.1 * sdbg.EdgeMultiplicity(start);
-                if (min_mult < 1.0) min_mult = 1.0;
-                double max_mult = 5.0 * sdbg.EdgeMultiplicity(start);
-                if (max_mult < min_mult) max_mult = min_mult * 50.0;
+                const int left_budget = remaining / 2;
+                const int right_budget = remaining - left_budget;
 
-                auto extended_paths = BeamSearchPathsAvoiding(
-                    start, min_length, max_length, cycle_nodes, beam_width, min_mult, max_mult, nullptr);
+                double bk_min = 0.1 * sdbg.EdgeMultiplicity(path.front());
+                if (bk_min < 1.0) bk_min = 1.0;
+                double bk_max = 5.0 * sdbg.EdgeMultiplicity(path.front());
+                if (bk_max < bk_min) bk_max = bk_min * 50.0;
 
-                if (extended_paths.empty()) continue;
+                double fw_min = 0.1 * sdbg.EdgeMultiplicity(path.back());
+                if (fw_min < 1.0) fw_min = 1.0;
+                double fw_max = 5.0 * sdbg.EdgeMultiplicity(path.back());
+                if (fw_max < fw_min) fw_max = fw_min * 50.0;
 
-                // NOTE: keep original parameter order/types to avoid changing logic
-                std::vector<std::vector<uint64_t>> best_paths =
-                    GetTopPathsFromBeamPaths(extended_paths, /*max*/ static_cast<int>(min_mult), /*min*/ static_cast<int>(max_mult), /*top_n*/ 2);
+                auto bw_paths = BeamSearchBackwardAvoiding(
+                    path.front(), 1, left_budget, cycle_nodes, beam_width, bk_min, bk_max);
+                auto fw_paths = BeamSearchPathsAvoiding(
+                    path.back(), 1, right_budget, cycle_nodes, beam_width, fw_min, fw_max, nullptr);
 
-                if (best_paths.empty()) continue;
+                if (bw_paths.empty() || fw_paths.empty()) continue;
 
-                for (const auto& ext_path : best_paths) {
-                    if (ext_path.empty()) continue;
+                auto best_bw = GetTopPathsFromBeamPaths(bw_paths, static_cast<int>(bk_max), static_cast<int>(bk_min), 1);
+                auto best_fw = GetTopPathsFromBeamPaths(fw_paths, static_cast<int>(fw_max), static_cast<int>(fw_min), 1);
 
-                    std::string result_path = _FetchFirstNode(ext_path.front());
-                    for (size_t i = 1; i < ext_path.size(); ++i) {
-                        result_path += _FetchNodeLastBase(ext_path[i]);
-                    }
+                if (best_bw.empty() || best_fw.empty()) continue;
 
-                    // Keep original output side-effect and counter behavior
-                    out << ">quality_path_" << path_count << "\n" << result_path << "\n";
-                    ++path_count;
-                    // quality_paths.push_back(result_path); // commented in original; keep as-is
-                }
+                const auto& bw = best_bw[0];
+                const auto& fw = best_fw[0];
+
+                // Stitch: reversed(bw[1:]) + spacer_path + fw[1:]
+                std::vector<uint64_t> combined;
+                combined.reserve(bw.size() + static_cast<size_t>(spacer_len) + fw.size());
+                for (int i = static_cast<int>(bw.size()) - 1; i >= 1; --i)
+                    combined.push_back(bw[i]);
+                for (uint64_t n : path)
+                    combined.push_back(n);
+                for (size_t i = 1; i < fw.size(); ++i)
+                    combined.push_back(fw[i]);
+
+                if (combined.empty()) continue;
+
+                std::string result_path = _FetchFirstNode(combined.front());
+                for (size_t i = 1; i < combined.size(); ++i)
+                    result_path += _FetchNodeLastBase(combined[i]);
+
+                const std::string spacer_label = _ReconstructPath(path);
+                double score = 0.0;
+                for (uint64_t n : combined) score += sdbg.EdgeMultiplicity(n);
+                score /= static_cast<double>(combined.size());
+                results.push_back({"phage_excerpt_" + spacer_label, result_path, score});
             }
         }
 
@@ -643,7 +686,14 @@ PhageCurator::FindQualityPathsBeamSearchFromGroupedPaths(int min_length, int max
         consensus_map[group_id_str] = quality_paths;
     }
 
-    std::cout << "\nSaved in " << filename << std::endl;
+    if (!results.empty()) {
+        const auto best = std::max_element(results.begin(), results.end(),
+            [](const PhageResult& a, const PhageResult& b) { return a.score < b.score; });
+        out << ">" << best->header << "\n" << best->seq << "\n";
+        std::cout << "\nSaved 1 quality path (argmax) in " << filename << std::endl;
+    } else {
+        std::cout << "\nNo quality paths found." << std::endl;
+    }
     out.close();
     return consensus_map;
 }
