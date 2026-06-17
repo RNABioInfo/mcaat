@@ -106,7 +106,7 @@ void CycleFinder::_GetOutgoings(uint64_t node, SmallNodeSet& outgoings_set) {
     int flag = this->settings.sdbg->OutgoingEdges(node, outgoings);
     if(flag!=-1)
         for (const auto& outgoing : outgoings)
-            if (this->settings.sdbg->IsValidEdge(outgoing))
+            if (this->settings.sdbg->IsValidEdge(outgoing) && outgoing != node && !(this->settings.sdbg->EdgeMultiplicity(node) / this->settings.sdbg->EdgeMultiplicity(outgoing) > 500))
                 outgoings_set.insert(outgoing);
     
     
@@ -124,7 +124,7 @@ void CycleFinder::_GetIncomings(uint64_t node, SmallNodeSet& incomings_set) {
     int flag = this->settings.sdbg->IncomingEdges(node, incomings);
     if (flag!=-1)
         for (const auto& incoming : incomings)
-            if (this->settings.sdbg->IsValidEdge(incoming))
+            if (this->settings.sdbg->IsValidEdge(incoming) && incoming != node && !(this->settings.sdbg->EdgeMultiplicity(node) / this->settings.sdbg->EdgeMultiplicity(incoming) > 500))
                 incomings_set.insert(incoming);
 }
 // ## END: HELPER FUNCTIONS FOR DLS ##
