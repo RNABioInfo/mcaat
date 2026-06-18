@@ -350,6 +350,101 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
 }
 
 
+/**
+ * @brief Bidirectional BFS to determine if a cycle through `start` exists within `limit` hops.
+ * Expands a forward frontier (outgoing edges) and a backward frontier (incoming edges)
+ * simultaneously. A cycle is confirmed when the two frontiers share a node, or when the
+ * forward frontier reaches `start` itself.
+ * Memory: O(b^(limit/2)) visited nodes total vs O(b^limit) for the DLS.
+ */
+bool CycleFinder::BidirectionalBFS(uint64_t start, int limit) {
+    // Thread-local pools: cleared each call but capacity is retained across calls.
+    static thread_local phmap::flat_hash_set<uint64_t> fwd_visited_pool;
+    static thread_local phmap::flat_hash_set<uint64_t> bwd_visited_pool;
+    static thread_local std::vector<uint64_t> fwd_frontier_pool;
+    static thread_local std::vector<uint64_t> bwd_frontier_pool;
+    static thread_local std::vector<uint64_t> next_frontier_pool;
+
+    // Release memory if pools have grown too large (safety valve)
+    constexpr size_t MAX_POOL_BUCKETS = 1 << 17; // ~128K buckets
+    if (fwd_visited_pool.bucket_count() > MAX_POOL_BUCKETS) {
+        phmap::flat_hash_set<uint64_t>().swap(fwd_visited_pool);
+        phmap::flat_hash_set<uint64_t>().swap(bwd_visited_pool);
+    }
+
+    fwd_visited_pool.clear();
+    bwd_visited_pool.clear();
+    fwd_frontier_pool.clear();
+    bwd_frontier_pool.clear();
+
+    const size_t start_multiplicity = this->settings.sdbg->EdgeMultiplicity(start);
+
+    fwd_visited_pool.insert(start);
+    bwd_visited_pool.insert(start);
+    fwd_frontier_pool.push_back(start);
+    bwd_frontier_pool.push_back(start);
+
+    uint64_t neighbors[MAX_EDGE_COUNT];
+    const int half = limit / 2 + 1; // slight asymmetry to cover odd limits
+
+    for (int depth = 0; depth < half; ++depth) {
+        // --- Expand forward frontier ---
+        if (!fwd_frontier_pool.empty()) {
+            next_frontier_pool.clear();
+            for (uint64_t v : fwd_frontier_pool) {
+                if (!this->settings.sdbg->IsValidEdge(v)) continue;
+                if (this->settings.sdbg->EdgeOutdegreeZero(v)) continue;
+                int outdegree = this->settings.sdbg->OutgoingEdges(v, neighbors);
+                if (outdegree == -1) continue;
+                for (int i = 0; i < outdegree; ++i) {
+                    uint64_t nb = neighbors[i];
+                    if (!this->settings.sdbg->IsValidEdge(nb)) continue;
+                    // Multiplicity pruning
+                    if (this->settings.sdbg->EdgeMultiplicity(nb) == 0 ||
+                        start_multiplicity / this->settings.sdbg->EdgeMultiplicity(nb) > 500) continue;
+                    // Cycle: forward frontier reached start again
+                    if (nb == start && depth > 0) return true;
+                    // Intersection with backward frontier
+                    if (bwd_visited_pool.count(nb)) return true;
+                    if (fwd_visited_pool.insert(nb).second) {
+                        next_frontier_pool.push_back(nb);
+                    }
+                }
+            }
+            fwd_frontier_pool.swap(next_frontier_pool);
+        }
+
+        // --- Expand backward frontier ---
+        if (!bwd_frontier_pool.empty()) {
+            next_frontier_pool.clear();
+            for (uint64_t v : bwd_frontier_pool) {
+                if (!this->settings.sdbg->IsValidEdge(v)) continue;
+                if (this->settings.sdbg->EdgeIndegreeZero(v)) continue;
+                int indegree = this->settings.sdbg->IncomingEdges(v, neighbors);
+                if (indegree == -1) continue;
+                for (int i = 0; i < indegree; ++i) {
+                    uint64_t nb = neighbors[i];
+                    if (!this->settings.sdbg->IsValidEdge(nb)) continue;
+                    // Multiplicity pruning (symmetric: neighbor feeds into v)
+                    if (this->settings.sdbg->EdgeMultiplicity(nb) == 0 ||
+                        start_multiplicity / this->settings.sdbg->EdgeMultiplicity(nb) > 500) continue;
+                    // Intersection with forward frontier
+                    if (fwd_visited_pool.count(nb)) return true;
+                    if (bwd_visited_pool.insert(nb).second) {
+                        next_frontier_pool.push_back(nb);
+                    }
+                }
+            }
+            bwd_frontier_pool.swap(next_frontier_pool);
+        }
+
+        // Both frontiers exhausted — no cycle possible
+        if (fwd_frontier_pool.empty() && bwd_frontier_pool.empty()) return false;
+    }
+
+    return false;
+}
+
 vector<uint64_t> CycleFinder::CollectTips() {
     size_t n = this->settings.sdbg->size();
     int threads = static_cast<int>(this->settings.threads);
