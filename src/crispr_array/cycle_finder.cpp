@@ -327,24 +327,23 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
             // Unrolled loop for common case (de Bruijn graph max degree = 4)
             for (int i = 0; i < outdegree; ++i) {
                 uint64_t neighbor = neighbors[i];
-                // Check if the neighbor is valid
                 if (!this->settings.sdbg->IsValidEdge(neighbor)) {
                     continue;
                 }
-                auto visited_it = dls_visited.find(neighbor);
-                bool not_visited = (visited_it == dls_visited.end());
-                bool is_start_revisit = (neighbor == start_node && depth > 0);
-                
-                if (__builtin_expect(not_visited || is_start_revisit, 1)) {
+                // Multiplicity pruning: skip paths into low-coverage branches
+                if (this->settings.sdbg->EdgeMultiplicity(start_node) /
+                    this->settings.sdbg->EdgeMultiplicity(neighbor) > 500) {
+                    continue;
+                }
+                // Cycle found: start_node is reachable from itself
+                if (neighbor == start_node) {
+                    return true;
+                }
+                if (dls_visited.find(neighbor) == dls_visited.end()) {
                     dls_visited.insert(neighbor);
                     dls_stack.push_back({neighbor, depth + 1});
                 }
             }
-        
-        // Megahit-style aggressive early cycle detection
-        if (__builtin_expect(v == target_node && depth > 1, 0)) {
-            return true;  // Found cycle - exit immediately
-        }
     }
 
     return false;
