@@ -45,6 +45,9 @@ class CycleFinder {
         uint16_t cluster_bounds;
         // visited bitset stored as 64-bit words (1 bit per node). Use atomic builtins on the words to avoid non-copyable std::atomic in vectors.
         vector<vector<uint64_t>> per_thread_visited;
+        // dirty-list: indices of touched 64-bit words in per_thread_visited, per thread.
+        // Cleared at the start of each BFS/DLS call; avoids O(N) memset on every call.
+        vector<vector<uint32_t>> per_thread_dirty;
         vector<bool> look_up_table;
 
         // thread count obtained from settings

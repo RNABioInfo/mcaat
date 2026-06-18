@@ -254,27 +254,30 @@ vector<vector<uint64_t>> CycleFinder::FindCycleUtil(uint64_t start_node) {
  * Optimized using megahit's graph traversal patterns.
  */
 bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, int& reached_depth) {
-    // Megahit-style memory pool: Dynamic thread-local pools for reuse (no heuristic sizing)
     struct StackEntry {
         uint64_t node;
         int depth;
     };
-    
-    static thread_local std::vector<StackEntry> dls_stack_pool;
-    static thread_local phmap::flat_hash_set<uint64_t> dls_visited_pool;
-    
-    // Clear but keep capacity (megahit memory reuse pattern) - no fixed reserve
-    dls_stack_pool.clear();
-    dls_visited_pool.clear();
-    
-    // Reserve reasonable initial capacity to avoid reallocations
-    if (dls_stack_pool.capacity() == 0) {
-        dls_stack_pool.reserve(64);  // Small initial reserve
-    }
 
-    // Use pooled structures
+    static thread_local std::vector<StackEntry> dls_stack_pool;
+    dls_stack_pool.clear();
+    if (dls_stack_pool.capacity() == 0)
+        dls_stack_pool.reserve(64);
     auto& dls_stack = dls_stack_pool;
-    auto& dls_visited = dls_visited_pool;
+
+    // Reuse per_thread_visited (allocated before ChunkStartNodes — no extra memory).
+    // Dirty list clears only touched words: O(visited/64) per call, not O(N).
+    const int tid = omp_get_thread_num();
+    auto& vis_bits  = per_thread_visited[tid];
+    auto& vis_dirty = per_thread_dirty[tid];
+    for (uint32_t w : vis_dirty) vis_bits[w] = 0ULL;
+    vis_dirty.clear();
+    auto vis_test = [&](uint64_t n) -> bool { return (vis_bits[n >> 6] >> (n & 63)) & 1ULL; };
+    auto vis_mark = [&](uint64_t n) {
+        uint32_t w = static_cast<uint32_t>(n >> 6);
+        vis_bits[w] |= 1ULL << (n & 63);
+        vis_dirty.push_back(w);
+    };
 
     // Cache values for faster comparison
     const uint64_t target_node = target;
@@ -339,8 +342,8 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
                 if (neighbor == start_node) {
                     return true;
                 }
-                if (dls_visited.find(neighbor) == dls_visited.end()) {
-                    dls_visited.insert(neighbor);
+                if (!vis_test(neighbor)) {
+                    vis_mark(neighbor);
                     dls_stack.push_back({neighbor, depth + 1});
                 }
             }
@@ -358,28 +361,32 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
  * Memory: O(b^(limit/2)) visited nodes total vs O(b^limit) for the DLS.
  */
 bool CycleFinder::BidirectionalBFS(uint64_t start, int limit) {
-    // Thread-local pools: cleared each call but capacity is retained across calls.
-    static thread_local phmap::flat_hash_set<uint64_t> fwd_visited_pool;
+    // fwd: reuses per_thread_visited (already allocated, zero extra memory).
+    // bwd: small phmap — BFS terminates early so this stays negligible in size.
     static thread_local phmap::flat_hash_set<uint64_t> bwd_visited_pool;
     static thread_local std::vector<uint64_t> fwd_frontier_pool;
     static thread_local std::vector<uint64_t> bwd_frontier_pool;
     static thread_local std::vector<uint64_t> next_frontier_pool;
 
-    // Release memory if pools have grown too large (safety valve)
-    constexpr size_t MAX_POOL_BUCKETS = 1 << 17; // ~128K buckets
-    if (fwd_visited_pool.bucket_count() > MAX_POOL_BUCKETS) {
-        phmap::flat_hash_set<uint64_t>().swap(fwd_visited_pool);
-        phmap::flat_hash_set<uint64_t>().swap(bwd_visited_pool);
-    }
+    const int tid = omp_get_thread_num();
+    auto& fwd_bits  = per_thread_visited[tid];
+    auto& fwd_dirty = per_thread_dirty[tid];
+    for (uint32_t w : fwd_dirty) fwd_bits[w] = 0ULL;
+    fwd_dirty.clear();
+    auto fwd_test = [&](uint64_t n) -> bool { return (fwd_bits[n >> 6] >> (n & 63)) & 1ULL; };
+    auto fwd_mark = [&](uint64_t n) {
+        uint32_t w = static_cast<uint32_t>(n >> 6);
+        fwd_bits[w] |= 1ULL << (n & 63);
+        fwd_dirty.push_back(w);
+    };
 
-    fwd_visited_pool.clear();
     bwd_visited_pool.clear();
     fwd_frontier_pool.clear();
     bwd_frontier_pool.clear();
 
     const size_t start_multiplicity = this->settings.sdbg->EdgeMultiplicity(start);
 
-    fwd_visited_pool.insert(start);
+    fwd_mark(start);
     bwd_visited_pool.insert(start);
     fwd_frontier_pool.push_back(start);
     bwd_frontier_pool.push_back(start);
@@ -403,10 +410,11 @@ bool CycleFinder::BidirectionalBFS(uint64_t start, int limit) {
                     if (this->settings.sdbg->EdgeMultiplicity(nb) == 0 ||
                         start_multiplicity / this->settings.sdbg->EdgeMultiplicity(nb) > 500) continue;
                     // Cycle: forward frontier reached start again
-                    if (nb == start && depth > 0) return true;
+                    if (nb == start) return true;
                     // Intersection with backward frontier
                     if (bwd_visited_pool.count(nb)) return true;
-                    if (fwd_visited_pool.insert(nb).second) {
+                    if (!fwd_test(nb)) {
+                        fwd_mark(nb);
                         next_frontier_pool.push_back(nb);
                     }
                 }
@@ -429,7 +437,7 @@ bool CycleFinder::BidirectionalBFS(uint64_t start, int limit) {
                     if (this->settings.sdbg->EdgeMultiplicity(nb) == 0 ||
                         start_multiplicity / this->settings.sdbg->EdgeMultiplicity(nb) > 500) continue;
                     // Intersection with forward frontier
-                    if (fwd_visited_pool.count(nb)) return true;
+                    if (fwd_test(nb)) return true;
                     if (bwd_visited_pool.insert(nb).second) {
                         next_frontier_pool.push_back(nb);
                     }
@@ -588,16 +596,23 @@ int CycleFinder::FindApproximateCRISPRArrays()
               << "  threads=" << this->settings.threads << std::endl;
         std::unordered_map<uint64_t, std::vector<std::vector<uint64_t>>> all_cycles;
 
+    // Allocate visited bitsets before ChunkStartNodes so BFS/DLS can reuse them.
+    int max_threads = static_cast<int>(this->settings.threads);
+    size_t words = (this->settings.sdbg->size() + 63) / 64;
+    per_thread_visited.resize(max_threads);
+    per_thread_dirty.resize(max_threads);
+    for (auto &v : per_thread_visited) v.assign(words, 0);
+    {
+        size_t mb = (words * 8 * max_threads) / (1024 * 1024);
+        std::cout << "  ▸ Memory estimate: visited bitset " << max_threads << " threads x "
+                  << (words * 8 / (1024 * 1024)) << " MB = " << mb << " MB ("
+                  << (mb / 1024) << " GB)" << std::endl;
+    }
+
     map<int, vector<uint64_t>, greater<int>> start_nodes_chunked;
     size_t start_nodes_amount=this->ChunkStartNodes(start_nodes_chunked);
     std::cout << "  ▸ Start nodes: " << start_nodes_amount << std::endl;
     size_t counter = 0;
-    int max_threads = static_cast<int>(this->settings.threads);
-    size_t words = (this->settings.sdbg->size() + 63) / 64;
-    per_thread_visited.resize(max_threads);
-    for (auto &v : per_thread_visited) {
-        v.resize(words, 0);
-    }
     for (auto nodes_iterator = start_nodes_chunked.begin(); nodes_iterator != start_nodes_chunked.end(); nodes_iterator++) {
         // Reset visited bitmaps so nodes from a higher-multiplicity bucket don't
         // block traversal in lower-multiplicity buckets.
