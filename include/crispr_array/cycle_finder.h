@@ -82,7 +82,8 @@ class CycleFinder {
         void writeMapToFile(const std::unordered_map<uint64_t,  std::vector<std::vector<uint64_t>>>& cycles, const std::string& filename);
         //#### DLS ####
         size_t ChunkStartNodes(map<int, vector<uint64_t>, std::greater<int>>& start_nodes_chunked);
-        bool DepthLevelSearch(uint64_t start, uint64_t target, int limit, int& reached_depth) ;
+        bool DepthLevelSearch(uint64_t start, uint64_t target, int limit, int& reached_depth);
+        bool BidirectionalBFS(uint64_t start, int limit);
         //#### DLS ####
         string CreateFolder();
         //#### CYCLE ENUMERATION ####
