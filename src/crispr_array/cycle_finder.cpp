@@ -531,7 +531,7 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
                 if(this->_IncomingNotEqualToCurrentNode(node, edge_indegree)) continue;
                 int reached_depth = 0;
 
-                bool dls = this->DepthLevelSearch(node, node, this->settings.cycle_finder_settings.cycle_max_length, reached_depth);
+                bool dls = this->BidirectionalBFS(node, this->settings.cycle_finder_settings.cycle_max_length);
                 if(!dls) continue;
                 int log2_mult = static_cast<int>(ceil(log2(double(this->settings.sdbg->EdgeMultiplicity(node)))));
                 local_chunks[tid][log2_mult].push_back(node);
