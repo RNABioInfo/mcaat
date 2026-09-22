@@ -361,96 +361,157 @@ bool CycleFinder::DepthLevelSearch(uint64_t start, uint64_t target, int limit, i
  * Memory: O(b^(limit/2)) visited nodes total vs O(b^limit) for the DLS.
  */
 bool CycleFinder::BidirectionalBFS(uint64_t start, int limit) {
-    // fwd: reuses per_thread_visited (already allocated, zero extra memory).
-    // bwd: small phmap — BFS terminates early so this stays negligible in size.
-    static thread_local phmap::flat_hash_set<uint64_t> bwd_visited_pool;
-    static thread_local std::vector<uint64_t> fwd_frontier_pool;
-    static thread_local std::vector<uint64_t> bwd_frontier_pool;
-    static thread_local std::vector<uint64_t> next_frontier_pool;
-
     const int tid = omp_get_thread_num();
-    auto& fwd_bits  = per_thread_visited[tid];
+    auto& fwd_bits = per_thread_visited[tid];
     auto& fwd_dirty = per_thread_dirty[tid];
-    for (uint32_t w : fwd_dirty) fwd_bits[w] = 0ULL;
+
+    // Dirty indices address bitmap words, not nodes.
+    // Fall back to full reset if word indices exceed 32 bits.
+    const bool track_dirty = fwd_bits.empty() ||
+        static_cast<uint64_t>(fwd_bits.size() - 1) <= UINT32_MAX;
+
+    if (track_dirty) {
+        for (uint32_t w : fwd_dirty) fwd_bits[w] = 0ULL;
+    } else {
+        std::fill(fwd_bits.begin(), fwd_bits.end(), 0ULL);
+    }
     fwd_dirty.clear();
-    auto fwd_test = [&](uint64_t n) -> bool { return (fwd_bits[n >> 6] >> (n & 63)) & 1ULL; };
-    auto fwd_mark = [&](uint64_t n) {
-        uint32_t w = static_cast<uint32_t>(n >> 6);
-        fwd_bits[w] |= 1ULL << (n & 63);
-        fwd_dirty.push_back(w);
+
+    auto fwd_test = [&](uint64_t node) -> bool {
+        return (fwd_bits[node >> 6] >> (node & 63)) & 1ULL;
     };
 
-    bwd_visited_pool.clear();
-    fwd_frontier_pool.clear();
-    bwd_frontier_pool.clear();
+    auto fwd_mark = [&](uint64_t node) {
+        const uint64_t w = node >> 6;
+        auto& word = fwd_bits[w];
 
-    const size_t start_multiplicity = this->settings.sdbg->EdgeMultiplicity(start);
+        // Record each touched word exactly once.
+        if (track_dirty && word == 0ULL)
+            fwd_dirty.push_back(static_cast<uint32_t>(w));
 
-    fwd_mark(start);
-    bwd_visited_pool.insert(start);
-    fwd_frontier_pool.push_back(start);
-    bwd_frontier_pool.push_back(start);
+        word |= 1ULL << (node & 63);
+    };
 
-    uint64_t neighbors[MAX_EDGE_COUNT];
-    const int half = limit / 2 + 1; // slight asymmetry to cover odd limits
+    // Dispatch once per call; SDBG API calls remain 64-bit.
+    auto search = [&](auto id_tag) -> bool {
+        using NodeId = decltype(id_tag);
 
-    for (int depth = 0; depth < half; ++depth) {
-        // --- Expand forward frontier ---
-        if (!fwd_frontier_pool.empty()) {
-            next_frontier_pool.clear();
-            for (uint64_t v : fwd_frontier_pool) {
-                if (!this->settings.sdbg->IsValidEdge(v)) continue;
-                if (this->settings.sdbg->EdgeOutdegreeZero(v)) continue;
-                int outdegree = this->settings.sdbg->OutgoingEdges(v, neighbors);
-                if (outdegree == -1) continue;
-                for (int i = 0; i < outdegree; ++i) {
-                    uint64_t nb = neighbors[i];
-                    if (!this->settings.sdbg->IsValidEdge(nb)) continue;
-                    // Multiplicity pruning
-                    if (this->settings.sdbg->EdgeMultiplicity(nb) == 0 ||
-                        start_multiplicity / this->settings.sdbg->EdgeMultiplicity(nb) > 500) continue;
-                    // Cycle: forward frontier reached start again
-                    if (nb == start) return true;
-                    // Intersection with backward frontier
-                    if (bwd_visited_pool.count(nb)) return true;
+        static thread_local phmap::flat_hash_set<NodeId> bwd_visited;
+        static thread_local std::vector<NodeId> fwd_frontier;
+        static thread_local std::vector<NodeId> bwd_frontier;
+        static thread_local std::vector<NodeId> next_frontier;
+
+        bwd_visited.clear();
+        fwd_frontier.clear();
+        bwd_frontier.clear();
+        next_frontier.clear();
+
+        const auto start_multiplicity =
+            settings.sdbg->EdgeMultiplicity(start);
+
+        fwd_mark(start);
+        bwd_visited.insert(static_cast<NodeId>(start));
+        fwd_frontier.push_back(static_cast<NodeId>(start));
+        bwd_frontier.push_back(static_cast<NodeId>(start));
+
+        uint64_t neighbors[MAX_EDGE_COUNT];
+
+        // Preserve the original search bounds and return values.
+        const int half = limit / 2 + 1;
+
+        for (int depth = 0; depth < half; ++depth) {
+            const bool last_round = depth == half - 1;
+            bool found_new_forward = false;
+            next_frontier.clear();
+
+            for (NodeId stored_v : fwd_frontier) {
+                const uint64_t v = stored_v;
+                if (!settings.sdbg->IsValidEdge(v)) continue;
+                if (settings.sdbg->EdgeOutdegreeZero(v)) continue;
+
+                const int degree =
+                    settings.sdbg->OutgoingEdges(v, neighbors);
+
+                for (int i = 0; i < degree; ++i) {
+                    const uint64_t nb = neighbors[i];
+                    if (!settings.sdbg->IsValidEdge(nb)) continue;
+
+                    const auto multiplicity =
+                        settings.sdbg->EdgeMultiplicity(nb);
+
+                    if (multiplicity == 0 ||
+                        start_multiplicity / multiplicity > 500)
+                        continue;
+
+                    if (nb == start ||
+                        bwd_visited.count(static_cast<NodeId>(nb)))
+                        return true;
+
                     if (!fwd_test(nb)) {
                         fwd_mark(nb);
-                        next_frontier_pool.push_back(nb);
+                        found_new_forward = true;
+
+                        // Final forward discoveries need visited bits
+                        // for intersection checks, but no new frontier.
+                        if (!last_round)
+                            next_frontier.push_back(
+                                static_cast<NodeId>(nb));
                     }
                 }
             }
-            fwd_frontier_pool.swap(next_frontier_pool);
-        }
 
-        // --- Expand backward frontier ---
-        if (!bwd_frontier_pool.empty()) {
-            next_frontier_pool.clear();
-            for (uint64_t v : bwd_frontier_pool) {
-                if (!this->settings.sdbg->IsValidEdge(v)) continue;
-                if (this->settings.sdbg->EdgeIndegreeZero(v)) continue;
-                int indegree = this->settings.sdbg->IncomingEdges(v, neighbors);
-                if (indegree == -1) continue;
-                for (int i = 0; i < indegree; ++i) {
-                    uint64_t nb = neighbors[i];
-                    if (!this->settings.sdbg->IsValidEdge(nb)) continue;
-                    // Multiplicity pruning (symmetric: neighbor feeds into v)
-                    if (this->settings.sdbg->EdgeMultiplicity(nb) == 0 ||
-                        start_multiplicity / this->settings.sdbg->EdgeMultiplicity(nb) > 500) continue;
-                    // Intersection with forward frontier
+            if (!found_new_forward) return false;
+            if (!last_round)
+                fwd_frontier.swap(next_frontier);
+
+            next_frontier.clear();
+
+            for (NodeId stored_v : bwd_frontier) {
+                const uint64_t v = stored_v;
+                if (!settings.sdbg->IsValidEdge(v)) continue;
+                if (settings.sdbg->EdgeIndegreeZero(v)) continue;
+
+                const int degree =
+                    settings.sdbg->IncomingEdges(v, neighbors);
+
+                for (int i = 0; i < degree; ++i) {
+                    const uint64_t nb = neighbors[i];
+                    if (!settings.sdbg->IsValidEdge(nb)) continue;
+
+                    const auto multiplicity =
+                        settings.sdbg->EdgeMultiplicity(nb);
+
+                    if (multiplicity == 0 ||
+                        start_multiplicity / multiplicity > 500)
+                        continue;
+
                     if (fwd_test(nb)) return true;
-                    if (bwd_visited_pool.insert(nb).second) {
-                        next_frontier_pool.push_back(nb);
+
+                    // Final backward discoveries are never queried or
+                    // expanded afterward, so only check intersections.
+                    if (!last_round &&
+                        bwd_visited.insert(
+                            static_cast<NodeId>(nb)).second) {
+                        next_frontier.push_back(
+                            static_cast<NodeId>(nb));
                     }
                 }
             }
-            bwd_frontier_pool.swap(next_frontier_pool);
+
+            if (last_round) return false;
+
+            bwd_frontier.swap(next_frontier);
+            if (bwd_frontier.empty()) return false;
         }
 
-        // Both frontiers exhausted — no cycle possible
-        if (fwd_frontier_pool.empty() && bwd_frontier_pool.empty()) return false;
-    }
+        return false;
+    };
 
-    return false;
+    const uint64_t node_count = settings.sdbg->size();
+    if (node_count != 0 && node_count - 1 <= UINT32_MAX)
+        return search(uint32_t{0});
+
+    return search(uint64_t{0});
 }
 
 vector<uint64_t> CycleFinder::CollectTips() {
