@@ -45,9 +45,6 @@ class CycleFinder {
         uint16_t cluster_bounds;
         // visited bitset stored as 64-bit words (1 bit per node). Use atomic builtins on the words to avoid non-copyable std::atomic in vectors.
         vector<vector<uint64_t>> per_thread_visited;
-        // dirty-list: indices of touched 64-bit words in per_thread_visited, per thread.
-        // Cleared at the start of each BFS/DLS call; avoids O(N) memset on every call.
-        vector<vector<uint32_t>> per_thread_dirty;
         vector<bool> look_up_table;
 
         // thread count obtained from settings
@@ -57,7 +54,7 @@ class CycleFinder {
         void _ReadStartNodesFromFile(map<int, vector<uint64_t>, greater<int>>& start_nodes_chunked, const std::string& filename);
         void _WriteMapToFile(const std::unordered_map<uint64_t,  std::vector<std::vector<uint64_t>>>& cycles, const std::string& filename);
         //### DEVELOPER FUNCTIONS ####
-        
+        std::vector<std::vector<uint32_t>> per_thread_dirty;
         //#### HELPER FUNCTIONS FOR CYCLE ENUMERATION ####
         bool _IncomingNotEqualToCurrentNode(uint64_t node, size_t edge_indegree);
         bool _BackgroundCheck(uint64_t original_node, size_t repeat_multiplicity, uint64_t current_node);
