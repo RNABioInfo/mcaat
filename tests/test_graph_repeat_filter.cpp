@@ -153,6 +153,34 @@ void test_shifted_strands() {
     auto all=filter.run({{1,first},{2,cycles}});
     check(all.size()==1 && all[0].observations.size()==8,"shifted repeat boundaries and opposite canonical strands still deduplicate");
 }
+void test_incremental_deduplication() {
+    Fixture f(23,30);
+    for (int i=0;i<16;++i) f.append(f.repeat);
+    std::map<Node,std::vector<Path>> groups;
+    const size_t copies=256;
+    for (size_t i=0;i<copies;++i) groups[i]=f.cycles;
+    RepeatFilter<Graph> filter(f.g,f.o);
+    auto systems=filter.run(groups);
+    check(systems.size()==1 && systems[0].sources.size()==copies,"all duplicate starts retained");
+    check(filter.stats.duplicate_systems==copies-1,"all duplicate systems removed");
+    check(filter.stats.dedup_index_builds==copies,"source-only removals never rebuild system index");
+    check(filter.stats.dedup_pair_checks==copies-1,"dense duplicate groups require only linear pair checks");
+    // Each superset replaces the retained system's geometry and index. Old
+    // entries must disappear, and every source remains attached to the union.
+    groups.clear();
+    for (size_t i=4;i<=16;i+=4) groups[i]={f.cycles.begin(),f.cycles.begin()+i};
+    systems=filter.run(groups);
+    check(systems.size()==1 && systems[0].observations.size()==16,"successive supersets replace indexed geometry");
+    check(systems[0].sources==Path({4,8,12,16}),"superset replacements preserve sorted provenance");
+    check(filter.stats.dedup_index_builds==7,"only changed superset geometry gets reindexed");
+    // Disjoint groups become connected through a later candidate.
+    groups={{1,{f.cycles.begin(),f.cycles.begin()+4}},
+            {2,{f.cycles.begin()+4,f.cycles.begin()+8}},
+            {3,{f.cycles.begin()+2,f.cycles.begin()+6}}};
+    systems=filter.run(groups);
+    check(systems.size()==1 && systems[0].observations.size()==8,"bridge merge discovers newly adjacent group");
+    check(systems[0].sources==Path({1,2,3}) && filter.stats.merged_systems==2,"bridge merge preserves sources and counts");
+}
 void test_boundaries_and_rejections() {
     Fixture f;
     for(int i=0;i<20;++i) f.append(i<17?f.repeat:mutate(f.repeat,0));
@@ -179,7 +207,8 @@ int main() {
             check(threw,std::string("invalid support rejected: ")+s);
         }
         check(parse_repeat_support("0.85")==.85 && parse_repeat_support(".60")==.6 && parse_repeat_support("1")==1,"valid fractions");
-        test_threshold_and_variants();test_joint_support();test_deduplication();test_shifted_strands();test_boundaries_and_rejections();
+        test_threshold_and_variants();test_joint_support();test_deduplication();test_shifted_strands();
+        test_incremental_deduplication();test_boundaries_and_rejections();
         std::cout<<checks<<" graph repeat-filter checks passed\n";
     }catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<'\n';return 1;}
 }

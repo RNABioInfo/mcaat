@@ -56,6 +56,7 @@ struct Statistics {
     size_t input_cycles = 0, invalid_cycles = 0, duplicate_cycles = 0;
     size_t input_groups = 0, groups_without_repeat = 0;
     size_t duplicate_systems = 0, merged_systems = 0;
+    size_t dedup_pair_checks = 0, dedup_index_builds = 0;
 };
 
 inline std::string reverse_complement(const std::string& sequence) {
@@ -138,7 +139,7 @@ public:
         std::string sequence=g_.label(path.front());
         if (sequence.size()!=o_.k) throw std::runtime_error("wrong graph k-mer length");
         for (size_t i=1;i<path.size();++i) {
-            const auto next=g_.label(path[i]);
+            const auto& next=g_.label(path[i]);
             if (next.size()!=o_.k || sequence.compare(sequence.size()-o_.k+1,o_.k-1,next,0,o_.k-1)!=0)
                 throw std::runtime_error("non-overlapping graph path");
             sequence+=next.back();
@@ -157,8 +158,9 @@ private:
         for (size_t i=0;i<cycle.size();++i) {
             if (!visited.insert(cycle[i]).second || !g_.adjacent(cycle[i],cycle[(i+1)%cycle.size()]))
                 return false;
-            auto a=g_.label(cycle[i]),b=g_.label(cycle[(i+1)%cycle.size()]);
-            if (a.size()!=o_.k || b.size()!=o_.k || a.substr(1)!=b.substr(0,o_.k-1)) return false;
+            const auto& a=g_.label(cycle[i]);
+            const auto& b=g_.label(cycle[(i+1)%cycle.size()]);
+            if (a.size()!=o_.k || b.size()!=o_.k || a.compare(1,o_.k-1,b,0,o_.k-1)!=0) return false;
         }
         return true;
     }
@@ -266,6 +268,7 @@ private:
 
     Path reversed(const Path& path) {
         Path result;
+        result.reserve(path.size());
         for (auto i=path.rbegin();i!=path.rend();++i) {
             Node node=g_.reverse_node(*i);
             if (node==missing_node) return {};
@@ -299,7 +302,8 @@ private:
         flip(system);
     }
 
-    std::pair<std::set<Node>,std::set<Node>> roles(const System& s) {
+    using Roles = std::pair<std::set<Node>,std::set<Node>>;
+    Roles roles(const System& s) {
         std::set<Node> repeats,spacers;
         for (const auto& row:s.observations) {
             repeats.insert(row.cycle.begin(),row.cycle.begin()+row.repeat_nodes);
@@ -309,12 +313,17 @@ private:
         }
         return {repeats,spacers};
     }
-    static bool intersects(const std::set<Node>& a,const std::set<Node>& b) {
-        for (Node node:a) if (b.count(node)) return true;
+    template<class T>
+    static bool intersects(const std::set<T>& a,const std::set<T>& b) {
+        auto i=a.begin(),j=b.begin();
+        while (i!=a.end() && j!=b.end()) {
+            if (*i<*j) ++i;
+            else if (*j<*i) ++j;
+            else return true;
+        }
         return false;
     }
-    bool compatible(const System& a,const System& b) {
-        auto ar=roles(a),br=roles(b);
+    static bool compatible(const Roles& ar,const Roles& br) {
         return intersects(ar.first,br.first) && !intersects(ar.first,br.second) &&
                !intersects(br.first,ar.second);
     }
@@ -322,49 +331,113 @@ private:
         return std::includes(b.begin(),b.end(),a.begin(),a.end());
     }
     static void add_sources(System& keep,const System& other) {
+        const bool append_sorted=keep.sources.empty() || other.sources.empty() ||
+                                 keep.sources.back()<other.sources.front();
+        const size_t middle=keep.sources.size();
         keep.sources.insert(keep.sources.end(),other.sources.begin(),other.sources.end());
-        std::sort(keep.sources.begin(),keep.sources.end());
-        keep.sources.erase(std::unique(keep.sources.begin(),keep.sources.end()),keep.sources.end());
+        if (!append_sorted) {
+            std::inplace_merge(keep.sources.begin(),keep.sources.begin()+middle,keep.sources.end());
+            keep.sources.erase(std::unique(keep.sources.begin(),keep.sources.end()),keep.sources.end());
+        }
     }
     void deduplicate(std::vector<System>& systems) {
         // Only compare systems sharing an entire observed cycle. A common
         // repeat alone, or a spacer shared with another repeat, is insufficient.
-        bool changed=true;
-        while (changed) {
-            changed=false;
-            std::map<Path,std::vector<size_t>> owners;
-            for (size_t i=0;i<systems.size();++i)
-                for (const auto& c:observed_cycles(systems[i])) owners[strand_key(c)].push_back(i);
-            std::set<std::pair<size_t,size_t>> pairs;
-            for (const auto& [cycle,ids]:owners)
-                for (size_t i=0;i<ids.size();++i) for (size_t j=i+1;j<ids.size();++j)
-                    pairs.emplace(ids[i],ids[j]);
-            for (auto [i,j]:pairs) {
-                if (i==j) continue;
-                auto& a=systems[i];auto b=systems[j];
+        // Stable indices preserve the original lexicographic merge order. Keep
+        // the index across removals; do not rebuild every system or materialize
+        // the quadratic clique of pairs belonging to one common cycle.
+        struct Metadata {
+            std::set<Path> observed, strands;
+            Roles parts;
+        };
+        std::vector<Metadata> metadata(systems.size());
+        std::vector<bool> alive(systems.size(),true);
+        std::map<Path,std::set<size_t>> owners;
+        std::set<size_t> pending;
+        auto index=[&](size_t i) {
+            auto& m=metadata[i];
+            m.observed=observed_cycles(systems[i]);m.parts=roles(systems[i]);m.strands.clear();
+            for (const auto& c:m.observed) m.strands.insert(strand_key(c));
+            for (const auto& c:m.strands) owners[c].insert(i);
+            ++stats.dedup_index_builds;
+        };
+        auto unindex=[&](size_t i) {
+            for (const auto& c:metadata[i].strands) {
+                auto it=owners.find(c);
+                it->second.erase(i);
+                if (it->second.empty()) owners.erase(it);
+            }
+        };
+        auto retire=[&](size_t j) {
+            unindex(j);alive[j]=false;pending.erase(j);
+            metadata[j]={};systems[j]={};
+        };
+        for (size_t i=0;i<systems.size();++i) {index(i);pending.insert(i);}
+        while (!pending.empty()) {
+            const size_t i=*pending.begin();pending.erase(pending.begin());
+            std::set<size_t> neighbors;
+            for (const auto& c:metadata[i].strands) {
+                const auto& ids=owners.at(c);
+                neighbors.insert(ids.upper_bound(i),ids.end());
+            }
+            for (size_t j:neighbors) {
+                if (!alive[j]) continue;
+                ++stats.dedup_pair_checks;
+                auto& a=systems[i];
+                const System* b=&systems[j];
+                const auto& ac=metadata[i].observed;
+                const auto& ar=metadata[i].parts;
+                const auto* bc=&metadata[j].observed;
+                const auto* br=&metadata[j].parts;
+                System flipped;
+                std::set<Path> flipped_cycles;
+                Roles flipped_parts;
                 // Slightly different repeat boundaries can select opposite
                 // canonical strands. Align by shared full cycles before roles.
-                const auto ac=observed_cycles(a);
-                auto bc=observed_cycles(b);
-                bool common=false;
-                for (const auto& c:ac) common|=bc.count(c)>0;
-                if (!common) {if (!flip(b)) continue;bc=observed_cycles(b);}
-                if (!compatible(a,b)) continue;
-                if (subset(ac,bc) || subset(bc,ac)) {
-                    if (subset(ac,bc) && !subset(bc,ac)) {add_sources(b,a);a=std::move(b);}
-                    else add_sources(a,b);
-                    orient(a);systems.erase(systems.begin()+j);++stats.duplicate_systems;changed=true;break;
+                if (!intersects(ac,*bc)) {
+                    flipped=*b;
+                    if (!flip(flipped)) continue;
+                    b=&flipped;flipped_cycles=observed_cycles(flipped);flipped_parts=roles(flipped);
+                    bc=&flipped_cycles;br=&flipped_parts;
                 }
-                std::set<Path> united(a.candidate_cycles.begin(),a.candidate_cycles.end());
-                united.insert(b.candidate_cycles.begin(),b.candidate_cycles.end());
-                System merged;
-                if (!infer({united.begin(),united.end()},merged)) continue;
-                const auto mc=observed_cycles(merged);
-                if (!compatible(merged,a) || !compatible(merged,b) || !subset(ac,mc) || !subset(bc,mc)) continue;
-                add_sources(merged,a);add_sources(merged,b);orient(merged);a=std::move(merged);
-                systems.erase(systems.begin()+j);++stats.merged_systems;changed=true;break;
+                if (!compatible(ar,*br)) continue;
+                const bool a_in_b=subset(ac,*bc),b_in_a=subset(*bc,ac);
+                if (b_in_a) {
+                    // Only provenance changes. All earlier rejected pairs are
+                    // still rejected, so continue without rebuilding even i.
+                    add_sources(a,*b);retire(j);++stats.duplicate_systems;
+                    continue;
+                }
+                System replacement;
+                if (a_in_b) {
+                    replacement=*b;add_sources(replacement,a);
+                    ++stats.duplicate_systems;
+                } else {
+                    std::set<Path> united(a.candidate_cycles.begin(),a.candidate_cycles.end());
+                    united.insert(b->candidate_cycles.begin(),b->candidate_cycles.end());
+                    if (!infer({united.begin(),united.end()},replacement)) continue;
+                    const auto mc=observed_cycles(replacement);
+                    const auto mr=roles(replacement);
+                    if (!compatible(mr,ar) || !compatible(mr,*br) || !subset(ac,mc) || !subset(*bc,mc)) continue;
+                    add_sources(replacement,a);add_sources(replacement,*b);++stats.merged_systems;
+                }
+                orient(replacement);unindex(i);retire(j);a=std::move(replacement);index(i);
+                // A changed repeat boundary or cycle set can make an earlier
+                // rejected pair eligible. Revisit those earlier owners first.
+                pending.insert(i);
+                for (const auto& c:metadata[i].strands) {
+                    const auto& ids=owners.at(c);
+                    pending.insert(ids.begin(),ids.lower_bound(i));
+                }
+                break;
             }
         }
+        size_t kept=0;
+        for (size_t i=0;i<systems.size();++i) if (alive[i]) {
+            if (kept!=i) systems[kept]=std::move(systems[i]);
+            ++kept;
+        }
+        systems.resize(kept);
     }
 };
 } // namespace mcaat::arrays

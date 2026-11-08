@@ -38,6 +38,20 @@ Candidate comparisons require at least one shared complete cycle, with rotations
 - A shared repeat alone, or a shared spacer associated with a different repeat, does not trigger a merge.
 - Original start-edge IDs are retained as provenance.
 
+The cycle-owner index is built once. Removing a contained detection removes only
+that detection's entries; merging or replacing a system reindexes only the
+changed system. Comparisons follow the original start-group order, and changed
+systems reschedule earlier neighbors when necessary. Repeat/spacer roles and
+canonical cycle sets are cached between changes. Candidate pairs are generated
+for one system at a time instead of allocating every pair sharing a cycle.
+
+This removes the previous global index rebuild after every duplicate removal.
+It does not skip repeat inference, reduce the support threshold, or cap candidate
+comparisons. Incompatible overlapping candidates can still require many
+comparisons. Filtering is currently serial; `--threads` does not parallelize this
+stage. See [the performance checks](repeat-filter-performance.md) for measured
+scope and reproducible commands.
+
 These rules consolidate graph evidence. A pooled graph cannot establish that two identical repeat–spacer combinations came from the same physical locus. Nor does this output infer genomic spacer order. Additional read or assembly linkage is needed for those claims.
 
 ## Output

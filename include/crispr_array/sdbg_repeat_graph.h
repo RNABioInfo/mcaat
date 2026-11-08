@@ -3,29 +3,31 @@
 #include "crispr_array/graph_repeat_filter.h"
 #include "sdbg/sdbg.h"
 #include <sstream>
+#include <unordered_map>
 
 namespace mcaat::arrays {
 // A k-mer vertex can have several outgoing SDBG edge slots. Normalize its
 // identity, but retain the actual traversed edges separately for downstream code.
 class SdbgRepeatGraph {
     const SDBG& g_;
-    std::map<Node,std::string> labels_;
-    std::map<Node,Node> reverse_;
+    std::unordered_map<Node,std::string> labels_;
+    std::unordered_map<Node,Node> reverse_;
 public:
     explicit SdbgRepeatGraph(const SDBG& graph):g_(graph) {}
     size_t k() const {return g_.k();}
-    std::string label(Node vertex) {
+    const std::string& label(Node vertex) {
         auto found=labels_.find(vertex);
         if (found!=labels_.end()) return found->second;
         if (vertex>=g_.size()) throw std::runtime_error("graph vertex out of range");
         std::vector<uint8_t> bases(k());
         g_.GetLabel(vertex,bases.data());
         std::string result;
+        result.reserve(k());
         for (auto base:bases) {
             if (base<1 || base>4) throw std::runtime_error("non-DNA graph label");
             result+="ACGT"[base-1];
         }
-        labels_[vertex]=result;return result;
+        return labels_.emplace(vertex,std::move(result)).first->second;
     }
     Node find(const std::string& sequence) const {
         if (sequence.size()!=k()) return missing_node;
@@ -55,6 +57,7 @@ public:
     }
     Path vertices(const Path& edges) const {
         Path result;
+        result.reserve(edges.size());
         for (size_t i=0;i<edges.size();++i) {
             Node e=edges[i],next=edges[(i+1)%edges.size()];
             if (e>=g_.size() || next>=g_.size() || !g_.IsValidEdge(e) ||
@@ -65,6 +68,7 @@ public:
     }
     Path edges(const Path& vertices) const {
         Path result;
+        result.reserve(vertices.size());
         for (size_t i=0;i<vertices.size();++i) {
             Node e=edge(vertices[i],vertices[(i+1)%vertices.size()]);
             if (e==missing_node) throw std::runtime_error("cycle is not present in graph");
