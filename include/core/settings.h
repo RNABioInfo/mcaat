@@ -47,6 +47,7 @@ struct Settings {
         int repeat_min_length = 23; // Minimum length of a repeat
         int repeat_max_length = 55; // Maximum length of a repeat
         double repeat_support = 0.85; // Fraction of distinct candidate cycles sharing the complete repeat path
+        mcaat::arrays::QualityOptions quality;
     } dna_sequence_settings;
 
     SDBG* sdbg = nullptr; // Pointer to the SDBG graph
@@ -247,6 +248,10 @@ struct Settings {
             else if (key == "repeat-support") {
                 this->dna_sequence_settings.repeat_support = mcaat::arrays::parse_repeat_support(val);
             }
+            else if (key == "spacer-variant-similarity") { dna_sequence_settings.quality.variant_similarity=mcaat::arrays::parse_fraction(val,key); }
+            else if (key == "max-spacer-similarity") { dna_sequence_settings.quality.max_spacer_similarity=mcaat::arrays::parse_fraction(val,key); }
+            else if (key == "max-repeat-spacer-similarity") { dna_sequence_settings.quality.max_repeat_spacer_similarity=mcaat::arrays::parse_fraction(val,key); }
+            else if (key == "max-cycles") { dna_sequence_settings.quality.max_cycles=mcaat::arrays::parse_max_cycles(val); }
             // unknown keys are ignored for forward-compatibility
         }
         file.close();

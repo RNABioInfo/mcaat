@@ -136,7 +136,8 @@ void CycleFinder::_GetIncomings(uint64_t node, SmallNodeSet& incomings_set) {
  * @param settings The application Settings containing SDBG pointer and cycle finder configuration.
  */
 CycleFinder::CycleFinder(Settings& settings)
-    : settings(settings), cluster_bounds(500) {
+    : settings(settings), cluster_bounds(settings.dna_sequence_settings.quality.max_cycles) {
+    settings.dna_sequence_settings.quality.validate();
     // Ensure settings.sdbg is valid; this should be set by caller before constructing CycleFinder
     if (this->settings.sdbg == nullptr) {
         throw std::runtime_error("CycleFinder requires settings.sdbg to be set to a valid SDBG instance");
@@ -167,8 +168,9 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                     cycles.push_back(path);
                     counter += 1;
                     if (counter >= this->cluster_bounds) {
-                        cycles.clear();
-                        flag=false;
+                        // This start is over the tangle limit. Continuing here
+                        // revisits the closing edge until the step limit.
+                        return {};
                     }
                 }
             } 

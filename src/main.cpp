@@ -50,7 +50,9 @@ static int run_postprocess_arrays(int argc,char** argv) {
         if (arg=="--help" || arg=="-h") {
             std::cout<<"mcaat postprocess-arrays --graph <prefix> --cycles <cycles.txt> "
                        "--output-folder <dir> [--repeat-support 0.85]\n"
-                       "Optional: --min-repeat-len, --max-repeat-len, --min-spacer-len, --max-spacer-len\n";
+                       "Optional: --min-repeat-len, --max-repeat-len, --min-spacer-len, --max-spacer-len\n"
+                       "Quality: --spacer-variant-similarity 0.90 --max-spacer-similarity 0.60\n"
+                       "         --max-repeat-spacer-similarity 0.60 --max-cycles 500 (exclusive)\n";
             return 0;
         }
         if (++i>=argc) throw std::runtime_error("Missing value for "+arg);
@@ -59,6 +61,10 @@ static int run_postprocess_arrays(int argc,char** argv) {
         else if (arg=="--cycles") cycles=value;
         else if (arg=="--output-folder") settings.output_folder=value;
         else if (arg=="--repeat-support") settings.dna_sequence_settings.repeat_support=mcaat::arrays::parse_repeat_support(value);
+        else if (arg=="--spacer-variant-similarity") settings.dna_sequence_settings.quality.variant_similarity=mcaat::arrays::parse_fraction(value,"spacer-variant-similarity");
+        else if (arg=="--max-spacer-similarity") settings.dna_sequence_settings.quality.max_spacer_similarity=mcaat::arrays::parse_fraction(value,"max-spacer-similarity");
+        else if (arg=="--max-repeat-spacer-similarity") settings.dna_sequence_settings.quality.max_repeat_spacer_similarity=mcaat::arrays::parse_fraction(value,"max-repeat-spacer-similarity");
+        else if (arg=="--max-cycles") settings.dna_sequence_settings.quality.max_cycles=mcaat::arrays::parse_max_cycles(value);
         else if (arg=="--min-repeat-len") settings.dna_sequence_settings.repeat_min_length=std::stoi(value);
         else if (arg=="--max-repeat-len") settings.dna_sequence_settings.repeat_max_length=std::stoi(value);
         else if (arg=="--min-spacer-len") settings.dna_sequence_settings.spacer_min_length=std::stoi(value);
@@ -489,6 +495,10 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "  --min-spacer-len <int>           Minimum spacer length  [default: 23]\n"
                  << "  --max-spacer-len <int>           Maximum spacer length  [default: 50]\n"
                  << "  --repeat-support <fraction>      Complete repeat path support in distinct cycles [default: 0.85]\n"
+                 << "  --spacer-variant-similarity <fraction>  Group observed spacer variants [default: 0.90]\n"
+                 << "  --max-spacer-similarity <fraction>      Mean similarity between spacer families [default: 0.60]\n"
+                 << "  --max-repeat-spacer-similarity <fraction>  Mean repeat/spacer similarity [default: 0.60]\n"
+                 << "  --max-cycles <int>              Reject starts/candidates at this cycle count [default: 500]\n"
                  << "  --min-repeat-len <int>           Minimum repeat length  [default: 23]\n"
                  << "  --max-repeat-len <int>           Maximum repeat length  [default: 55]\n"
                  << "  --benchmark <file>              Expected sequences for evaluation\n"
@@ -648,6 +658,18 @@ Settings parse_arguments(int argc, char* argv[]) {
         } else if (arg == "--repeat-support") {
             if (++i >= argc) throw runtime_error("Missing value for --repeat-support");
             settings.dna_sequence_settings.repeat_support = mcaat::arrays::parse_repeat_support(argv[i]);
+        } else if (arg == "--spacer-variant-similarity") {
+            if (++i >= argc) throw runtime_error("Missing value for --spacer-variant-similarity");
+            settings.dna_sequence_settings.quality.variant_similarity = mcaat::arrays::parse_fraction(argv[i],"spacer-variant-similarity");
+        } else if (arg == "--max-spacer-similarity") {
+            if (++i >= argc) throw runtime_error("Missing value for --max-spacer-similarity");
+            settings.dna_sequence_settings.quality.max_spacer_similarity = mcaat::arrays::parse_fraction(argv[i],"max-spacer-similarity");
+        } else if (arg == "--max-repeat-spacer-similarity") {
+            if (++i >= argc) throw runtime_error("Missing value for --max-repeat-spacer-similarity");
+            settings.dna_sequence_settings.quality.max_repeat_spacer_similarity = mcaat::arrays::parse_fraction(argv[i],"max-repeat-spacer-similarity");
+        } else if (arg == "--max-cycles") {
+            if (++i >= argc) throw runtime_error("Missing value for --max-cycles");
+            settings.dna_sequence_settings.quality.max_cycles = mcaat::arrays::parse_max_cycles(argv[i]);
         } else if (arg == "--min-repeat-len") {
             if (++i < argc) {
                 try { settings.dna_sequence_settings.repeat_min_length = stoi(argv[i]); }
@@ -1024,7 +1046,11 @@ int main(int argc, char** argv) {
            << "    \"spacer_max_length\": " << settings.dna_sequence_settings.spacer_max_length << ",\n"
            << "    \"repeat_min_length\": " << settings.dna_sequence_settings.repeat_min_length << ",\n"
            << "    \"repeat_max_length\": " << settings.dna_sequence_settings.repeat_max_length << ",\n"
-           << "    \"repeat_support\": " << std::setprecision(17) << settings.dna_sequence_settings.repeat_support << "\n"
+           << "    \"repeat_support\": " << std::setprecision(17) << settings.dna_sequence_settings.repeat_support << ",\n"
+           << "    \"variant_similarity\": " << settings.dna_sequence_settings.quality.variant_similarity << ",\n"
+           << "    \"max_spacer_similarity\": " << settings.dna_sequence_settings.quality.max_spacer_similarity << ",\n"
+           << "    \"max_repeat_spacer_similarity\": " << settings.dna_sequence_settings.quality.max_repeat_spacer_similarity << ",\n"
+           << "    \"max_cycles\": " << settings.dna_sequence_settings.quality.max_cycles << "\n"
            << "  }\n"
            << "}\n";
     }

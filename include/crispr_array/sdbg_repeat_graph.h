@@ -111,12 +111,6 @@ public:
     }
 };
 
-inline std::string path_text(const Path& path) {
-    if (path.empty()) return "-";
-    std::ostringstream out;
-    for (size_t i=0;i<path.size();++i) {if(i) out<<',';out<<path[i];}
-    return out.str();
-}
 inline Path parse_path(const std::string& text) {
     if (text=="-") return {};
     Path result;std::istringstream input(text);std::string token;

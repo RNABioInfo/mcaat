@@ -1,5 +1,6 @@
 #ifndef MCAAT_GRAPH_REPEAT_FILTER_H
 #define MCAAT_GRAPH_REPEAT_FILTER_H
+#include "crispr_array/candidate_quality.h"
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -18,25 +20,36 @@ using Path = std::vector<Node>;
 using Progress = std::function<void(const char*,size_t,size_t)>;
 constexpr Node missing_node = std::numeric_limits<Node>::max();
 
-inline double parse_repeat_support(const std::string& text) {
+inline double parse_fraction(const std::string& text,const std::string& name) {
     size_t used=0;
     double value;
     try {value=std::stod(text,&used);}
-    catch (...) {throw std::invalid_argument("repeat-support must be a finite fraction in (0, 1]");}
+    catch (...) {throw std::invalid_argument(name+" must be a finite fraction in (0, 1]");}
     if (used!=text.size() || !std::isfinite(value) || value<=0 || value>1)
-        throw std::invalid_argument("repeat-support must be a finite fraction in (0, 1]");
+        throw std::invalid_argument(name+" must be a finite fraction in (0, 1]");
     return value;
+}
+inline double parse_repeat_support(const std::string& text) {return parse_fraction(text,"repeat-support");}
+inline size_t parse_max_cycles(const std::string& text) {
+    size_t used=0;unsigned long long value=0;
+    try {value=std::stoull(text,&used);} catch (...) {used=0;}
+    if (text.empty() || text.find_first_not_of("0123456789")!=std::string::npos ||
+        used!=text.size() || value<3 || value>std::numeric_limits<int>::max())
+        throw std::invalid_argument("max-cycles must be an integer from 3 to INT_MAX");
+    return size_t(value);
 }
 
 struct Options {
     size_t k = 23;
     double repeat_support = 0.85;
     size_t repeat_min = 23, repeat_max = 55, spacer_min = 23, spacer_max = 50;
+    QualityOptions quality;
     void validate() const {
         if (!std::isfinite(repeat_support) || repeat_support <= 0 || repeat_support > 1)
             throw std::invalid_argument("repeat-support must be a finite fraction in (0, 1]");
         if (!k || repeat_min > repeat_max || spacer_min > spacer_max || !spacer_min)
             throw std::invalid_argument("invalid graph repeat/spacer length bounds");
+        quality.validate();
     }
 };
 
@@ -53,12 +66,22 @@ struct System {
     std::vector<Node> sources;
     size_t support_count = 0;
     size_t alternate_repeat_paths = 0;
+    size_t candidate_id = 0, candidate_count = 0;
+    Quality quality;
+};
+struct CandidateDecision {
+    System original;
+    std::string status;
+    std::set<size_t> competing_candidates;
+    std::set<Path> retained_paths;
+    size_t removed_cycles=0, duplicate_strand_cycles=0;
 };
 struct Statistics {
     size_t input_cycles = 0, invalid_cycles = 0, duplicate_cycles = 0;
     size_t input_groups = 0, groups_without_repeat = 0;
     size_t duplicate_systems = 0, merged_systems = 0;
     size_t dedup_pair_checks = 0, dedup_index_builds = 0;
+    size_t quality_rejected=0, overlap_rejected=0, shared_cycles_removed=0, duplicate_strand_cycles=0;
 };
 
 inline std::string reverse_complement(const std::string& sequence) {
@@ -81,11 +104,29 @@ inline Path cycle_key(Path path) {
     if (!path.empty()) path=rotate(path,std::min_element(path.begin(),path.end())-path.begin());
     return path;
 }
+inline std::string circular_sequence_key(const std::string& sequence) {
+    if (sequence.empty()) return sequence;
+    std::string best=sequence;
+    for (const auto& direction:{sequence,reverse_complement(sequence)})
+        for (size_t i=0;i<direction.size();++i) {
+            if (direction[i]>best.front()) continue;
+            auto rotated=direction.substr(i)+direction.substr(0,i);
+            if (rotated<best) best=std::move(rotated);
+        }
+    return best;
+}
 inline bool contains_path(const Path& cycle, size_t start, const Path& path) {
     if (path.size()>cycle.size()) return false;
     for (size_t i=0;i<path.size();++i)
         if (cycle[(start+i)%cycle.size()]!=path[i]) return false;
     return true;
+}
+
+inline std::string path_text(const Path& path) {
+    if (path.empty()) return "-";
+    std::ostringstream out;
+    for (size_t i=0;i<path.size();++i) {if(i) out<<',';out<<path[i];}
+    return out.str();
 }
 
 struct Parts {Path repeat,spacer,repeat_to_spacer,spacer_to_repeat;};
@@ -110,9 +151,11 @@ class RepeatFilter {
 public:
     RepeatFilter(Graph& graph, Options options):g_(graph),o_(options) {o_.validate();}
     Statistics stats;
+    std::vector<CandidateDecision> decisions;
 
     std::vector<System> run(const std::map<Node,std::vector<Path>>& input,const Progress& progress={}) {
         stats={};
+        decisions.clear();
         validity_cache_.clear();
         std::vector<System> systems;
         if (progress) progress("Repeat inference",0,input.size());
@@ -140,7 +183,109 @@ public:
             return a.repeat_path!=b.repeat_path ? a.repeat_path<b.repeat_path
                                                : observed_cycles(a)<observed_cycles(b);
         });
-        return systems;
+        return curate(std::move(systems),progress);
+    }
+
+    // Final quality and evidence-ownership pass. Also usable by report-replay
+    // checks: candidate_count must retain the original denominator, including
+    // unresolved cycles when only assigned observations are available.
+    std::vector<System> curate(std::vector<System> systems,const Progress& progress={}) {
+        decisions.clear();
+        stats.quality_rejected=stats.overlap_rejected=stats.shared_cycles_removed=stats.duplicate_strand_cycles=0;
+        std::map<Path,std::string> keys;
+        auto sequence_key=[&](const Path& cycle)->const std::string& {
+            auto key=cycle_key(cycle);auto it=keys.find(key);
+            if (it!=keys.end()) return it->second;
+            return keys.emplace(std::move(key),circular_sequence_key(spell(cycle).substr(0,cycle.size()))).first->second;
+        };
+        auto assess=[&](System& system) {
+            std::vector<std::string> spacers;
+            for (const auto& row:system.observations) spacers.push_back(row.spacer);
+            system.quality=assess_quality(spell(system.repeat_path),std::move(spacers),system.candidate_count,o_.quality);
+        };
+        if (progress) progress("Candidate quality",0,systems.size());
+        for (size_t i=0;i<systems.size();++i) {
+            auto& system=systems[i];system.candidate_id=i+1;
+            if (!system.candidate_count) system.candidate_count=system.candidate_cycles.size();
+            if (system.candidate_count<system.candidate_cycles.size() || system.support_count>system.candidate_count ||
+                system.observations.size()>system.candidate_cycles.size())
+                throw std::runtime_error("inconsistent candidate cycle counts");
+            for (const auto& row:system.observations)
+                keys.emplace(cycle_key(row.cycle),circular_sequence_key(row.repeat+row.spacer));
+            assess(system);
+            if (progress) progress("Candidate quality",i+1,systems.size());
+        }
+        std::vector<size_t> order(systems.size());std::iota(order.begin(),order.end(),0);
+        // Prefer candidates with more distinct spacer families, then better
+        // sequence separation. Variant counts are deliberately not abundance.
+        std::sort(order.begin(),order.end(),[&](size_t i,size_t j) {
+            const auto& a=systems[i];const auto& b=systems[j];
+            if (a.quality.reason.empty()!=b.quality.reason.empty()) return a.quality.reason.empty();
+            if (a.quality.families.size()!=b.quality.families.size()) return a.quality.families.size()>b.quality.families.size();
+            if (a.quality.spacer_similarity!=b.quality.spacer_similarity) return a.quality.spacer_similarity<b.quality.spacer_similarity;
+            if (a.repeat_path.size()!=b.repeat_path.size()) return a.repeat_path.size()>b.repeat_path.size();
+            return i<j;
+        });
+        std::map<std::string,size_t> owners;
+        std::vector<System> accepted;
+        decisions.resize(systems.size());
+        if (progress) progress("Resolve shared cycles",0,systems.size());
+        size_t done=0;
+        for (size_t index:order) {
+            auto& decision=decisions[index];decision.original=std::move(systems[index]);
+            const auto& original=decision.original;
+            if (!original.quality.reason.empty()) {
+                decision.status=original.quality.reason;++stats.quality_rejected;
+            } else {
+                System keep=original;
+                keep.candidate_cycles.clear();keep.observations.clear();keep.support_count=0;
+                std::map<std::string,size_t> remaining,assigned;
+                for (const auto& cycle:original.candidate_cycles) {
+                    const auto& key=sequence_key(cycle);auto owned=owners.find(key);
+                    if (owned==owners.end()) {
+                        if (remaining.emplace(key,keep.candidate_cycles.size()).second) keep.candidate_cycles.push_back(cycle);
+                        else ++decision.duplicate_strand_cycles;
+                    }
+                    else {decision.competing_candidates.insert(owned->second);++decision.removed_cycles;}
+                }
+                keep.candidate_count-=decision.removed_cycles+decision.duplicate_strand_cycles;
+                for (const auto& row:original.observations) {
+                    const auto& key=sequence_key(row.cycle);
+                    if (!owners.count(key)) {
+                        auto [position,fresh]=assigned.emplace(key,keep.observations.size());
+                        if (fresh) keep.observations.push_back(row);
+                        else if (row.supports_path && !keep.observations[position->second].supports_path)
+                            keep.observations[position->second]=row;
+                    }
+                }
+                for (const auto& row:keep.observations) {
+                    keep.support_count+=row.supports_path;
+                    keep.candidate_cycles.at(remaining.at(sequence_key(row.cycle)))=cycle_key(row.cycle);
+                }
+                const size_t required=std::max<size_t>(2,size_t(std::ceil(o_.repeat_support*keep.candidate_count-1e-12)));
+                if (keep.observations.size()<2) decision.status="shared_cycle_subset";
+                else if (keep.support_count<required) decision.status="repeat_support_after_overlap";
+                else {
+                    assess(keep);decision.status=keep.quality.reason;
+                }
+                if (decision.status.empty()) {
+                    decision.status=decision.removed_cycles?"accepted_without_shared_cycles":
+                        (decision.duplicate_strand_cycles?"accepted_without_strand_duplicates":"accepted");
+                    for (const auto& row:keep.observations) {
+                        const auto& key=sequence_key(row.cycle);
+                        if (!owners.emplace(key,keep.candidate_id).second)
+                            throw std::runtime_error("internal error: cycle assigned to multiple accepted arrays");
+                        decision.retained_paths.insert(cycle_key(row.cycle));
+                    }
+                    accepted.push_back(std::move(keep));
+                } else ++stats.overlap_rejected;
+                stats.shared_cycles_removed+=decision.removed_cycles;
+                stats.duplicate_strand_cycles+=decision.duplicate_strand_cycles;
+            }
+            if (progress) progress("Resolve shared cycles",++done,decisions.size());
+        }
+        std::sort(accepted.begin(),accepted.end(),[](const auto& a,const auto& b) {return a.candidate_id<b.candidate_id;});
+        return accepted;
     }
 
     std::string spell(const Path& path) {
@@ -263,7 +408,7 @@ private:
         bool found=false;
         size_t alternatives=0;
         for (const auto& path:paths) {
-            System candidate;candidate.repeat_path=path;candidate.candidate_cycles=cycles;
+            System candidate;candidate.repeat_path=path;candidate.candidate_cycles=cycles;candidate.candidate_count=cycles.size();
             place(candidate);
             if (candidate.support_count<required) continue;
             std::set<std::string> spacers;

@@ -210,6 +210,64 @@ void test_boundaries_and_rejections() {
     systems=short_spacer.run();check(systems.size()==1,"spacer shorter than k supported without fabricated pure spacer nodes");
     for(const auto& row:systems[0].observations) check(partition(row.cycle,row.repeat_nodes,9).spacer.empty(),"short spacer has boundary nodes only");
 }
+System assigned(Fixture& f,const std::vector<size_t>& indexes) {
+    System s;s.repeat_path=Path(f.cycles[0].begin(),f.cycles[0].begin()+f.repeat.size()-f.g.k+1);
+    for(auto i:indexes) {
+        s.candidate_cycles.push_back(cycle_key(f.cycles.at(i)));
+        s.observations.push_back({f.cycles[i],f.repeat.size()-f.g.k+1,f.repeats[i],f.spacers[i],true});
+    }
+    s.support_count=s.candidate_count=indexes.size();return s;
+}
+void test_curation_ownership() {
+    Fixture f(23,28);for(int i=0;i<10;++i)f.append(f.repeat);
+    auto a=assigned(f,{0,1,2,3,4,5}),b=assigned(f,{0,1,6,7});
+    RepeatFilter<Graph> filter(f.g,f.o);
+    auto systems=filter.curate({a,b});
+    check(systems.size()==2 && systems[0].observations.size()==6 && systems[1].observations.size()==2,"independent residual evidence survives shared-cycle removal");
+    check(systems[1].support_count==2 && systems[1].candidate_count==2,"support recomputed on residual evidence");
+    check(filter.decisions[1].removed_cycles==2 && filter.decisions[1].competing_candidates.count(1),"competing candidate provenance recorded");
+    systems=filter.curate({a,assigned(f,{0,1,6})});
+    check(systems.size()==1 && filter.decisions[1].status=="shared_cycle_subset","one residual spacer cannot remain an array");
+    auto ambiguous=b;ambiguous.candidate_count=5;
+    systems=filter.curate({a,ambiguous});
+    check(systems.size()==1 && filter.decisions[1].status=="repeat_support_after_overlap","unresolved cycles stay in support denominator");
+    auto bad=a;bad.candidate_count=500;
+    systems=filter.curate({bad,b});
+    check(systems.size()==1 && systems[0].observations.size()==4 && filter.decisions[0].status=="cycle_limit","rejected candidates never claim cycles");
+    auto reverse=a;reverse.repeat_path.clear();reverse.observations.clear();reverse.candidate_cycles.clear();
+    for(const auto& r:a.observations) {
+        auto repeat=reverse_complement(r.repeat),spacer=reverse_complement(r.spacer);auto c=f.g.add(repeat+spacer);
+        reverse.observations.push_back({c,r.repeat_nodes,repeat,spacer,true});reverse.candidate_cycles.push_back(rotate(c,13));
+        if(reverse.repeat_path.empty())reverse.repeat_path=Path(c.begin(),c.begin()+r.repeat_nodes);
+    }
+    systems=filter.curate({a,reverse});
+    check(systems.size()==1 && systems[0].observations.size()==6,"rotated reverse-strand circles have one accepted owner");
+    Fixture pal(9,28);auto half=dna(14);pal.repeat=half+reverse_complement(half);
+    for(int i=0;i<3;++i)pal.append(pal.repeat);
+    auto both=assigned(pal,{0,1,2});
+    for(size_t i=0;i<3;++i) {
+        auto spacer=reverse_complement(pal.spacers[i]);auto cycle=pal.g.add(pal.repeat+spacer);
+        both.candidate_cycles.push_back(cycle_key(cycle));
+        both.observations.push_back({cycle,20,pal.repeat,spacer,true});
+    }
+    both.support_count=both.candidate_count=6;RepeatFilter<Graph> pal_filter(pal.g,pal.o);
+    auto pal_systems=pal_filter.curate({both});
+    check(pal_systems.size()==1 && pal_systems[0].observations.size()==3,"opposite strand copies inside one candidate cannot double-count cycles");
+    check(pal_systems[0].candidate_count==3 && pal_systems[0].support_count==3 && pal_filter.decisions[0].duplicate_strand_cycles==3,"within-candidate strand duplicates adjust support denominator and remain traceable");
+    // Shift an otherwise identical circle so the proposed repeat is inside the
+    // original spacer. It is a competing boundary interpretation, not new data.
+    auto wrong=assigned(f,{0,1});wrong.repeat_path.clear();
+    for(auto& row:wrong.observations) {
+        auto period=row.repeat+row.spacer;size_t offset=row.repeat.size();period=period.substr(offset)+period.substr(0,offset);
+        row.cycle=rotate(row.cycle,offset);row.repeat=period.substr(0,28);row.spacer=period.substr(28);
+        if(wrong.repeat_path.empty())wrong.repeat_path=Path(row.cycle.begin(),row.cycle.begin()+row.repeat_nodes);
+    }
+    systems=filter.curate({a,wrong});
+    check(systems.size()==1 && filter.decisions[1].retained_paths.empty(),"repeat/spacer reinterpretation cannot duplicate accepted evidence");
+    check(filter.decisions[1].original.observations.size()==2,"alternative boundary observations preserved for review");
+    for(const auto& row:systems[0].observations)check(row.repeat==f.repeat,"winning repeat boundary unchanged");
+}
+
 int main() {
     try {
         for(auto s:{"0","-0.1","1.01","nan","inf","85%",".6junk",""}) {
@@ -218,7 +276,7 @@ int main() {
         }
         check(parse_repeat_support("0.85")==.85 && parse_repeat_support(".60")==.6 && parse_repeat_support("1")==1,"valid fractions");
         test_threshold_and_variants();test_joint_support();test_deduplication();test_shifted_strands();
-        test_incremental_deduplication();test_boundaries_and_rejections();
+        test_incremental_deduplication();test_boundaries_and_rejections();test_curation_ownership();
         std::cout<<checks<<" graph repeat-filter checks passed\n";
     }catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<'\n';return 1;}
 }

@@ -91,6 +91,10 @@ mcaat --graph <path> [options]
 | `--cycle-min-length <int>` | `27` | Minimum cycle length to search |
 | `--threshold-multiplicity <int>` | `20` | Min edge multiplicity for cycle start nodes |
 | `--repeat-support <fraction>` | `0.85` | Minimum fraction of distinct cycles supporting the entire repeat path; range `(0, 1]` |
+| `--spacer-variant-similarity <fraction>` | `0.90` | Minimum normalized edit similarity within each spacer family; every variant is preserved |
+| `--max-spacer-similarity <fraction>` | `0.60` | Maximum mean similarity between distinct spacer-family representatives |
+| `--max-repeat-spacer-similarity <fraction>` | `0.60` | Maximum mean similarity of repeat to spacer-family representatives |
+| `--max-cycles <int>` | `500` | Exclusive cycle limit for enumeration starts and merged array candidates |
 | `--low-abundance <true\|false>` | `true` | Enable low-abundance mode |
 | `--autoclean <true\|false>` | `true` | Remove intermediate graph/cycle files after run. Set to `false` to keep them |
 | `--settings <path>` | — | Key=value settings file (CLI flags override it) |
@@ -105,6 +109,10 @@ mcaat --graph <path> [options]
 ├── CRISPR_graph_paths.tsv      # observed cycles, repeat/spacer/boundary vertices and edges
 ├── CRISPR_graph_candidates.tsv # assigned and unresolved candidate cycles
 ├── CRISPR_graph_summary.tsv    # filtering and deduplication counts
+├── CRISPR_spacer_variants.tsv   # observed variants and their family representatives
+├── CRISPR_graph_decisions.tsv   # acceptance/rejection reasons for final candidates
+├── CRISPR_graph_alternatives.tsv # rejected or competing observations, including paths
+├── CRISPR_graph_review_cycles.tsv # non-retained assigned/unresolved paths
 ├── graph/                     # graph files, unless autoclean removes them
 └── cycles.txt                 # ordered k-mers, unless autoclean removes them
 ```
@@ -114,16 +122,16 @@ Each `CRISPR_Arrays_N.txt` file has a short header followed by one block per arr
 ```
 # MCAAT graph-based CRISPR array candidates
 # Repeat support: 0.85 (distinct cycles per candidate group; not sequence identity)
-# Spacer rows have no inferred genomic order. See CRISPR_graph_*.tsv for paths.
+# Rows: observed spacer-family representatives, without inferred genomic order. All variants/paths in TSV files.
 
->Array_1  spacers=8
+>Array_1  spacers=3  sequence_variants=4
 ATCGATCGATCGATCGATCGATCG
         --------------------    AACCCGGTTAATCGATCGTTTCGAGC
         --------------------    TTGGCCAATCGATCGATCAAAACGGG
         ATCGATCGATCGATCTATCG    GGAATTCCAATCGATCGAATACCCAC   ← repeat variant
 ```
 
-The supported observed repeat sequence is on its own line. Each spacer entry shows its observed repeat variant (or dashes when it matches the supported repeat) followed by the spacer sequence. The text format stays compatible with existing readers. CAS and phage commands prefer the graph path table and validate its sequences, edges and boundaries against the loaded graph.
+The supported observed repeat sequence is on its own line. Each spacer entry is one observed representative of a spacer family and shows its observed repeat variant (or dashes when it matches the supported repeat) followed by the spacer sequence. All observed variants remain in the variant and graph-path tables. `spacers=` counts families; `sequence_variants=` counts distinct observed spacer strings. The text structure stays compatible with existing readers. CAS and phage commands prefer the graph path table and validate its sequences, edges and boundaries against the loaded graph.
 
 See [graph-based repeat/spacer filtering](docs/graph-repeat-filtering.md) for the support definition, deduplication rules, output fields and limitations.
 
