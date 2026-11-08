@@ -87,14 +87,15 @@ mcaat --graph <path> [options]
 | `--output-folder <path>` | `mcaat_run_YYYY-MM-DD_HH-MM-SS/` | Output directory |
 | `--ram <amount>` | 95% of system RAM | Memory cap. Units: `B`, `K`, `M`, `G` (e.g. `--ram 8G`) |
 | `--threads <num>` | CPU cores − 2 | Thread count |
-| `--cycle-max-length <int>` | `77` | Maximum cycle length to search |
-| `--cycle-min-length <int>` | `27` | Minimum cycle length to search |
+| `--cycle-max-length <int>` | `100` | Inclusive maximum number of distinct nodes per cycle |
+| `--cycle-min-length <int>` | `47` | Inclusive minimum number of distinct nodes per cycle |
 | `--threshold-multiplicity <int>` | `20` | Min edge multiplicity for cycle start nodes |
 | `--repeat-support <fraction>` | `0.85` | Minimum fraction of distinct cycles supporting the entire repeat path; range `(0, 1]` |
+| `--array-filter-mode <conservative\|strict>` | `conservative` | Flag uncertain sequence/overlap evidence; opt into strict heuristic rejection |
 | `--spacer-variant-similarity <fraction>` | `0.90` | Minimum normalized edit similarity within each spacer family; every variant is preserved |
-| `--max-spacer-similarity <fraction>` | `0.60` | Maximum mean similarity between distinct spacer-family representatives |
-| `--max-repeat-spacer-similarity <fraction>` | `0.60` | Maximum mean similarity of repeat to spacer-family representatives |
-| `--max-cycles <int>` | `500` | Exclusive cycle limit for enumeration starts and merged array candidates |
+| `--max-spacer-similarity <fraction>` | `0.60` | Flag mean similarity above this value; reject only in strict mode |
+| `--max-repeat-spacer-similarity <fraction>` | `0.60` | Flag repeat/spacer similarity above this value; reject only in strict mode |
+| `--max-cycles <int>` | `500` | Exclusive enumeration limit; merged candidates at this limit are flagged (rejected in strict mode) |
 | `--low-abundance <true\|false>` | `true` | Enable low-abundance mode |
 | `--autoclean <true\|false>` | `true` | Remove intermediate graph/cycle files after run. Set to `false` to keep them |
 | `--settings <path>` | — | Key=value settings file (CLI flags override it) |
@@ -113,6 +114,7 @@ mcaat --graph <path> [options]
 ├── CRISPR_graph_decisions.tsv   # acceptance/rejection reasons for final candidates
 ├── CRISPR_graph_alternatives.tsv # rejected or competing observations, including paths
 ├── CRISPR_graph_review_cycles.tsv # non-retained assigned/unresolved paths
+├── CRISPR_graph_shared_cycles.tsv # shared evidence retained across competing candidates
 ├── graph/                     # graph files, unless autoclean removes them
 └── cycles.txt                 # ordered k-mers, unless autoclean removes them
 ```
@@ -122,16 +124,18 @@ Each `CRISPR_Arrays_N.txt` file has a short header followed by one block per arr
 ```
 # MCAAT graph-based CRISPR array candidates
 # Repeat support: 0.85 (distinct cycles per candidate group; not sequence identity)
-# Rows: observed spacer-family representatives, without inferred genomic order. All variants/paths in TSV files.
+# Rows: all distinct observed spacers, without inferred genomic order. Similarity families and paths are in TSV files.
 
->Array_1  spacers=3  sequence_variants=4
+>Array_1  spacers=3  spacer_families=3  flags=-
 ATCGATCGATCGATCGATCGATCG
         --------------------    AACCCGGTTAATCGATCGTTTCGAGC
         --------------------    TTGGCCAATCGATCGATCAAAACGGG
         ATCGATCGATCGATCTATCG    GGAATTCCAATCGATCGAATACCCAC   ← repeat variant
 ```
 
-The supported observed repeat sequence is on its own line. Each spacer entry is one observed representative of a spacer family and shows its observed repeat variant (or dashes when it matches the supported repeat) followed by the spacer sequence. All observed variants remain in the variant and graph-path tables. `spacers=` counts families; `sequence_variants=` counts distinct observed spacer strings. The text structure stays compatible with existing readers. CAS and phage commands prefer the graph path table and validate its sequences, edges and boundaries against the loaded graph.
+The supported observed repeat sequence is on its own line. Each distinct observed spacer is shown with its observed repeat variant (or dashes when it matches the supported repeat) followed by the spacer sequence. All observed variants remain in the variant and graph-path tables. `spacers=` counts distinct observed spacer strings; `spacer_families=` gives the separate similarity-group count. The text structure stays compatible with existing readers. CAS and phage commands prefer the graph path table and validate its sequences, edges and boundaries against the loaded graph.
+
+Default curation preserves candidates that pass structural and repeat-support checks, while flagging uncertain sequence features and shared evidence. It does not assign each shared cycle exclusively to one candidate. Read [recall and cycle lengths](docs/recall-and-cycle-lengths.md) before comparing candidate counts with annotated arrays.
 
 See [graph-based repeat/spacer filtering](docs/graph-repeat-filtering.md) for the support definition, deduplication rules, output fields and limitations.
 
@@ -152,11 +156,12 @@ input-files=/data/R1.fastq /data/R2.fastq
 ram=128G
 threads=26
 output-folder=results/run_1
-cycle-max-length=77
-cycle-min-length=27
+cycle-max-length=100
+cycle-min-length=47
 threshold-multiplicity=20
 low-abundance=true
 repeat-support=0.85
+array-filter-mode=conservative
 autoclean=true
 ```
 

@@ -219,7 +219,7 @@ System assigned(Fixture& f,const std::vector<size_t>& indexes) {
     s.support_count=s.candidate_count=indexes.size();return s;
 }
 void test_curation_ownership() {
-    Fixture f(23,28);for(int i=0;i<10;++i)f.append(f.repeat);
+    Fixture f(23,28);f.o.quality.strict=true;for(int i=0;i<10;++i)f.append(f.repeat);
     auto a=assigned(f,{0,1,2,3,4,5}),b=assigned(f,{0,1,6,7});
     RepeatFilter<Graph> filter(f.g,f.o);
     auto systems=filter.curate({a,b});
@@ -254,6 +254,15 @@ void test_curation_ownership() {
     auto pal_systems=pal_filter.curate({both});
     check(pal_systems.size()==1 && pal_systems[0].observations.size()==3,"opposite strand copies inside one candidate cannot double-count cycles");
     check(pal_systems[0].candidate_count==3 && pal_systems[0].support_count==3 && pal_filter.decisions[0].duplicate_strand_cycles==3,"within-candidate strand duplicates adjust support denominator and remain traceable");
+    auto conservative_options=f.o;conservative_options.quality.strict=false;
+    RepeatFilter<Graph> conservative(f.g,conservative_options);
+    auto preserved=conservative.curate({a,b});
+    check(preserved.size()==2 && preserved[0].observations.size()==6 && preserved[1].observations.size()==4,"shared evidence must not be stolen from another candidate in conservative mode");
+    check(conservative.decisions[0].status=="accepted_with_shared_evidence" && conservative.decisions[1].status=="accepted_with_shared_evidence","shared evidence must be flagged symmetrically");
+    check(preserved[0].quality.flags.back()=="shared_cycle_evidence" && preserved[1].quality.flags.back()=="shared_cycle_evidence","ambiguous overlap is flagged on both candidates");
+    conservative_options.cycle_min=59;conservative_options.cycle_max=100;
+    RepeatFilter<Graph> outside(f.g,conservative_options);
+    check(outside.curate({a}).empty() && outside.decisions[0].status=="cycle_length_range","saved candidates outside requested cycle bounds are rejected explicitly");
     // Shift an otherwise identical circle so the proposed repeat is inside the
     // original spacer. It is a competing boundary interpretation, not new data.
     auto wrong=assigned(f,{0,1});wrong.repeat_path.clear();

@@ -45,7 +45,13 @@ for cycles in sorted(a.data.glob('*/cycles/str_paths.txt')):
         duplicates=sum(len(v)>1 for v in shared.values())
         result['versions'][version]={'seconds':time.monotonic()-started,'arrays':len(per_array),'observations':len(paths),'distinct_spacers':len(sequences),'exact_reference_spacers':len(known&sequences),'reference_arrays_with_two_exact_spacers':sum(any(len(s&ref)>=2 for s in per_array.values()) for ref in refs),'shared_circles':duplicates}
         if version=='after':
-            assert duplicates==0,(base.name,'duplicate accepted cycle')
+            metrics={r['metric']:r['value'] for r in table(out/'CRISPR_graph_summary.tsv')}
+            if metrics.get('array_filter_mode','strict')=='strict':assert duplicates==0,(base.name,'duplicate accepted cycle')
+            assert len({(r['array_id'],circles(r['repeat']+r['spacer'])) for r in paths})==len(paths)
+            if (out/'CRISPR_graph_shared_cycles.tsv').exists():
+                reported={r['canonical_circular_sequence']:set(r['array_ids'].split(',')) for r in table(out/'CRISPR_graph_shared_cycles.tsv')}
+                assert reported=={k:v for k,v in shared.items() if len(v)>1}
+
             variants=table(out/'CRISPR_spacer_variants.tsv')
             assert {(r['array_id'],r['variant']) for r in variants}=={(r['array_id'],r['spacer']) for r in paths}
             review=table(out/'CRISPR_graph_alternatives.tsv');decisions=table(out/'CRISPR_graph_decisions.tsv')

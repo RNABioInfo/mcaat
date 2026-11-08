@@ -52,6 +52,7 @@ inline double sequence_similarity(const std::string& a,const std::string& b) {
 }
 
 struct QualityOptions {
+    bool strict=false; // Uncalibrated sequence/overlap heuristics are opt-in rejections.
     double variant_similarity=.90;
     double max_spacer_similarity=.60;
     double max_repeat_spacer_similarity=.60;
@@ -74,6 +75,7 @@ struct Quality {
     size_t variants=0;
     double spacer_similarity=0,repeat_spacer_similarity=0;
     bool similarities_computed=false;
+    std::vector<std::string> flags;
     std::string reason; // Empty means the candidate passed these specified checks.
 };
 
@@ -83,13 +85,18 @@ inline Quality assess_quality(const std::string& repeat,std::vector<std::string>
     std::sort(spacers.begin(),spacers.end());
     spacers.erase(std::unique(spacers.begin(),spacers.end()),spacers.end());
     result.variants=spacers.size();
-    if (cycle_count>=options.max_cycles) {result.reason="cycle_limit";return result;}
     if (spacers.size()<2) {result.reason="fewer_than_two_spacers";return result;}
     std::vector<size_t> lengths;for (const auto& s:spacers) lengths.push_back(s.size());
     std::sort(lengths.begin(),lengths.end());
     double median=lengths.size()%2?lengths[lengths.size()/2]:
         (double(lengths[lengths.size()/2-1])+lengths[lengths.size()/2])/2;
     if (median<.5*repeat.size()) {result.reason="spacer_repeat_length_ratio";return result;}
+    if (cycle_count>=options.max_cycles) {
+        result.flags={"cycle_limit","variant_grouping_skipped"};
+        if (options.strict) result.reason="cycle_limit";
+        else for (const auto& s:spacers) result.families.push_back({s,{s}});
+        return result;
+    }
     const size_t n=spacers.size();
     std::vector<size_t> distances(n*n);
     for (size_t i=0;i<n;++i) for (size_t j=0;j<i;++j)
@@ -119,7 +126,11 @@ inline Quality assess_quality(const std::string& repeat,std::vector<std::string>
         result.families.push_back(std::move(family));
     }
     std::sort(result.families.begin(),result.families.end(),[](const auto& a,const auto& b) {return a.representative<b.representative;});
-    if (result.families.size()<2) {result.reason="fewer_than_two_spacer_families";return result;}
+    if (result.families.size()<2) {
+        result.flags.push_back("fewer_than_two_spacer_families");
+        if (options.strict) result.reason=result.flags.back();
+        return result;
+    }
     size_t pairs=0;
     for (size_t i=0;i<result.families.size();++i) {
         const auto& sequence=result.families[i].representative;
@@ -132,9 +143,10 @@ inline Quality assess_quality(const std::string& repeat,std::vector<std::string>
     result.repeat_spacer_similarity/=result.families.size();
     result.similarities_computed=true;
     if (result.spacer_similarity>options.max_spacer_similarity+1e-12)
-        result.reason="similar_spacer_families";
-    else if (result.repeat_spacer_similarity>options.max_repeat_spacer_similarity+1e-12)
-        result.reason="repeat_like_spacers";
+        result.flags.push_back("similar_spacer_families");
+    if (result.repeat_spacer_similarity>options.max_repeat_spacer_similarity+1e-12)
+        result.flags.push_back("repeat_like_spacers");
+    if (options.strict && !result.flags.empty()) result.reason=result.flags.front();
     return result;
 }
 } // namespace mcaat::arrays

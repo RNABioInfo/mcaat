@@ -138,6 +138,7 @@ void CycleFinder::_GetIncomings(uint64_t node, SmallNodeSet& incomings_set) {
 CycleFinder::CycleFinder(Settings& settings)
     : settings(settings), cluster_bounds(settings.dna_sequence_settings.quality.max_cycles) {
     settings.dna_sequence_settings.quality.validate();
+    settings.cycle_finder_settings.validate();
     // Ensure settings.sdbg is valid; this should be set by caller before constructing CycleFinder
     if (this->settings.sdbg == nullptr) {
         throw std::runtime_error("CycleFinder requires settings.sdbg to be set to a valid SDBG instance");
@@ -164,7 +165,8 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
             current_node = neighbor;
             if (current_node == start_node ) {
                 backtrack_lengths.back() = 1;
-                if (path.size() > static_cast<size_t>(this->settings.cycle_finder_settings.cycle_min_length)) {
+                if (path.size() >= static_cast<size_t>(this->settings.cycle_finder_settings.cycle_min_length) &&
+                    path.size() <= static_cast<size_t>(this->settings.cycle_finder_settings.cycle_max_length)) {
                     cycles.push_back(path);
                     counter += 1;
                     if (counter >= this->cluster_bounds) {
@@ -174,7 +176,8 @@ vector<vector<uint64_t>> CycleFinder::FindCycle(uint64_t start_node, vector<uint
                     }
                 }
             } 
-            else if (static_cast<int>(path.size()) < lock.try_emplace(neighbor, this->settings.cycle_finder_settings.cycle_max_length).first->second) {
+            else if (path.size() < static_cast<size_t>(this->settings.cycle_finder_settings.cycle_max_length) &&
+                     static_cast<int>(path.size()) < lock.try_emplace(neighbor, this->settings.cycle_finder_settings.cycle_max_length).first->second) {
                 neighbors.erase(neighbor);
                 path.push_back(neighbor);
                 backtrack_lengths.push_back(this->settings.cycle_finder_settings.cycle_max_length);

@@ -30,6 +30,11 @@ inline double parse_fraction(const std::string& text,const std::string& name) {
     return value;
 }
 inline double parse_repeat_support(const std::string& text) {return parse_fraction(text,"repeat-support");}
+inline bool parse_filter_mode(const std::string& text) {
+    if (text=="conservative") return false;
+    if (text=="strict") return true;
+    throw std::invalid_argument("array-filter-mode must be conservative or strict");
+}
 inline size_t parse_max_cycles(const std::string& text) {
     size_t used=0;unsigned long long value=0;
     try {value=std::stoull(text,&used);} catch (...) {used=0;}
@@ -44,12 +49,14 @@ struct Options {
     double repeat_support = 0.85;
     size_t repeat_min = 23, repeat_max = 55, spacer_min = 23, spacer_max = 50;
     QualityOptions quality;
+    size_t cycle_min=1,cycle_max=std::numeric_limits<int>::max();
     void validate() const {
         if (!std::isfinite(repeat_support) || repeat_support <= 0 || repeat_support > 1)
             throw std::invalid_argument("repeat-support must be a finite fraction in (0, 1]");
         if (!k || repeat_min > repeat_max || spacer_min > spacer_max || !spacer_min)
             throw std::invalid_argument("invalid graph repeat/spacer length bounds");
         quality.validate();
+        if (!cycle_min || cycle_min>cycle_max) throw std::invalid_argument("invalid cycle length range");
     }
 };
 
@@ -74,7 +81,7 @@ struct CandidateDecision {
     std::string status;
     std::set<size_t> competing_candidates;
     std::set<Path> retained_paths;
-    size_t removed_cycles=0, duplicate_strand_cycles=0;
+    size_t removed_cycles=0, duplicate_strand_cycles=0, out_of_range_cycles=0;
 };
 struct Statistics {
     size_t input_cycles = 0, invalid_cycles = 0, duplicate_cycles = 0;
@@ -82,6 +89,7 @@ struct Statistics {
     size_t duplicate_systems = 0, merged_systems = 0;
     size_t dedup_pair_checks = 0, dedup_index_builds = 0;
     size_t quality_rejected=0, overlap_rejected=0, shared_cycles_removed=0, duplicate_strand_cycles=0;
+    size_t out_of_range_cycles=0, curation_out_of_range_cycles=0;
 };
 
 inline std::string reverse_complement(const std::string& sequence) {
@@ -165,6 +173,7 @@ public:
             for (Path cycle:raw) {
                 ++stats.input_cycles;
                 if (cycle.size()>1 && cycle.front()==cycle.back()) cycle.pop_back();
+                if (cycle.size()<o_.cycle_min || cycle.size()>o_.cycle_max) {++stats.out_of_range_cycles;continue;}
                 cycle=cycle_key(std::move(cycle));
                 // Repeated saved records and rotated rediscoveries must not
                 // revalidate every graph edge before being recognized as copies.
@@ -192,6 +201,7 @@ public:
     std::vector<System> curate(std::vector<System> systems,const Progress& progress={}) {
         decisions.clear();
         stats.quality_rejected=stats.overlap_rejected=stats.shared_cycles_removed=stats.duplicate_strand_cycles=0;
+        stats.curation_out_of_range_cycles=0;
         std::map<Path,std::string> keys;
         auto sequence_key=[&](const Path& cycle)->const std::string& {
             auto key=cycle_key(cycle);auto it=keys.find(key);
@@ -218,7 +228,7 @@ public:
         std::vector<size_t> order(systems.size());std::iota(order.begin(),order.end(),0);
         // Prefer candidates with more distinct spacer families, then better
         // sequence separation. Variant counts are deliberately not abundance.
-        std::sort(order.begin(),order.end(),[&](size_t i,size_t j) {
+        if (o_.quality.strict) std::sort(order.begin(),order.end(),[&](size_t i,size_t j) {
             const auto& a=systems[i];const auto& b=systems[j];
             if (a.quality.reason.empty()!=b.quality.reason.empty()) return a.quality.reason.empty();
             if (a.quality.families.size()!=b.quality.families.size()) return a.quality.families.size()>b.quality.families.size();
@@ -241,17 +251,19 @@ public:
                 keep.candidate_cycles.clear();keep.observations.clear();keep.support_count=0;
                 std::map<std::string,size_t> remaining,assigned;
                 for (const auto& cycle:original.candidate_cycles) {
+                    if (cycle.size()<o_.cycle_min || cycle.size()>o_.cycle_max) {++decision.out_of_range_cycles;continue;}
                     const auto& key=sequence_key(cycle);auto owned=owners.find(key);
-                    if (owned==owners.end()) {
+                    if (!o_.quality.strict || owned==owners.end()) {
                         if (remaining.emplace(key,keep.candidate_cycles.size()).second) keep.candidate_cycles.push_back(cycle);
                         else ++decision.duplicate_strand_cycles;
                     }
                     else {decision.competing_candidates.insert(owned->second);++decision.removed_cycles;}
                 }
-                keep.candidate_count-=decision.removed_cycles+decision.duplicate_strand_cycles;
+                keep.candidate_count-=decision.removed_cycles+decision.duplicate_strand_cycles+decision.out_of_range_cycles;
                 for (const auto& row:original.observations) {
+                    if (row.cycle.size()<o_.cycle_min || row.cycle.size()>o_.cycle_max) continue;
                     const auto& key=sequence_key(row.cycle);
-                    if (!owners.count(key)) {
+                    if (!o_.quality.strict || !owners.count(key)) {
                         auto [position,fresh]=assigned.emplace(key,keep.observations.size());
                         if (fresh) keep.observations.push_back(row);
                         else if (row.supports_path && !keep.observations[position->second].supports_path)
@@ -263,8 +275,9 @@ public:
                     keep.candidate_cycles.at(remaining.at(sequence_key(row.cycle)))=cycle_key(row.cycle);
                 }
                 const size_t required=std::max<size_t>(2,size_t(std::ceil(o_.repeat_support*keep.candidate_count-1e-12)));
-                if (keep.observations.size()<2) decision.status="shared_cycle_subset";
-                else if (keep.support_count<required) decision.status="repeat_support_after_overlap";
+                if (keep.observations.size()<2) decision.status=decision.out_of_range_cycles?"cycle_length_range":
+                    (o_.quality.strict?"shared_cycle_subset":"fewer_than_two_cycles");
+                else if (keep.support_count<required) decision.status=o_.quality.strict?"repeat_support_after_overlap":"repeat_support_after_deduplication";
                 else {
                     assess(keep);decision.status=keep.quality.reason;
                 }
@@ -273,7 +286,7 @@ public:
                         (decision.duplicate_strand_cycles?"accepted_without_strand_duplicates":"accepted");
                     for (const auto& row:keep.observations) {
                         const auto& key=sequence_key(row.cycle);
-                        if (!owners.emplace(key,keep.candidate_id).second)
+                        if (!owners.emplace(key,keep.candidate_id).second && o_.quality.strict)
                             throw std::runtime_error("internal error: cycle assigned to multiple accepted arrays");
                         decision.retained_paths.insert(cycle_key(row.cycle));
                     }
@@ -281,10 +294,26 @@ public:
                 } else ++stats.overlap_rejected;
                 stats.shared_cycles_removed+=decision.removed_cycles;
                 stats.duplicate_strand_cycles+=decision.duplicate_strand_cycles;
+                stats.curation_out_of_range_cycles+=decision.out_of_range_cycles;
             }
             if (progress) progress("Resolve shared cycles",++done,decisions.size());
         }
         std::sort(accepted.begin(),accepted.end(),[](const auto& a,const auto& b) {return a.candidate_id<b.candidate_id;});
+        if (!o_.quality.strict) {
+            std::map<std::string,std::vector<size_t>> shared;
+            for (size_t i=0;i<accepted.size();++i)
+                for (const auto& row:accepted[i].observations) shared[sequence_key(row.cycle)].push_back(i);
+            for (const auto& [key,indexes]:shared) if (indexes.size()>1) {
+                for (size_t i:indexes) {
+                    auto& s=accepted[i];auto& d=decisions.at(s.candidate_id-1);
+                    if (std::find(s.quality.flags.begin(),s.quality.flags.end(),"shared_cycle_evidence")==s.quality.flags.end())
+                        s.quality.flags.push_back("shared_cycle_evidence");
+                    d.status="accepted_with_shared_evidence";
+                    // Complete membership is serialized once per shared cycle.
+                    // Do not materialize a quadratic pairwise candidate clique.
+                }
+            }
+        }
         return accepted;
     }
 

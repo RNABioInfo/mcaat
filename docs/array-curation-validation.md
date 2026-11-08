@@ -1,4 +1,8 @@
-# Array curation repair: validation scope
+# Historical strict-curation validation (commit 21f8f8d)
+
+These are results for the former strict default, **not the current conservative
+default**. Retaining the local reference matches did not establish sensitivity
+against the complete ~750 annotated arrays. See [the correction](recall-and-cycle-lengths.md).
 
 The comparison baseline is `6205933`, before final candidate curation. The repair
 adds configurable spacer-family/sequence-quality checks, exclusive ownership of

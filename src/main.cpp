@@ -51,6 +51,8 @@ static int run_postprocess_arrays(int argc,char** argv) {
             std::cout<<"mcaat postprocess-arrays --graph <prefix> --cycles <cycles.txt> "
                        "--output-folder <dir> [--repeat-support 0.85]\n"
                        "Optional: --min-repeat-len, --max-repeat-len, --min-spacer-len, --max-spacer-len\n"
+                       "Cycles: --cycle-min-length 47 --cycle-max-length 100 (inclusive)\n"
+                       "Filter: --array-filter-mode conservative|strict (default: conservative)\n"
                        "Quality: --spacer-variant-similarity 0.90 --max-spacer-similarity 0.60\n"
                        "         --max-repeat-spacer-similarity 0.60 --max-cycles 500 (exclusive)\n";
             return 0;
@@ -60,6 +62,9 @@ static int run_postprocess_arrays(int argc,char** argv) {
         if (arg=="--graph") settings.graph_input=value;
         else if (arg=="--cycles") cycles=value;
         else if (arg=="--output-folder") settings.output_folder=value;
+        else if (arg=="--cycle-min-length") settings.cycle_finder_settings.cycle_min_length=parse_cycle_length(value,"cycle-min-length");
+        else if (arg=="--cycle-max-length") settings.cycle_finder_settings.cycle_max_length=parse_cycle_length(value,"cycle-max-length");
+        else if (arg=="--array-filter-mode") settings.dna_sequence_settings.quality.strict=mcaat::arrays::parse_filter_mode(value);
         else if (arg=="--repeat-support") settings.dna_sequence_settings.repeat_support=mcaat::arrays::parse_repeat_support(value);
         else if (arg=="--spacer-variant-similarity") settings.dna_sequence_settings.quality.variant_similarity=mcaat::arrays::parse_fraction(value,"spacer-variant-similarity");
         else if (arg=="--max-spacer-similarity") settings.dna_sequence_settings.quality.max_spacer_similarity=mcaat::arrays::parse_fraction(value,"max-spacer-similarity");
@@ -73,6 +78,7 @@ static int run_postprocess_arrays(int argc,char** argv) {
     }
     if (settings.graph_input.empty() || cycles.empty() || settings.output_folder.empty())
         throw std::runtime_error("postprocess-arrays requires --graph, --cycles and --output-folder");
+    settings.cycle_finder_settings.validate();
     auto prefix=fs::is_directory(settings.graph_input)?settings.graph_input+"/graph":settings.graph_input;
     if (!fs::exists(prefix+".sdbg_info")) throw std::runtime_error("Graph metadata not found: "+prefix);
     omp_set_num_threads(1);
@@ -486,15 +492,16 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "  --output-folder <path>          Output directory  [default: mcaat_run_TIMESTAMP]\n"
                  << "  --ram <amount>                  Memory cap: B/K/M/G suffix  [default: 95% system]\n"
                  << "  --threads <num>                 Thread count  [default: CPU cores - 2]\n"
-                 << "  --cycle-max-length <int>        Maximum cycle length  [default: 77]\n"
+                 << "  --cycle-max-length <int>        Maximum cycle length, inclusive  [default: 100]\n"
                  << "  --cycle-precheck <bfs|unitig>   Start-node search [default: bfs]\n"
-                 << "  --cycle-min-length <int>        Minimum cycle length  [default: 27]\n"
+                 << "  --cycle-min-length <int>        Minimum cycle length, inclusive  [default: 47]\n"
                  << "  --threshold-multiplicity <int>  Edge multiplicity cutoff  [default: 20]\n"
                  << "  --low-abundance <true|false>    Low-abundance mode  [default: true]\n"
                  << "  --autoclean <true|false>         Remove intermediate files after run  [default: true]\n"
                  << "  --min-spacer-len <int>           Minimum spacer length  [default: 23]\n"
                  << "  --max-spacer-len <int>           Maximum spacer length  [default: 50]\n"
                  << "  --repeat-support <fraction>      Complete repeat path support in distinct cycles [default: 0.85]\n"
+                 << "  --array-filter-mode <conservative|strict>  Flag uncertain evidence or reject it [default: conservative]\n"
                  << "  --spacer-variant-similarity <fraction>  Group observed spacer variants [default: 0.90]\n"
                  << "  --max-spacer-similarity <fraction>      Mean similarity between spacer families [default: 0.60]\n"
                  << "  --max-repeat-spacer-similarity <fraction>  Mean repeat/spacer similarity [default: 0.60]\n"
@@ -602,7 +609,7 @@ Settings parse_arguments(int argc, char* argv[]) {
         else if (arg == "--cycle-max-length") {
             if (++i < argc) {
                 try {
-                    settings.cycle_finder_settings.cycle_max_length = stoi(argv[i]);
+                    settings.cycle_finder_settings.cycle_max_length = parse_cycle_length(argv[i],"cycle-max-length");
                 } catch (...) {
                     throw runtime_error("Error: Invalid value for --cycle-max-length: " + string(argv[i]));
                 }
@@ -612,7 +619,7 @@ Settings parse_arguments(int argc, char* argv[]) {
         } else if (arg == "--cycle-min-length") {
             if (++i < argc) {
                 try {
-                    settings.cycle_finder_settings.cycle_min_length = stoi(argv[i]);
+                    settings.cycle_finder_settings.cycle_min_length = parse_cycle_length(argv[i],"cycle-min-length");
                 } catch (...) {
                     throw runtime_error("Error: Invalid value for --cycle-min-length: " + string(argv[i]));
                 }
@@ -658,6 +665,9 @@ Settings parse_arguments(int argc, char* argv[]) {
         } else if (arg == "--repeat-support") {
             if (++i >= argc) throw runtime_error("Missing value for --repeat-support");
             settings.dna_sequence_settings.repeat_support = mcaat::arrays::parse_repeat_support(argv[i]);
+        } else if (arg == "--array-filter-mode") {
+            if (++i >= argc) throw runtime_error("Missing value for --array-filter-mode");
+            settings.dna_sequence_settings.quality.strict=mcaat::arrays::parse_filter_mode(argv[i]);
         } else if (arg == "--spacer-variant-similarity") {
             if (++i >= argc) throw runtime_error("Missing value for --spacer-variant-similarity");
             settings.dna_sequence_settings.quality.variant_similarity = mcaat::arrays::parse_fraction(argv[i],"spacer-variant-similarity");
@@ -696,6 +706,7 @@ Settings parse_arguments(int argc, char* argv[]) {
     if (!required_files_provided && input_files_default.empty() && settings.input_files.empty() && settings.graph_input.empty()) {
         throw runtime_error("Error: No input provided. Use --input-files <file1> [file2] or --graph <path>");
     }
+    settings.cycle_finder_settings.validate();
     // Set default output folder if not provided (only if not set by settings file)
     if (!output_folder_provided && settings.output_folder.empty()) {
         settings.output_folder = "mcaat_run_" + timestamp;
@@ -1047,6 +1058,7 @@ int main(int argc, char** argv) {
            << "    \"repeat_min_length\": " << settings.dna_sequence_settings.repeat_min_length << ",\n"
            << "    \"repeat_max_length\": " << settings.dna_sequence_settings.repeat_max_length << ",\n"
            << "    \"repeat_support\": " << std::setprecision(17) << settings.dna_sequence_settings.repeat_support << ",\n"
+           << "    \"array_filter_mode\": \"" << (settings.dna_sequence_settings.quality.strict ? "strict" : "conservative") << "\",\n"
            << "    \"variant_similarity\": " << settings.dna_sequence_settings.quality.variant_similarity << ",\n"
            << "    \"max_spacer_similarity\": " << settings.dna_sequence_settings.quality.max_spacer_similarity << ",\n"
            << "    \"max_repeat_spacer_similarity\": " << settings.dna_sequence_settings.quality.max_repeat_spacer_similarity << ",\n"

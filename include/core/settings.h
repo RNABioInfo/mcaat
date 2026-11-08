@@ -20,6 +20,15 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+inline int parse_cycle_length(const std::string& text,const std::string& name) {
+    size_t used=0;unsigned long long value=0;
+    try {value=std::stoull(text,&used);} catch (...) {used=0;}
+    if (text.empty() || text.find_first_not_of("0123456789")!=std::string::npos ||
+        used!=text.size() || value<1 || value>std::numeric_limits<int>::max())
+        throw std::invalid_argument(name+" must be a positive integer no larger than INT_MAX");
+    return int(value);
+}
+
 struct Settings {
     std::string input_files; // Path to the input files
     std::string graph_input;  // Path to a pre-built SDBG graph folder (skips build step)
@@ -36,10 +45,14 @@ struct Settings {
     struct CycleFinderSettings {
         uint64_t threshold_multiplicity = 20; // Minimum multiplicity threshold
         bool low_abundance = true; // Flag to enable low abundance mode
-        int cycle_max_length = 77; // Maximum length of a cycle
-        int cycle_min_length = 27; // Minimum length of a cycle
+        int cycle_max_length = 100; // Inclusive number of distinct k-mer nodes.
+        int cycle_min_length = 47;  // Closing start node is not counted twice.
         // Opt-in while graph-dependent performance is evaluated.
         std::string cycle_precheck = "bfs"; // bfs | unitig
+        void validate() const {
+            if (cycle_min_length<1 || cycle_min_length>cycle_max_length)
+                throw std::invalid_argument("cycle-min-length must be positive and <= cycle-max-length");
+        }
     } cycle_finder_settings;
     struct DNASequenceSettings {
         int spacer_min_length = 23; // Minimum length of a spacer
@@ -136,8 +149,8 @@ struct Settings {
     // graph=/path/to/graph
     // ram=4G
     // threads=4
-    // cycle-max-length=77
-    // cycle-min-length=27
+    // cycle-max-length=100
+    // cycle-min-length=47
     // threshold-multiplicity=20
     // low-abundance=true
     // autoclean=true
@@ -224,8 +237,8 @@ struct Settings {
             else if (key == "graph-folder") { this->graph_folder = val; }
             else if (key == "cycles-folder") { this->cycles_folder = val; }
             else if (key == "output-file") { this->output_file = val; }
-            else if (key == "cycle-max-length") { this->cycle_finder_settings.cycle_max_length = stoi(val); }
-            else if (key == "cycle-min-length") { this->cycle_finder_settings.cycle_min_length = stoi(val); }
+            else if (key == "cycle-max-length") { this->cycle_finder_settings.cycle_max_length = parse_cycle_length(val,key); }
+            else if (key == "cycle-min-length") { this->cycle_finder_settings.cycle_min_length = parse_cycle_length(val,key); }
             else if (key == "cycle-precheck") {
                 if (val != "bfs" && val != "unitig")
                     throw runtime_error("cycle-precheck must be bfs or unitig");
@@ -252,6 +265,9 @@ struct Settings {
             else if (key == "max-spacer-similarity") { dna_sequence_settings.quality.max_spacer_similarity=mcaat::arrays::parse_fraction(val,key); }
             else if (key == "max-repeat-spacer-similarity") { dna_sequence_settings.quality.max_repeat_spacer_similarity=mcaat::arrays::parse_fraction(val,key); }
             else if (key == "max-cycles") { dna_sequence_settings.quality.max_cycles=mcaat::arrays::parse_max_cycles(val); }
+            else if (key == "array-filter-mode") {
+                dna_sequence_settings.quality.strict=mcaat::arrays::parse_filter_mode(val);
+            }
             // unknown keys are ignored for forward-compatibility
         }
         file.close();

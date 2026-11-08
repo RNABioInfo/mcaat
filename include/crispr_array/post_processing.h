@@ -113,6 +113,8 @@ public:
             size_t(dna.repeat_min_length),size_t(dna.repeat_max_length),
             size_t(dna.spacer_min_length),size_t(dna.spacer_max_length)};
         options.quality=dna.quality;
+        options.cycle_min=settings.cycle_finder_settings.cycle_min_length;
+        options.cycle_max=settings.cycle_finder_settings.cycle_max_length;
         Graph graph(*settings.sdbg);
         RepeatFilter<Graph> filter(graph,options);
         auto groups=read_cycles(graph,cycles_file);

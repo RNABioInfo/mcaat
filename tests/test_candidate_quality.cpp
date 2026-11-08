@@ -21,7 +21,7 @@ int main() {
             for(size_t j=random()%101;j--;)b+="ACGT"[random()%4];
             check(edit_distance(a,b)==reference(a,b),"bit-vector distance differs from independent DP");
         }
-        QualityOptions options;
+        QualityOptions options;options.strict=true;
         std::string a(30,'A'),b=a,c=a;b[0]=b[1]='C';c[0]=c[1]=c[2]=c[3]='C';
         auto bridge=assess_quality(std::string(30,'G'),{a,b,c},3,options);
         check(bridge.families.size()==2,"similarity bridge incorrectly merged dissimilar endpoints");
@@ -34,6 +34,11 @@ int main() {
         auto diverse=assess_quality(std::string(30,'G'),{a,std::string(30,'T')},2,options);
         check(diverse.reason.empty() && diverse.families.size()==2,"dissimilar spacer families rejected");
         check(assess_quality(a,{a,b},500,options).reason=="cycle_limit","merged cycle bound ignored");
+        QualityOptions conservative;
+        auto flagged=assess_quality(std::string(30,'G'),{a,b},2,conservative);
+        check(flagged.reason.empty() && flagged.families.size()==1 && flagged.variants==2 && !flagged.flags.empty(),"display families must not delete two distinct observed spacers by default");
+        auto big=assess_quality(a,{a,b},500,conservative);
+        check(big.reason.empty() && big.families.size()==2 && big.flags.size()==2,"merged cycle limit must flag, preserve variants and skip quadratic grouping by default");
         options.variant_similarity=std::numeric_limits<double>::quiet_NaN();
         bool rejected=false;try{options.validate();}catch(const std::invalid_argument&){rejected=true;}
         check(rejected,"nonfinite quality threshold accepted");

@@ -42,10 +42,20 @@ struct ReportGraph {
 };
 int main(int argc,char** argv) {
     try {
-        if(argc!=3)throw std::runtime_error("replay_array_candidates INPUT_REPORT_DIR OUTPUT_DIR");
+        if(argc<3)throw std::runtime_error("replay_array_candidates INPUT_REPORT_DIR OUTPUT_DIR [--array-filter-mode conservative|strict] [--cycle-min-length 47 --cycle-max-length 100]");
         namespace fs=std::filesystem;fs::path input=argv[1],output=argv[2];
         if(fs::weakly_canonical(input)==fs::weakly_canonical(output))throw std::runtime_error("replay output must differ from input");
-        Options options;
+        Options options;options.cycle_min=47;options.cycle_max=100;
+        for(int i=3;i<argc;++i) {
+            std::string flag=argv[i];if(++i>=argc)throw std::runtime_error("missing value: "+flag);
+            if(flag=="--array-filter-mode")options.quality.strict=parse_filter_mode(argv[i]);
+            else if(flag=="--cycle-min-length" || flag=="--cycle-max-length") {
+                size_t used=0;auto n=std::stoull(argv[i],&used);
+                if(used!=std::string(argv[i]).size() || std::string(argv[i]).find_first_not_of("0123456789")!=std::string::npos || !n || n>std::numeric_limits<int>::max())throw std::runtime_error("invalid cycle length");
+                if(flag=="--cycle-min-length")options.cycle_min=n;else options.cycle_max=n;
+            } else throw std::runtime_error("unknown option: "+flag);
+        }
+
         rows(input/"CRISPR_graph_summary.tsv",[&](const Fields& r){
             if(r.at("metric")=="k")options.k=std::stoull(r.at("value"));
             if(r.at("metric")=="repeat_support")options.repeat_support=parse_repeat_support(r.at("value"));

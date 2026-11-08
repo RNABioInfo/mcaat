@@ -8,7 +8,7 @@ Use `--repeat-support 0.85` (the default), or set `repeat-support=0.85` in a set
 
 The denominator is the number of **distinct valid cycles in a candidate group**, initially the cycles collected from one start edge. Rotated copies of the same cycle count once. The numerator is the number of those cycles that contain the **entire same contiguous repeat path**, in the same direction, and pass repeat/spacer length bounds. This is neither nucleotide identity nor prevalence across organisms, reads, or all detected arrays.
 
-For example, 17 of 20 cycles meet 85% support; 12 of 20 meet 60%. The minimum is `max(2, ceil(support * cycle_count))`. Final accepted candidates require at least two distinct spacer families (defined below). Separate 85% majorities at different nodes cannot be combined into a path supported by only 70% of cycles.
+For example, 17 of 20 cycles meet 85% support; 12 of 20 meet 60%. The minimum is `max(2, ceil(support * cycle_count))`. Final accepted candidates require at least two distinct observed spacer sequences. Strict mode additionally requires two spacer families (defined below). Separate 85% majorities at different nodes cannot be combined into a path supported by only 70% of cycles.
 
 The algorithm enumerates observed contiguous paths meeting this support, retains paths that cannot extend further with sufficient support, and applies the configured length bounds. It chooses the longest qualifying path, then the highest support, then a deterministic graph-ID tie-break. The number of additional eligible repeat paths is reported. It retains the existing minimum median spacer/repeat length ratio of 0.5. It does not crop an overlong conserved path to make it pass the maximum repeat length.
 
@@ -54,7 +54,40 @@ scope and reproducible commands.
 
 These rules consolidate graph evidence. A pooled graph cannot establish that two identical repeat–spacer combinations came from the same physical locus. Nor does this output infer genomic spacer order. Additional read or assembly linkage is needed for those claims.
 
+## Cycle length range
+
+The default range is **47–100 inclusive**, measured as distinct k-mer nodes on
+the simple cycle, counting the returning start only once. Both CLI and settings
+accept `cycle-min-length` and `cycle-max-length`. Enumeration includes the stated
+minimum (the older implementation incorrectly used `>`), and enforces the
+maximum even when returning to the start.
+
+`postprocess-arrays` applies these bounds to saved input as well, before repeat
+inference, and reports excluded cycles. It cannot discover cycles missing from
+an earlier search. If the saved search stopped at 77, rerun ordinary MCAAT with
+`--graph`, minimum 47 and maximum 100; do not rebuild the graph or expect a
+post-processing replay to supply lengths 78–100.
+
 ## Final quality and competing assignments
+
+`--array-filter-mode conservative` is now the default. It retains candidates
+passing the structural, length and 85% support checks, and reports sequence
+heuristics as `quality_flags`. Similarity-based grouping annotates the variant table;
+it does not assert that nearby sequences are errors or delete candidates with
+two distinct observations in one display family. Within-candidate strand copies
+still count once. Original graph-compatible deduplication/merging still runs.
+
+Shared cycles across remaining candidates are preserved and explicitly listed
+in `CRISPR_graph_shared_cycles.tsv`; both candidates get a `shared_cycle_evidence`
+flag. Alternative partitions of the same circle are not proven false merely
+because another candidate was ranked first. Large merged candidates are flagged
+and quadratic grouping is skipped: each observed string is annotated as its own
+family in that case. The enumeration cap itself is unchanged.
+
+The numbered rejection/ownership procedure below describes **opt-in strict mode**
+(`--array-filter-mode strict`), introduced in commit `21f8f8d`. Its thresholds
+were not calibrated against the complete annotated metagenome, so it must not
+be the default used for sensitivity assessment.
 
 After repeat inference and compatible merges, candidates undergo an explicit
 curation pass. These are configurable heuristics, not probabilities or a trained
@@ -82,7 +115,7 @@ configured sequences use dynamic programming.
 3. Rank passing candidates by more spacer families, lower mean inter-family
    similarity, longer repeat path, then original candidate order. Assign each
    **complete circular sequence**, normalized over rotations and both strands,
-   to at most one accepted candidate. This is a deterministic evidence ownership
+   to at most one accepted candidate in strict mode. This is a deterministic evidence ownership
    convention, not proof that a chosen boundary or physical locus is correct.
 4. Remove already-owned cycles from each later candidate. Opposite-strand
    copies inside one candidate count once too; their alternative paths remain
@@ -109,26 +142,28 @@ stack could repeat the same work until the ten-million-step watchdog.
 
 ## Output
 
-`CRISPR_Arrays_N.txt` keeps the legacy text structure. Its repeat is an observed supported sequence; each spacer family contributes one observed representative, with its observed repeat variant when applicable. `spacers=` counts families and `sequence_variants=` counts distinct observed strings. Rows are sorted for deterministic output, not biological order.
+`CRISPR_Arrays_N.txt` keeps the legacy text structure. Its repeat is an observed supported sequence; every distinct observed spacer is displayed with its observed repeat variant when applicable. `spacers=` counts observed strings and `spacer_families=` counts similarity groups. Rows are sorted for deterministic output, not biological order.
 
 `CRISPR_graph_systems.tsv` has one row per retained candidate: repeat sequence, support numerator, distinct candidate-cycle denominator, assigned-cycle count, threshold, repeat vertices, source start edges, number of alternative repeat paths, original candidate ID, spacer-family count and sequence-variant count.
 
 `CRISPR_graph_paths.tsv` preserves every assigned cycle observation, including repeat variants, with its repeat/spacer strings, the four vertex categories, ordered complete cycle vertices, ordered actual SDBG edge handles, and whether it supports the selected repeat path. IDs are comma-separated; `-` means an empty path.
 
-`CRISPR_graph_candidates.tsv` records each retained system's candidate cycles and whether boundaries were assigned or unresolved. `CRISPR_graph_summary.tsv` records input, rejection, duplicate and merge counts. These files describe retained candidates. `spacers` in the summary now means
-spacer families; `sequence_variants` and `assigned_observations` are separate.
+`CRISPR_graph_candidates.tsv` records each retained system's candidate cycles and whether boundaries were assigned or unresolved. `CRISPR_graph_summary.tsv` records input, rejection, duplicate and merge counts. These files describe retained candidates. `spacers` and `sequence_variants` in the summary count distinct observed strings
+summed per candidate; `spacer_families` and `assigned_observations` are separate.
 Groups rejected during initial inference are still only counted in the summary.
 
 `CRISPR_spacer_variants.tsv` maps every retained observed spacer string to one
 family and an observed representative. CAS/phage graph-path readers still receive
-all variants, not just the text representatives.
+all variants, as does the main text report.
+
+`CRISPR_graph_shared_cycles.tsv` lists normalized circular sequences shared by retained candidates and their IDs. Complete overlap membership is stored once per cycle rather than as a quadratic set of candidate pairs; `competing_candidates` in the decision table lists exclusive-assignment competitors only in strict mode. `unique_circular_sequences` and `unique_spacer_sequences_across_arrays` in the summary separate globally deduplicated evidence counts from per-candidate totals. These are sequence counts, not inferred physical loci.
 
 `CRISPR_graph_decisions.tsv` records every candidate entering final curation,
 its original counts and sequence metrics, status, competing candidate IDs,
 retained observation count and accepted array ID. Metrics not computed after an
 early rejection are `NA`. Family counts are zero when grouping was skipped at
 the cycle limit. Candidate IDs refer to this table; array IDs are assigned only
-to accepted candidates. Original metrics describe the candidate before shared
+to accepted candidates. The `quality_flags` column describes retained evidence when accepted, and the original candidate otherwise. Original metrics describe the candidate before shared
 cycles were removed; retained counts describe the accepted residual candidate.
 
 `CRISPR_graph_alternatives.tsv` preserves every rejected or removed observation
@@ -156,7 +191,7 @@ mcaat postprocess-arrays \
   --repeat-support 0.60
 ```
 
-The command also accepts all four quality options described above, `--min-repeat-len`, `--max-repeat-len`, `--min-spacer-len`, and `--max-spacer-len`. It validates every k-mer and transition against the graph. Saved cycles must retain their original order and start; hand-rotating individual records changes which start groups they belong to. Normal full-pipeline execution uses in-memory cycle IDs, even when no cycles were found, rather than accidentally reusing a stale `cycles.txt`.
+The command also accepts `--array-filter-mode`, `--cycle-min-length`, `--cycle-max-length`, all four quality options described above, `--min-repeat-len`, `--max-repeat-len`, `--min-spacer-len`, and `--max-spacer-len`. It validates every k-mer and transition against the graph. Saved cycles must retain their original order and start; hand-rotating individual records changes which start groups they belong to. Normal full-pipeline execution uses in-memory cycle IDs, even when no cycles were found, rather than accidentally reusing a stale `cycles.txt`.
 
 Saved-cycle loading looks up the first k-mer of each record, checks each textual
 overlap, and follows the corresponding outgoing edge for subsequent k-mers.
