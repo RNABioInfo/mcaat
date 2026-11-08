@@ -200,7 +200,11 @@ public:
     // Final quality and evidence-ownership pass. Also usable by report-replay
     // checks: candidate_count must retain the original denominator, including
     // unresolved cycles when only assigned observations are available.
-    std::vector<System> curate(std::vector<System> systems,const Progress& progress={}) {
+    std::vector<System> curate(std::vector<System> systems,const Progress& progress={},
+                               const std::map<size_t,std::string>& exclusions={}) {
+        for (const auto& [id,reason]:exclusions)
+            if (!id || id>systems.size() || reason.empty())
+                throw std::invalid_argument("invalid external candidate exclusion");
         decisions.clear();
         stats.quality_rejected=stats.overlap_rejected=stats.shared_cycles_removed=stats.duplicate_strand_cycles=0;
         stats.curation_out_of_range_cycles=0;
@@ -239,6 +243,11 @@ public:
             for (const auto& row:system.observations)
                 keys.emplace(cycle_key(row.cycle),circular_sequence_key(row.repeat+row.spacer));
             assess(system);
+            auto exclusion=exclusions.find(system.candidate_id);
+            if (exclusion!=exclusions.end()) {
+                system.quality.flags.push_back(exclusion->second);
+                system.quality.reason="string_filter:"+exclusion->second;
+            }
             if (progress) progress("Candidate quality",i+1,systems.size());
         }
         std::vector<size_t> order(systems.size());std::iota(order.begin(),order.end(),0);

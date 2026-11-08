@@ -360,6 +360,25 @@ void test_curation_length_bounds() {
     options.repeat_max=28;options.spacer_min=options.spacer_max=32;RepeatFilter<Graph> no_spacers(f.g,options);
     check(no_spacers.curate({input}).empty() && no_spacers.decisions[0].status=="repeat_spacer_length_range","candidate with no length-valid spacers rejected explicitly");
 }
+void test_explicit_string_exclusions() {
+    Fixture f(23,28);for(int i=0;i<6;++i)f.append(f.repeat);
+    RepeatFilter<Graph> filter(f.g,f.o);
+    auto parent=assigned(f,{0,1,2,3,4,5}),child=assigned(f,{0,1,2});
+    auto result=filter.curate({parent,child},{},{{1,"short_motif_across_unit"}});
+    check(result.size()==1 && result[0].candidate_id==2 && result[0].observations.size()==3,
+          "explicit string rejection occurs before containment and cannot suppress an unflagged child");
+    check(filter.decisions[0].status=="string_filter:short_motif_across_unit" &&
+          filter.decisions[0].original.observations.size()==6 && filter.decisions[0].retained_paths.empty(),
+          "string-rejected observations and exact reason remain in the review decisions");
+    check(filter.stats.quality_rejected==1 && filter.stats.redundant_candidates==0,
+          "string rejection and redundancy are counted separately");
+    for(size_t id:{0,3}) {
+        bool failed=false;
+        try {filter.curate({parent,child},{},{{id,"short_motif_across_unit"}});}
+        catch(const std::invalid_argument&) {failed=true;}
+        check(failed,"unknown explicit exclusion ID rejected");
+    }
+}
 
 int main() {
     try {
@@ -371,6 +390,7 @@ int main() {
         test_threshold_and_variants();test_joint_support();test_deduplication();test_shifted_strands();
         test_incremental_deduplication();test_boundaries_and_rejections();test_curation_ownership();
         test_sequence_subset_removal();test_curation_length_bounds();
+        test_explicit_string_exclusions();
         std::cout<<checks<<" graph repeat-filter checks passed\n";
     }catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<'\n';return 1;}
 }

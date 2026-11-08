@@ -17,6 +17,48 @@ The input directory must contain `CRISPR_graph_summary.tsv`,
 MAFFT with one thread. The optional `--references /path/to/data` reads spacer
 records from `data/*/reference/*`; FASTA headers must start with `spacer`.
 
+## Apply the computed string filters
+
+The audit itself only scores candidates. To remove candidates meeting either of
+its two explicit rules, run the companion application step:
+
+```bash
+cmake -S tests -B build/array-tools -DBUILD_SDBG_BENCHMARK=OFF
+cmake --build build/array-tools --target replay_array_candidates -j 2
+python3 bench/apply_string_filter.py /path/to/mcaat-output results/string-audit \
+  results/string-filtered --replay-binary build/array-tools/replay_array_candidates
+```
+
+Use the exact input directory that was audited, and a new output directory. The
+application verifies SHA-256 hashes of all four input reports before using the
+audit, checks complete candidate-ID coverage, and rejects stale audits. It applies
+the short-motif/conserved-spacer union before exact circular-set deduplication.
+Boundary-only and single-family flags do not cause these string rejections.
+The supplied original cycle range and repeat/spacer length bounds are retained
+(older reports lacking repeat/spacer metadata use the existing 23–55/23–50
+defaults). No graph, cycle search or new alignment is needed for an existing audit.
+
+All removed observations are written to `CRISPR_graph_alternatives.tsv` with
+`string_filter:<reason>` or `redundant_circular_subset` decisions. The manifest
+`string_filter_rejections.tsv` uses original array IDs. Accepted reports receive
+new array IDs; `candidate_id` and `REPLAY_SCOPE.txt` preserve the mapping.
+`string_filter_summary.json` records parameters, input/audit hashes, counts, and
+available exact-reference comparison results.
+
+On the supplied 934-candidate run, applying the existing thresholds rejects 74
+candidates containing 6,609 spacer entries. Deduplicating the remaining evidence
+removes 24 more reports containing 577 entries. The result is **836 candidates
+and 16,699 reported spacer entries**, down from 934 and 23,885. All 7,186 excluded
+observations remain in alternatives. All 842 previously detected exact matches
+to the available local reference spacers remain. This is not a measurement of
+precision/recall against the full approximately 750 annotated arrays.
+
+This is an explicit post-processing stage. Ordinary `mcaat` execution does not
+implicitly run MAFFT or apply these string criteria. To score a new server run,
+first run `audit_string_structure.py`, then apply its result with the command
+above. The filtering thresholds remain configurable in the audit command;
+they were not adjusted to obtain a requested number of candidates.
+
 ## Method
 
 1. Keep each observed unit as `repeat | spacer`. Align the repeat and spacer
@@ -97,8 +139,10 @@ Examples in this run:
   neither proposed rejection-style rule flags it.
 
 These are reasons to inspect strings, not newly established biological labels.
-Neither rule is installed as a production rejection default. Full annotations
-and separate validation data are needed before choosing a production policy.
+Neither rule is installed as an implicit default of the main MCAAT binary. The
+explicit application command above now implements the requested rejections.
+Full annotations and separate validation data are needed to measure their
+classification accuracy.
 
 ## Tests and methodological context
 
@@ -107,6 +151,12 @@ gap handling, motif substitutions, reference-set deduplication, invalid inputs,
 preservation of strings by real MAFFT, boundary flags, and an end-to-end fixture
 where tandem-like strings are flagged while all positive-control spacers remain.
 MAFFT-dependent tests explicitly skip if MAFFT is absent.
+
+`python3 tests/test_apply_string_filter.py --replay-binary build/array-tools/replay_array_candidates`
+checks stale-input rejection, candidate-ID coverage, flag consistency, exclusion
+of boundary-only flags, CRLF inputs, and end-to-end preservation of rejected
+observations and positive-control spacers. The C++ graph-filter suite also checks
+that a string-rejected parent cannot suppress an unflagged contained candidate.
 
 [CRISPRDetect](https://doi.org/10.1186/s12864-016-2627-0) uses alignments to refine
 repeat boundaries and distinguish tandem repeats. This audit uses that general

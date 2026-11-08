@@ -13,8 +13,9 @@ Path path(const std::string& s) {
 }
 template<class F> void rows(const std::filesystem::path& file,F f) {
     std::ifstream in(file);if(!in)throw std::runtime_error("cannot read "+file.string());
-    std::string line;std::getline(in,line);auto names=split(line,'\t');
+    std::string line;std::getline(in,line);if(!line.empty() && line.back()=='\r')line.pop_back();auto names=split(line,'\t');
     while(std::getline(in,line)) {
+        if(!line.empty() && line.back()=='\r')line.pop_back();
         if(line.empty())continue;auto values=split(line,'\t');
         if(values.size()!=names.size())throw std::runtime_error("column mismatch: "+file.string());
         Fields row;for(size_t i=0;i<names.size();++i)row[names[i]]=values[i];f(row);
@@ -42,10 +43,11 @@ struct ReportGraph {
 };
 int main(int argc,char** argv) {
     try {
-        if(argc<3)throw std::runtime_error("replay_array_candidates INPUT_REPORT_DIR OUTPUT_DIR [--array-filter-mode conservative|strict] [--cycle-min-length 47 --cycle-max-length 100]");
+        if(argc<3)throw std::runtime_error("replay_array_candidates INPUT_REPORT_DIR OUTPUT_DIR [--array-filter-mode conservative|strict] [--cycle-min-length 47 --cycle-max-length 100] [--reject-candidates decisions.tsv]");
         namespace fs=std::filesystem;fs::path input=argv[1],output=argv[2];
         if(fs::weakly_canonical(input)==fs::weakly_canonical(output))throw std::runtime_error("replay output must differ from input");
         Options options;options.cycle_min=47;options.cycle_max=100;
+        fs::path rejection_file;
         rows(input/"CRISPR_graph_summary.tsv",[&](const Fields& r){
             const auto& key=r.at("metric");const auto& value=r.at("value");
             if(key=="k")options.k=std::stoull(value);
@@ -58,6 +60,7 @@ int main(int argc,char** argv) {
         for(int i=3;i<argc;++i) {
             std::string flag=argv[i];if(++i>=argc)throw std::runtime_error("missing value: "+flag);
             if(flag=="--array-filter-mode")options.quality.strict=parse_filter_mode(argv[i]);
+            else if(flag=="--reject-candidates")rejection_file=argv[i];
             else if(flag=="--cycle-min-length" || flag=="--cycle-max-length" ||
                     flag=="--min-repeat-len" || flag=="--max-repeat-len" ||
                     flag=="--min-spacer-len" || flag=="--max-spacer-len") {
@@ -94,8 +97,19 @@ int main(int argc,char** argv) {
             if(expected[i]!=systems[i].observations.size() || support!=systems[i].support_count)throw std::runtime_error("report counts disagree");
         }
         RepeatFilter<ReportGraph> filter(graph,options);filter.stats.input_cycles=total;filter.stats.input_groups=systems.size();
+        std::map<size_t,std::string> exclusions;
+        if (!rejection_file.empty()) rows(rejection_file,[&](const Fields& r) {
+            const auto found=ids.find(r.at("array_id"));
+            if (found==ids.end())throw std::runtime_error("unknown rejected array: "+r.at("array_id"));
+            const auto& reason=r.at("reason");
+            if (reason!="short_motif_across_unit" && reason!="conservation_across_spacer" &&
+                reason!="short_motif_across_unit+conservation_across_spacer")
+                throw std::runtime_error("unknown string-filter reason: "+reason);
+            if (!exclusions.emplace(found->second+1,reason).second)
+                throw std::runtime_error("duplicate rejected array: "+r.at("array_id"));
+        });
         auto started=std::chrono::steady_clock::now();
-        auto accepted=filter.curate(std::move(systems));
+        auto accepted=filter.curate(std::move(systems),{},exclusions);
         const double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
         write_array_outputs(graph,filter,options,accepted,output.string());
         auto scope=array_output(output/"REPLAY_SCOPE.txt");
