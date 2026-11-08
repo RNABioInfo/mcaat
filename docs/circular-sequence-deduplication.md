@@ -43,7 +43,12 @@ as alternatives; their cycles are not silently removed from the support denomina
 Support and the minimum two observed spacers are checked after exclusion. The four
 configured bounds and exclusion counts are included in the output summary.
 
-## Supplied 47–100 run
+## Supplied 47–100 run: deduplication-only comparison
+
+These measurements isolate the exact-set deduplication change. Current MCAAT also
+runs native string filtering by default; see [string filtering](string-structure-audit.md)
+for the combined results. Use `--string-filter off` only to reproduce this older
+deduplication-only comparison.
 
 | Measurement | Before | After |
 |---|---:|---:|
@@ -76,7 +81,7 @@ to trace original names.
 cmake -S tests -B build/array-tools -DBUILD_SDBG_BENCHMARK=OFF
 cmake --build build/array-tools --target replay_array_candidates -j 2
 build/array-tools/replay_array_candidates /path/to/reports /path/to/new-output \
-  --array-filter-mode conservative --cycle-min-length 47 --cycle-max-length 100 \
+  --array-filter-mode conservative --string-filter off --cycle-min-length 47 --cycle-max-length 100 \
   --min-repeat-len 23 --max-repeat-len 55 --min-spacer-len 23 --max-spacer-len 50
 python3 bench/check_array_curation_output.py /path/to/reports /path/to/new-output
 ```

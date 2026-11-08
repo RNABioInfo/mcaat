@@ -53,6 +53,9 @@ static int run_postprocess_arrays(int argc,char** argv) {
                        "Optional: --min-repeat-len, --max-repeat-len, --min-spacer-len, --max-spacer-len\n"
                        "Cycles: --cycle-min-length 47 --cycle-max-length 100 (inclusive)\n"
                        "Filter: --array-filter-mode conservative|strict (default: conservative)\n"
+                       "String filters: --string-filter on|off (default: on; native, no external tools)\n"
+                       "  --string-column-support .85 --string-motif-identity .90 --string-motif-support .85\n"
+                       "  --string-conserved-spacer-fraction .80 --string-max-contrast .15\n"
                        "Quality: --spacer-variant-similarity 0.90 --max-spacer-similarity 0.60\n"
                        "         --max-repeat-spacer-similarity 0.60 --max-cycles 500 (exclusive)\n";
             return 0;
@@ -65,6 +68,7 @@ static int run_postprocess_arrays(int argc,char** argv) {
         else if (arg=="--cycle-min-length") settings.cycle_finder_settings.cycle_min_length=parse_cycle_length(value,"cycle-min-length");
         else if (arg=="--cycle-max-length") settings.cycle_finder_settings.cycle_max_length=parse_cycle_length(value,"cycle-max-length");
         else if (arg=="--array-filter-mode") settings.dna_sequence_settings.quality.strict=mcaat::arrays::parse_filter_mode(value);
+        else if (mcaat::arrays::set_string_filter_option(arg,value,settings.dna_sequence_settings.strings)) {}
         else if (arg=="--repeat-support") settings.dna_sequence_settings.repeat_support=mcaat::arrays::parse_repeat_support(value);
         else if (arg=="--spacer-variant-similarity") settings.dna_sequence_settings.quality.variant_similarity=mcaat::arrays::parse_fraction(value,"spacer-variant-similarity");
         else if (arg=="--max-spacer-similarity") settings.dna_sequence_settings.quality.max_spacer_similarity=mcaat::arrays::parse_fraction(value,"max-spacer-similarity");
@@ -502,6 +506,12 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "  --max-spacer-len <int>           Maximum spacer length  [default: 50]\n"
                  << "  --repeat-support <fraction>      Complete repeat path support in distinct cycles [default: 0.85]\n"
                  << "  --array-filter-mode <conservative|strict>  Flag uncertain evidence or reject it [default: conservative]\n"
+                 << "  --string-filter <on|off>         Native motif/conservation filters [default: on]\n"
+                 << "  --string-column-support <fraction>          [default: 0.85]\n"
+                 << "  --string-motif-identity <fraction>          [default: 0.90]\n"
+                 << "  --string-motif-support <fraction>           [default: 0.85]\n"
+                 << "  --string-conserved-spacer-fraction <fraction> [default: 0.80]\n"
+                 << "  --string-max-contrast <fraction>            [default: 0.15]\n"
                  << "  --spacer-variant-similarity <fraction>  Group observed spacer variants [default: 0.90]\n"
                  << "  --max-spacer-similarity <fraction>      Mean similarity between spacer families [default: 0.60]\n"
                  << "  --max-repeat-spacer-similarity <fraction>  Mean repeat/spacer similarity [default: 0.60]\n"
@@ -668,6 +678,9 @@ Settings parse_arguments(int argc, char* argv[]) {
         } else if (arg == "--array-filter-mode") {
             if (++i >= argc) throw runtime_error("Missing value for --array-filter-mode");
             settings.dna_sequence_settings.quality.strict=mcaat::arrays::parse_filter_mode(argv[i]);
+        } else if (mcaat::arrays::string_filter_option(arg)) {
+            if (++i >= argc) throw runtime_error("Missing value for "+arg);
+            mcaat::arrays::set_string_filter_option(arg,argv[i],settings.dna_sequence_settings.strings);
         } else if (arg == "--spacer-variant-similarity") {
             if (++i >= argc) throw runtime_error("Missing value for --spacer-variant-similarity");
             settings.dna_sequence_settings.quality.variant_similarity = mcaat::arrays::parse_fraction(argv[i],"spacer-variant-similarity");
@@ -1059,6 +1072,13 @@ int main(int argc, char** argv) {
            << "    \"repeat_max_length\": " << settings.dna_sequence_settings.repeat_max_length << ",\n"
            << "    \"repeat_support\": " << std::setprecision(17) << settings.dna_sequence_settings.repeat_support << ",\n"
            << "    \"array_filter_mode\": \"" << (settings.dna_sequence_settings.quality.strict ? "strict" : "conservative") << "\",\n"
+           << "    \"string_filter\": \"" << (settings.dna_sequence_settings.strings.enabled ? "on" : "off") << "\",\n"
+           << "    \"string_alignment\": \"spoa_global_msa\",\n"
+           << "    \"string_column_support\": " << settings.dna_sequence_settings.strings.column_support << ",\n"
+           << "    \"string_motif_identity\": " << settings.dna_sequence_settings.strings.motif_identity << ",\n"
+           << "    \"string_motif_support\": " << settings.dna_sequence_settings.strings.motif_support << ",\n"
+           << "    \"string_conserved_spacer_fraction\": " << settings.dna_sequence_settings.strings.conserved_spacer_fraction << ",\n"
+           << "    \"string_max_contrast\": " << settings.dna_sequence_settings.strings.max_contrast << ",\n"
            << "    \"variant_similarity\": " << settings.dna_sequence_settings.quality.variant_similarity << ",\n"
            << "    \"max_spacer_similarity\": " << settings.dna_sequence_settings.quality.max_spacer_similarity << ",\n"
            << "    \"max_repeat_spacer_similarity\": " << settings.dna_sequence_settings.quality.max_repeat_spacer_similarity << ",\n"

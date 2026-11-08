@@ -18,7 +18,7 @@ inline bool owned_array_file(const std::string& name) {
     }
     static const std::set<std::string> names={"CRISPR_graph_paths.tsv","CRISPR_graph_systems.tsv",
         "CRISPR_graph_candidates.tsv","CRISPR_graph_summary.tsv","CRISPR_spacer_variants.tsv",
-        "CRISPR_graph_decisions.tsv","CRISPR_graph_alternatives.tsv","CRISPR_graph_review_cycles.tsv","CRISPR_graph_shared_cycles.tsv"};
+        "CRISPR_graph_decisions.tsv","CRISPR_graph_alternatives.tsv","CRISPR_graph_review_cycles.tsv","CRISPR_graph_shared_cycles.tsv","CRISPR_string_scores.tsv"};
     return names.count(name);
 }
 
@@ -114,9 +114,22 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
         alternatives<<"candidate_id\treason\t"<<path_header;
         auto review=array_output(staging/"CRISPR_graph_review_cycles.tsv");
         review<<"candidate_id\tstatus\tcycle_vertices\tboundary_assignment\n";
+        auto string_scores=array_output(staging/"CRISPR_string_scores.tsv");
+        string_scores<<"candidate_id\tstatus\tevaluated\tscored_observations\tspacer_families\talignment_scored\talignment_skipped"
+                       "\tshort_motif_fraction\tmean_short_motif_identity\trepeat_columns\tspacer_columns\trepeat_conservation"
+                       "\tspacer_conservation\tconserved_spacer_fraction\tshort_motif_rule\tconserved_spacer_rule\n";
         size_t review_observations=0,known_review_cycles=0;
         for (const auto& d:filter.decisions) {
             const auto& s=d.original;auto found=accepted.find(s.candidate_id);
+            const auto& q=d.strings;
+            string_scores<<s.candidate_id<<'\t'<<d.status<<'\t'<<q.evaluated<<'\t'<<q.observations<<'\t'<<q.families
+                <<'\t'<<q.alignment_scored<<'\t'<<q.alignment_skipped<<'\t';
+            if(q.evaluated)string_scores<<std::setprecision(17)<<q.motif_fraction<<'\t'<<q.mean_motif_identity;
+            else string_scores<<"NA\tNA";
+            string_scores<<'\t'<<q.repeat_columns<<'\t'<<q.spacer_columns<<'\t';
+            if(q.alignment_scored)string_scores<<q.repeat_conservation<<'\t'<<q.spacer_conservation<<'\t'<<q.conserved_spacer_fraction;
+            else string_scores<<"NA\tNA\tNA";
+            string_scores<<'\t'<<q.short_motif<<'\t'<<q.conserved_spacer<<'\n';
             Path competing(d.competing_candidates.begin(),d.competing_candidates.end());
             decisions<<s.candidate_id<<'\t'<<d.status<<'\t'<<(found==accepted.end()?"-":found->second.first)<<'\t'
                 <<filter.spell(s.repeat_path)<<'\t'<<s.candidate_count<<'\t'<<s.observations.size()<<'\t'
@@ -148,6 +161,13 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
         auto stats=array_output(staging/"CRISPR_graph_summary.tsv");const auto& s=filter.stats;
         stats<<"metric\tvalue\nrepeat_support\t"<<std::setprecision(17)<<options.repeat_support<<"\nk\t"<<options.k
              <<"\narray_filter_mode\t"<<(options.quality.strict?"strict":"conservative")
+             <<"\nstring_filter\t"<<(options.strings.enabled?"on":"off")
+             <<"\nstring_alignment\tspoa_global_msa"
+             <<"\nstring_column_support\t"<<options.strings.column_support
+             <<"\nstring_motif_identity\t"<<options.strings.motif_identity
+             <<"\nstring_motif_support\t"<<options.strings.motif_support
+             <<"\nstring_conserved_spacer_fraction\t"<<options.strings.conserved_spacer_fraction
+             <<"\nstring_max_contrast\t"<<options.strings.max_contrast
              <<"\ncycle_min_length\t"<<options.cycle_min<<"\ncycle_max_length\t"<<options.cycle_max
              <<"\nrepeat_min_length\t"<<options.repeat_min<<"\nrepeat_max_length\t"<<options.repeat_max
              <<"\nspacer_min_length\t"<<options.spacer_min<<"\nspacer_max_length\t"<<options.spacer_max
@@ -163,12 +183,15 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
              <<"\nredundant_candidates_removed\t"<<s.redundant_candidates
              <<"\nredundant_observations_removed\t"<<s.redundant_observations
              <<"\nsequence_subset_checks\t"<<s.sequence_subset_checks
+             <<"\nnative_string_scored_candidates\t"<<s.string_scored
+             <<"\nnative_string_rejected_candidates\t"<<s.string_rejected
+             <<"\nstring_alignment_skipped_candidates\t"<<s.string_alignment_skipped
              <<"\nshared_circular_sequences\t"<<shared_count<<"\nunique_circular_sequences\t"<<cycle_arrays.size()
              <<"\nunique_spacer_sequences_across_arrays\t"<<distinct_spacers.size()
              <<"\narrays\t"<<systems.size()<<"\nspacers\t"<<variant_count
              <<"\nspacer_families\t"<<families<<"\nsequence_variants\t"<<variant_count<<"\nassigned_observations\t"<<observations
              <<"\nreview_observations\t"<<review_observations<<"\nknown_review_cycles\t"<<known_review_cycles<<"\nunresolved_candidate_cycles\t"<<unresolved<<'\n';
-        paths.close();summary.close();candidates.close();variants.close();arrays.close();decisions.close();alternatives.close();review.close();shared.close();stats.close();
+        paths.close();summary.close();candidates.close();variants.close();arrays.close();decisions.close();alternatives.close();review.close();shared.close();string_scores.close();stats.close();
         // Finish all serialization before replacing processor-owned files.
         for (const auto& item:fs::directory_iterator(destination))
             if (item.is_regular_file() && owned_array_file(item.path().filename().string())) fs::remove(item.path());
@@ -176,7 +199,8 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
         fs::remove(staging);
         std::cout<<"  ▸ Graph filtering: "<<systems.size()<<" candidates, "<<families<<" spacer families, "<<variant_count<<" sequence variants\n"
                  <<"  ▸ Review: "<<s.quality_rejected<<" quality rejections, "<<s.overlap_rejected<<" overlap rejections, "
-                 <<s.redundant_candidates<<" redundant candidates removed; "<<review_observations<<" alternative observations\n";
+                 <<s.redundant_candidates<<" redundant candidates removed; "<<review_observations<<" alternative observations\n"
+                 <<"  ▸ Native string filtering: "<<s.string_rejected<<" rejected / "<<s.string_scored<<" scored candidates\n";
     } catch (...) {std::error_code ec;fs::remove_all(staging,ec);throw;}
 }
 } // namespace mcaat::arrays

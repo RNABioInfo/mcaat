@@ -380,6 +380,38 @@ void test_explicit_string_exclusions() {
     }
 }
 
+void test_native_filter_default() {
+    Graph graph{23};
+    const std::string motif="AGTCGATGCATCAGGATCCGA";
+    auto unit=motif+motif+motif;
+    unit[5]='C';unit[26]='G';
+    std::vector<Path> cycles;
+    // Differences at 31 and 62 delimit a common 31-base repeat exactly.
+    for(auto positions:{std::vector<size_t>{31,41,51,62},std::vector<size_t>{33,43,53,61}}) {
+        auto variant=unit;for(auto i:positions)variant=mutate(variant,i);
+        auto path=graph.add(variant);
+        check(std::set<Node>(path.begin(),path.end()).size()==path.size(),"native integration fixture uses simple cycles");
+        cycles.push_back(path);
+    }
+    Options options;options.k=23;options.repeat_min=options.repeat_max=31;
+    options.spacer_min=options.spacer_max=32;
+    RepeatFilter<Graph> filter(graph,options);
+    auto filtered=filter.run({{1,cycles}});
+    if(!filtered.empty() || filter.stats.string_rejected!=1) {
+        std::cerr<<"native fixture: kept="<<filtered.size()<<" missing_repeat="<<filter.stats.groups_without_repeat
+                 <<" scored="<<filter.stats.string_scored<<" rejected="<<filter.stats.string_rejected<<'\n';
+        for(const auto& d:filter.decisions)std::cerr<<d.status<<" families="<<d.strings.families<<" motif="<<d.strings.motif_fraction<<'\n';
+    }
+    check(filtered.empty() && filter.stats.string_rejected==1,
+          "ordinary graph-cycle processing rejects motif evidence by default without external scores");
+    check(filter.decisions.size()==1 && filter.decisions[0].status=="string_filter:short_motif_across_unit" &&
+          filter.decisions[0].original.observations.size()==2,"native rejection retains exact evidence");
+    options.strings.enabled=false;RepeatFilter<Graph> unfiltered(graph,options);
+    auto result=unfiltered.run({{1,cycles}});
+    check(result.size()==1 && result[0].observations.size()==2 && unfiltered.stats.string_scored==0,
+          "explicit off restores pre-filter candidate for the same graph and cycles");
+}
+
 int main() {
     try {
         for(auto s:{"0","-0.1","1.01","nan","inf","85%",".6junk",""}) {
@@ -390,7 +422,7 @@ int main() {
         test_threshold_and_variants();test_joint_support();test_deduplication();test_shifted_strands();
         test_incremental_deduplication();test_boundaries_and_rejections();test_curation_ownership();
         test_sequence_subset_removal();test_curation_length_bounds();
-        test_explicit_string_exclusions();
+        test_explicit_string_exclusions();test_native_filter_default();
         std::cout<<checks<<" graph repeat-filter checks passed\n";
     }catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<'\n';return 1;}
 }

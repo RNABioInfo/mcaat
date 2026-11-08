@@ -70,12 +70,21 @@ post-processing replay to supply lengths 78–100.
 
 ## Final quality and competing assignments
 
-`--array-filter-mode conservative` is now the default. It retains candidates
-passing the structural, length and 85% support checks, and reports sequence
-heuristics as `quality_flags`. Similarity-based grouping annotates the variant table;
+`--array-filter-mode conservative` is the default for the older pairwise
+similarity/ownership checks. Their sequence heuristics are reported as
+`quality_flags`. Similarity-based grouping annotates the variant table;
 it does not assert that nearby sequences are errors or delete candidates with
 two distinct observations in one display family. Within-candidate strand copies
 still count once. Original graph-compatible deduplication/merging still runs.
+
+The native **string filters run by default in both modes**, after structural,
+length and support checks. Short-motif repetition and conservation across the
+assigned spacer region cause explicit rejection. They run inside normal MCAAT
+and saved-cycle post-processing, using bundled SPOA only for alignment/scoring,
+without changing any observed sequence or boundary. `CRISPR_string_scores.tsv`
+records every candidate's evidence; rejected observations remain in alternatives.
+See [string filtering](string-structure-audit.md) for formulas, configurable
+thresholds and the explicit `--string-filter off` comparison override.
 
 Final curation also removes a candidate when every assigned circular sequence
 is contained in **one** retained candidate, regardless of repeat-boundary shifts.
@@ -206,7 +215,7 @@ mcaat postprocess-arrays \
   --repeat-support 0.60
 ```
 
-The command also accepts `--array-filter-mode`, `--cycle-min-length`, `--cycle-max-length`, all four quality options described above, `--min-repeat-len`, `--max-repeat-len`, `--min-spacer-len`, and `--max-spacer-len`. It validates every k-mer and transition against the graph. Saved cycles must retain their original order and start; hand-rotating individual records changes which start groups they belong to. Normal full-pipeline execution uses in-memory cycle IDs, even when no cycles were found, rather than accidentally reusing a stale `cycles.txt`.
+The command also accepts `--array-filter-mode`, `--cycle-min-length`, `--cycle-max-length`, all native string-filter and quality options described above, `--min-repeat-len`, `--max-repeat-len`, `--min-spacer-len`, and `--max-spacer-len`. It validates every k-mer and transition against the graph. Saved cycles must retain their original order and start; hand-rotating individual records changes which start groups they belong to. Normal full-pipeline execution uses in-memory cycle IDs, even when no cycles were found, rather than accidentally reusing a stale `cycles.txt`.
 
 Saved-cycle loading looks up the first k-mer of each record, checks each textual
 overlap, and follows the corresponding outgoing edge for subsequent k-mers.

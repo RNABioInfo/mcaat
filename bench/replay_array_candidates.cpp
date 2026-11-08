@@ -60,6 +60,7 @@ int main(int argc,char** argv) {
         for(int i=3;i<argc;++i) {
             std::string flag=argv[i];if(++i>=argc)throw std::runtime_error("missing value: "+flag);
             if(flag=="--array-filter-mode")options.quality.strict=parse_filter_mode(argv[i]);
+            else if(set_string_filter_option(flag,argv[i],options.strings)) {}
             else if(flag=="--reject-candidates")rejection_file=argv[i];
             else if(flag=="--cycle-min-length" || flag=="--cycle-max-length" ||
                     flag=="--min-repeat-len" || flag=="--max-repeat-len" ||

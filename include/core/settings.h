@@ -61,6 +61,7 @@ struct Settings {
         int repeat_max_length = 55; // Maximum length of a repeat
         double repeat_support = 0.85; // Fraction of distinct candidate cycles sharing the complete repeat path
         mcaat::arrays::QualityOptions quality;
+        mcaat::arrays::StringFilterOptions strings;
     } dna_sequence_settings;
 
     SDBG* sdbg = nullptr; // Pointer to the SDBG graph
@@ -265,6 +266,7 @@ struct Settings {
             else if (key == "max-spacer-similarity") { dna_sequence_settings.quality.max_spacer_similarity=mcaat::arrays::parse_fraction(val,key); }
             else if (key == "max-repeat-spacer-similarity") { dna_sequence_settings.quality.max_repeat_spacer_similarity=mcaat::arrays::parse_fraction(val,key); }
             else if (key == "max-cycles") { dna_sequence_settings.quality.max_cycles=mcaat::arrays::parse_max_cycles(val); }
+            else if (mcaat::arrays::set_string_filter_option(key,val,dna_sequence_settings.strings)) {}
             else if (key == "array-filter-mode") {
                 dna_sequence_settings.quality.strict=mcaat::arrays::parse_filter_mode(val);
             }

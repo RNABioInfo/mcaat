@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the real CLI, saved-cycle replay and parameter validation on a small graph."""
 import argparse
+import csv
 import json
 from pathlib import Path
 import subprocess
@@ -45,6 +46,16 @@ for flag in ('--cycle-min-length','--cycle-max-length'):
 for prefix in ([],['postprocess-arrays']):
     result=run(('post-' if prefix else '')+'invalid-filter-mode',[*prefix,'--array-filter-mode','garbage'],False)
     assert 'array-filter-mode' in result.stderr
+for flag,values in [('--string-filter',('yes','')),('--string-column-support',('0','nan','1.01')),
+                    ('--string-motif-identity',('-1','85%')),('--string-motif-support',('inf','.9junk')),
+                    ('--string-conserved-spacer-fraction',('0','1.2')),('--string-max-contrast',('-0.1','nan'))]:
+    for i,value in enumerate(values):
+        for prefix in ([],['postprocess-arrays']):
+            result=run(('post-' if prefix else '')+flag[2:]+str(i),[*prefix,flag,value],False)
+            assert flag[2:] in result.stderr
+for prefix in ([],['postprocess-arrays']):
+    result=run(('post-' if prefix else '')+'missing-string-value',[*prefix,'--string-filter'],False)
+    assert 'string-filter' in result.stderr
 result=run('reversed-cycle-bounds',['--graph',a.graph,'--cycle-min-length','101','--cycle-max-length','100'],False)
 assert 'cycle-min-length' in result.stderr
 
@@ -53,30 +64,42 @@ default = a.output / 'default85'
 run('default85', [*common, '--output-folder', default])
 default_params=json.loads((default / 'parameters.json').read_text())
 assert default_params['dna_sequence']['repeat_support']==.85 and default_params['dna_sequence']['array_filter_mode']=='conservative'
+assert default_params['dna_sequence']['string_filter']=='on'
+assert default_params['dna_sequence']['string_column_support']==.85
+with (default/'CRISPR_string_scores.tsv').open() as f:
+    scores=list(csv.DictReader(f,delimiter='\t'))
+assert scores and any(r['evaluated']=='1' for r in scores),'ordinary pipeline did not run native scoring'
 assert default_params['cycle_finder']['cycle_min_length']==47 and default_params['cycle_finder']['cycle_max_length']==100
 for line in (default/'cycles.txt').read_text().splitlines():
     if line and not line.startswith('#'):
         words=line.split();count=len(words)-(words[0]==words[-1]);assert 47<=count<=100
 replay = a.output / 'replay85'
 run('replay85', ['postprocess-arrays', '--graph', a.graph, '--cycles', default / 'cycles.txt', '--output-folder', replay])
-for filename in ('CRISPR_Arrays_1.txt', 'CRISPR_graph_paths.tsv', 'CRISPR_graph_systems.tsv', 'CRISPR_graph_candidates.tsv', 'CRISPR_graph_summary.tsv', 'CRISPR_graph_decisions.tsv', 'CRISPR_graph_alternatives.tsv', 'CRISPR_graph_review_cycles.tsv', 'CRISPR_spacer_variants.tsv', 'CRISPR_graph_shared_cycles.tsv'):
+for filename in ('CRISPR_Arrays_1.txt', 'CRISPR_graph_paths.tsv', 'CRISPR_graph_systems.tsv', 'CRISPR_graph_candidates.tsv', 'CRISPR_graph_summary.tsv', 'CRISPR_graph_decisions.tsv', 'CRISPR_graph_alternatives.tsv', 'CRISPR_graph_review_cycles.tsv', 'CRISPR_spacer_variants.tsv', 'CRISPR_graph_shared_cycles.tsv','CRISPR_string_scores.tsv'):
     assert (default / filename).read_bytes() == (replay / filename).read_bytes(), filename
 
 config = a.output / 'support60.settings'
 config.write_text('repeat-support=0.60\nspacer-variant-similarity=0.95\nmax-spacer-similarity=0.7\nmax-repeat-spacer-similarity=0.8\nmax-cycles=600\narray-filter-mode=strict\ncycle-min-length=48\ncycle-max-length=99\n')
+with config.open('a') as f:
+    f.write('string-filter=off\nstring-column-support=.7\nstring-motif-identity=.95\nstring-motif-support=.8\nstring-conserved-spacer-fraction=.9\nstring-max-contrast=.1\n')
 configured = a.output / 'configured60'
 run('configured60', [*common, '--output-folder', configured, '--settings', config])
 params=json.loads((configured / 'parameters.json').read_text())['dna_sequence']
 assert params['array_filter_mode']=='strict'
+assert params['string_filter']=='off' and params['string_column_support']==.7
+assert params['string_motif_identity']==.95 and params['string_motif_support']==.8
+assert params['string_conserved_spacer_fraction']==.9 and params['string_max_contrast']==.1
+with (configured/'CRISPR_string_scores.tsv').open() as f:
+    assert all(r['evaluated']=='0' for r in csv.DictReader(f,delimiter='\t'))
 assert json.loads((configured/'parameters.json').read_text())['cycle_finder']['cycle_min_length']==48
 assert params['repeat_support']==.60 and params['variant_similarity']==.95 and params['max_spacer_similarity']==.7 and params['max_repeat_spacer_similarity']==.8 and params['max_cycles']==600
 
 override = a.output / 'override85'
-run('override85', [*common, '--output-folder', override, '--settings', config, '--repeat-support', '.85','--spacer-variant-similarity','.90','--max-spacer-similarity','.60','--max-repeat-spacer-similarity','.60','--max-cycles','500','--array-filter-mode','conservative','--cycle-min-length','47','--cycle-max-length','100'])
+run('override85', [*common, '--output-folder', override, '--settings', config, '--repeat-support', '.85','--spacer-variant-similarity','.90','--max-spacer-similarity','.60','--max-repeat-spacer-similarity','.60','--max-cycles','500','--array-filter-mode','conservative','--cycle-min-length','47','--cycle-max-length','100','--string-filter','on','--string-column-support','.85','--string-motif-identity','.90','--string-motif-support','.85','--string-conserved-spacer-fraction','.80','--string-max-contrast','.15'])
 assert json.loads((override / 'parameters.json').read_text())['dna_sequence']['repeat_support'] == .85
 assert (override / 'CRISPR_graph_paths.tsv').read_bytes() == (default / 'CRISPR_graph_paths.tsv').read_bytes()
+assert (override / 'CRISPR_string_scores.tsv').read_bytes() == (default / 'CRISPR_string_scores.tsv').read_bytes()
 # Every displayed row must include the full observed spacer set, not just medoids.
-import csv
 for folder in (default,replay,configured,override):
     with (folder/'CRISPR_graph_paths.tsv').open() as f:
         expected={(r['array_id'],r['spacer']) for r in csv.DictReader(f,delimiter='\t')}

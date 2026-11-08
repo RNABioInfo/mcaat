@@ -12,9 +12,15 @@ annotated arrays must not be equated.
   cycle. The returning start is counted once. The former lower-bound comparison
   excluded the stated minimum; this is fixed. The maximum is checked explicitly.
 - Array filter mode: **conservative**. Existing structural checks, 85% repeat
-  support, and graph-compatible deduplication remain. Uncalibrated sequence
-  heuristics and remaining shared-cycle evidence are flags, not automatic
-  reasons to discard a candidate or remove its spacers.
+  support, and graph-compatible deduplication remain. The older pairwise
+  similarity heuristics and remaining shared-cycle evidence remain flags.
+- Native string filtering: **on** in both normal execution and saved-cycle
+  processing. The later motif and conserved-spacer rules now reject candidates
+  automatically before final exact-set deduplication. Their observed strings and
+  reasons remain in alternatives; all scores are recorded. See
+  [the native string-filter implementation](string-structure-audit.md) for the
+  separate settings and available-reference validation. `--string-filter off`
+  reproduces behavior before this addition.
 - Both strands of a circle count once within a candidate. Shared evidence
   between candidates is disclosed in `CRISPR_graph_shared_cycles.tsv` and their
   `quality_flags`. Candidates consisting entirely of assigned circles already

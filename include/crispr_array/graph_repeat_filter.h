@@ -1,6 +1,7 @@
 #ifndef MCAAT_GRAPH_REPEAT_FILTER_H
 #define MCAAT_GRAPH_REPEAT_FILTER_H
 #include "crispr_array/candidate_quality.h"
+#include "crispr_array/string_structure_filter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -50,12 +51,14 @@ struct Options {
     size_t repeat_min = 23, repeat_max = 55, spacer_min = 23, spacer_max = 50;
     QualityOptions quality;
     size_t cycle_min=1,cycle_max=std::numeric_limits<int>::max();
+    StringFilterOptions strings;
     void validate() const {
         if (!std::isfinite(repeat_support) || repeat_support <= 0 || repeat_support > 1)
             throw std::invalid_argument("repeat-support must be a finite fraction in (0, 1]");
         if (!k || repeat_min > repeat_max || spacer_min > spacer_max || !spacer_min)
             throw std::invalid_argument("invalid graph repeat/spacer length bounds");
         quality.validate();
+        strings.validate();
         if (!cycle_min || cycle_min>cycle_max) throw std::invalid_argument("invalid cycle length range");
     }
 };
@@ -82,6 +85,7 @@ struct CandidateDecision {
     std::set<size_t> competing_candidates;
     std::set<Path> retained_paths;
     size_t removed_cycles=0, duplicate_strand_cycles=0, out_of_range_cycles=0, invalid_length_observations=0;
+    StringEvidence strings;
 };
 struct Statistics {
     size_t input_cycles = 0, invalid_cycles = 0, duplicate_cycles = 0;
@@ -92,6 +96,7 @@ struct Statistics {
     size_t out_of_range_cycles=0, curation_out_of_range_cycles=0;
     size_t invalid_length_observations=0, redundant_candidates=0, redundant_observations=0;
     size_t sequence_subset_checks=0;
+    size_t string_scored=0,string_rejected=0,string_alignment_skipped=0;
 };
 
 inline std::string reverse_complement(const std::string& sequence) {
@@ -209,6 +214,7 @@ public:
         stats.quality_rejected=stats.overlap_rejected=stats.shared_cycles_removed=stats.duplicate_strand_cycles=0;
         stats.curation_out_of_range_cycles=0;
         stats.invalid_length_observations=stats.redundant_candidates=stats.redundant_observations=stats.sequence_subset_checks=0;
+        stats.string_scored=stats.string_rejected=stats.string_alignment_skipped=0;
         std::map<Path,std::string> keys;
         auto sequence_key=[&](const Path& cycle)->const std::string& {
             auto key=cycle_key(cycle);auto it=keys.find(key);
@@ -264,7 +270,7 @@ public:
         std::map<std::string,size_t> owners;
         std::vector<System> accepted;
         decisions.resize(systems.size());
-        if (progress) progress("Resolve shared cycles",0,systems.size());
+        if (progress) progress("String filtering and cycle ownership",0,systems.size());
         size_t done=0;
         for (size_t index:order) {
             auto& decision=decisions[index];decision.original=std::move(systems[index]);
@@ -310,6 +316,21 @@ public:
                 else {
                     assess(keep);decision.status=keep.quality.reason;
                 }
+                if (decision.status.empty() && o_.strings.enabled) {
+                    std::vector<std::pair<std::string,std::string>> observations;
+                    for(const auto& row:keep.observations)observations.emplace_back(row.repeat,row.spacer);
+                    decision.strings=assess_strings(observations,keep.quality,o_.strings,o_.quality.max_cycles);
+                    ++stats.string_scored;
+                    if(decision.strings.alignment_skipped) {
+                        ++stats.string_alignment_skipped;
+                        keep.quality.flags.push_back("string_alignment_skipped_at_cycle_limit");
+                    }
+                    const auto reason=decision.strings.reason();
+                    if(!reason.empty()) {
+                        decision.status="string_filter:"+reason;
+                        decision.original.quality.flags.push_back(reason);
+                    }
+                }
                 if (decision.status.empty()) {
                     decision.status=decision.removed_cycles?"accepted_without_shared_cycles":
                         (decision.duplicate_strand_cycles?"accepted_without_strand_duplicates":"accepted");
@@ -320,12 +341,13 @@ public:
                         decision.retained_paths.insert(cycle_key(row.cycle));
                     }
                     accepted.push_back(std::move(keep));
-                } else ++stats.overlap_rejected;
+                } else if(decision.strings.reason().empty()) ++stats.overlap_rejected;
+                else ++stats.string_rejected;
                 stats.shared_cycles_removed+=decision.removed_cycles;
                 stats.duplicate_strand_cycles+=decision.duplicate_strand_cycles;
                 stats.curation_out_of_range_cycles+=decision.out_of_range_cycles;
             }
-            if (progress) progress("Resolve shared cycles",++done,decisions.size());
+            if (progress) progress("String filtering and cycle ownership",++done,decisions.size());
         }
         remove_sequence_subsets(accepted,sequence_key,progress);
         std::sort(accepted.begin(),accepted.end(),[](const auto& a,const auto& b) {return a.candidate_id<b.candidate_id;});

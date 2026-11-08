@@ -91,6 +91,7 @@ def apply_filter(source, audit_dir, destination, binary):
         writer.writerows(rejects)
     command = [str(binary.resolve()), str(source.resolve()), str(destination.resolve()),
                '--array-filter-mode', 'conservative', '--cycle-min-length', str(minimum),
+               '--string-filter', 'off',
                '--cycle-max-length', str(maximum), '--reject-candidates', str(manifest.resolve())]
     started = time.monotonic()
     with (destination / 'string_filter_run.log').open('w') as stream:
