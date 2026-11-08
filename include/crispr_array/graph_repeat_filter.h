@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <map>
 #include <set>
@@ -14,6 +15,7 @@
 namespace mcaat::arrays {
 using Node = uint64_t;
 using Path = std::vector<Node>;
+using Progress = std::function<void(const char*,size_t,size_t)>;
 constexpr Node missing_node = std::numeric_limits<Node>::max();
 
 inline double parse_repeat_support(const std::string& text) {
@@ -109,24 +111,31 @@ public:
     RepeatFilter(Graph& graph, Options options):g_(graph),o_(options) {o_.validate();}
     Statistics stats;
 
-    std::vector<System> run(const std::map<Node,std::vector<Path>>& input) {
+    std::vector<System> run(const std::map<Node,std::vector<Path>>& input,const Progress& progress={}) {
         stats={};
+        validity_cache_.clear();
         std::vector<System> systems;
+        if (progress) progress("Repeat inference",0,input.size());
         for (const auto& [source,raw]:input) {
             ++stats.input_groups;
             std::set<Path> distinct;
             for (Path cycle:raw) {
                 ++stats.input_cycles;
                 if (cycle.size()>1 && cycle.front()==cycle.back()) cycle.pop_back();
+                cycle=cycle_key(std::move(cycle));
+                // Repeated saved records and rotated rediscoveries must not
+                // revalidate every graph edge before being recognized as copies.
+                if (distinct.count(cycle)) {++stats.duplicate_cycles;continue;}
                 if (!valid_cycle(cycle)) {++stats.invalid_cycles;continue;}
-                if (!distinct.insert(cycle_key(std::move(cycle))).second) ++stats.duplicate_cycles;
+                distinct.insert(std::move(cycle));
             }
             System system;
             if (infer({distinct.begin(),distinct.end()},system)) {
                 system.sources={source};orient(system);systems.push_back(std::move(system));
             } else ++stats.groups_without_repeat;
+            if (progress) progress("Repeat inference",stats.input_groups,input.size());
         }
-        deduplicate(systems);
+        deduplicate(systems,progress);
         std::sort(systems.begin(),systems.end(),[](const System& a,const System& b) {
             return a.repeat_path!=b.repeat_path ? a.repeat_path<b.repeat_path
                                                : observed_cycles(a)<observed_cycles(b);
@@ -150,9 +159,20 @@ public:
 private:
     Graph& g_;
     Options o_;
+    std::map<Path,bool> validity_cache_;
+    static constexpr size_t validity_cache_limit=65536;
     struct Occurrence {size_t cycle,position;};
 
     bool valid_cycle(const Path& cycle) {
+        auto key=cycle_key(cycle);
+        auto cached=validity_cache_.find(key);
+        if (cached!=validity_cache_.end()) return cached->second;
+        const bool valid=check_cycle(cycle);
+        if (validity_cache_.size()>=validity_cache_limit) validity_cache_.clear();
+        validity_cache_.emplace(std::move(key),valid);
+        return valid;
+    }
+    bool check_cycle(const Path& cycle) {
         if (cycle.size()<2 || cycle.size()<o_.k) return false;
         std::set<Node> visited;
         for (size_t i=0;i<cycle.size();++i) {
@@ -340,7 +360,7 @@ private:
             keep.sources.erase(std::unique(keep.sources.begin(),keep.sources.end()),keep.sources.end());
         }
     }
-    void deduplicate(std::vector<System>& systems) {
+    void deduplicate(std::vector<System>& systems,const Progress& progress) {
         // Only compare systems sharing an entire observed cycle. A common
         // repeat alone, or a spacer shared with another repeat, is insufficient.
         // Stable indices preserve the original lexicographic merge order. Keep
@@ -372,7 +392,12 @@ private:
             unindex(j);alive[j]=false;pending.erase(j);
             metadata[j]={};systems[j]={};
         };
-        for (size_t i=0;i<systems.size();++i) {index(i);pending.insert(i);}
+        if (progress) progress("Indexing candidate systems",0,systems.size());
+        for (size_t i=0;i<systems.size();++i) {
+            index(i);pending.insert(i);
+            if (progress) progress("Indexing candidate systems",i+1,systems.size());
+        }
+        if (progress) progress("Duplicate comparisons",0,0);
         while (!pending.empty()) {
             const size_t i=*pending.begin();pending.erase(pending.begin());
             std::set<size_t> neighbors;
@@ -383,6 +408,7 @@ private:
             for (size_t j:neighbors) {
                 if (!alive[j]) continue;
                 ++stats.dedup_pair_checks;
+                if (progress) progress("Duplicate comparisons",stats.dedup_pair_checks,0);
                 auto& a=systems[i];
                 const System* b=&systems[j];
                 const auto& ac=metadata[i].observed;

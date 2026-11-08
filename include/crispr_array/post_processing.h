@@ -8,6 +8,7 @@
 #include <sstream>
 #include <filesystem>
 #include <iomanip>
+#include <chrono>
 
 // Recover repeat/spacer boundaries from ordered, observed graph paths. SPOA
 // consensus and arbitrary shared-k-mer spacer unions do not determine identity.
@@ -26,30 +27,75 @@ class PostProcessor {
     }
     std::map<Node,std::vector<Path>> read_cycles(Graph& graph,const std::string& file) {
         std::map<Node,std::vector<Path>> groups;
+        auto started=std::chrono::steady_clock::now(),last_report=started;
+        size_t cycle_count=0,kmer_count=0;
         if (file.empty()) {
-            for (const auto& [start,cycles]:settings.cycles)
-                for (const auto& cycle:cycles) groups[start].push_back(graph.vertices(cycle));
+            std::cerr<<"[arrays] Loading in-memory cycle paths from "<<settings.cycles.size()<<" start groups\n";
+            for (const auto& [start,cycles]:settings.cycles) {
+                for (const auto& cycle:cycles) {
+                    groups[start].push_back(graph.vertices(cycle));++cycle_count;kmer_count+=cycle.size();
+                }
+                auto now=std::chrono::steady_clock::now();
+                if (now-last_report>=std::chrono::seconds(5)) {
+                    std::cerr<<"[arrays] Loaded "<<cycle_count<<" cycles from "<<groups.size()<<'/'
+                             <<settings.cycles.size()<<" start groups\n";last_report=now;
+                }
+            }
+            std::cerr<<"[arrays] Loaded "<<cycle_count<<" cycles in "
+                     <<std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()<<" s\n";
             return groups;
         }
         std::ifstream in(file);
         if (!in) throw std::runtime_error("Cannot read cycles: "+file);
+        std::error_code error;
+        auto total_bytes=std::filesystem::file_size(file,error);
+        std::cerr<<"[arrays] Loading saved cycles: "<<file;
+        if (!error) std::cerr<<" ("<<total_bytes/1048576.0<<" MiB)";
+        std::cerr<<'\n';
         std::string line;
-        size_t line_number=0;
+        size_t line_number=0,bytes=0;
         while (std::getline(in,line)) {
-            ++line_number;
+            ++line_number;bytes+=line.size()+1;
             if (line.empty() || line[0]=='#') continue;
-            std::istringstream words(line);std::string word;Path cycle;
+            std::istringstream words(line);std::string word,previous;Path cycle;
+            Node first_edge=mcaat::arrays::missing_node;
             while (words>>word) {
-                Node v=graph.find(word);
-                if (v==mcaat::arrays::missing_node)
-                    throw std::runtime_error("Unknown k-mer in cycles, line "+std::to_string(line_number));
-                cycle.push_back(v);
+                ++kmer_count;
+                if (cycle.empty()) {
+                    Node v=graph.find(word);
+                    if (v==mcaat::arrays::missing_node)
+                        throw std::runtime_error("Unknown k-mer in cycles, line "+std::to_string(line_number));
+                    cycle.push_back(v);
+                } else {
+                    if (word.size()!=graph.k() || previous.compare(1,graph.k()-1,word,0,graph.k()-1)!=0)
+                        throw std::runtime_error("Non-overlapping k-mers in cycles, line "+std::to_string(line_number));
+                    auto [edge,vertex]=graph.step(cycle.back(),word.back());
+                    if (vertex==mcaat::arrays::missing_node)
+                        throw std::runtime_error("Missing graph transition in cycles, line "+std::to_string(line_number));
+                    if (cycle.size()==1) first_edge=edge;
+                    cycle.push_back(vertex);
+                }
+                previous.swap(word);
             }
             if (cycle.size()>1 && cycle.front()==cycle.back()) cycle.pop_back();
             if (cycle.size()<2) throw std::runtime_error("Invalid cycle, line "+std::to_string(line_number));
-            auto edges=graph.edges(cycle); // Requires every transition, including closure.
-            groups[edges.front()].push_back(std::move(cycle));
+            if (graph.edge(cycle.back(),cycle.front())==mcaat::arrays::missing_node)
+                throw std::runtime_error("Non-closing cycle, line "+std::to_string(line_number));
+            groups[first_edge].push_back(std::move(cycle));++cycle_count;
+            if ((line_number&1023)==0) {
+                auto now=std::chrono::steady_clock::now();
+                if (now-last_report>=std::chrono::seconds(5)) {
+                    std::cerr<<"[arrays] Loaded "<<cycle_count<<" cycles, "<<kmer_count<<" k-mers, "
+                             <<bytes/1048576.0<<" MiB";
+                    if (!error) std::cerr<<" / "<<total_bytes/1048576.0<<" MiB";
+                    std::cerr<<'\n';last_report=now;
+                }
+            }
         }
+        if (in.bad()) throw std::runtime_error("I/O error while reading cycles: "+file);
+        std::cerr<<"[arrays] Loaded "<<cycle_count<<" cycles, "<<kmer_count<<" k-mers in "
+                 <<std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()
+                 <<" s; "<<graph.index_queries<<" graph index searches, "<<graph.lookup_hits<<" cached starts\n";
         return groups;
     }
     static bool owned_file(const std::string& name) {
@@ -83,7 +129,21 @@ public:
         Graph graph(*settings.sdbg);
         RepeatFilter<Graph> filter(graph,options);
         auto groups=read_cycles(graph,cycles_file);
-        graph_systems=filter.run(groups);
+        auto filter_start=std::chrono::steady_clock::now(),last_report=filter_start;
+        std::string stage;
+        graph_systems=filter.run(groups,[&](const char* phase,size_t done,size_t total) {
+            auto now=std::chrono::steady_clock::now();
+            if (stage!=phase || now-last_report>=std::chrono::seconds(5) || (total && done==total)) {
+                std::cerr<<"[arrays] "<<phase<<": "<<done;
+                if (total) std::cerr<<'/'<<total<<" groups";
+                else std::cerr<<" comparisons";
+                std::cerr<<'\n';stage=phase;last_report=now;
+            }
+        });
+        std::cerr<<"[arrays] Filtering completed in "
+                 <<std::chrono::duration<double>(std::chrono::steady_clock::now()-filter_start).count()<<" s\n";
+        groups.clear(); // Release input paths before serializing retained systems.
+        std::cerr<<"[arrays] Writing "<<graph_systems.size()<<" retained systems\n";
         const auto& systems=graph_systems;
         crispr_arrays.clear();
         fs::create_directories(settings.output_folder);

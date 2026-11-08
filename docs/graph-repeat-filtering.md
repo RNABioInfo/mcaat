@@ -80,6 +80,30 @@ mcaat postprocess-arrays \
 
 The command also accepts `--min-repeat-len`, `--max-repeat-len`, `--min-spacer-len`, and `--max-spacer-len`. It validates every k-mer and transition against the graph. Saved cycles must retain their original order and start; hand-rotating individual records changes which start groups they belong to. Normal full-pipeline execution uses in-memory cycle IDs, even when no cycles were found, rather than accidentally reusing a stale `cycles.txt`.
 
+Saved-cycle loading looks up the first k-mer of each record, checks each textual
+overlap, and follows the corresponding outgoing edge for subsequent k-mers.
+It also checks cycle closure. It no longer performs a global graph lookup for
+every k-mer. Start lookups use a bounded cache, and validation of repeated or
+rotated cycles is cached within one filter run. Malformed records report their
+line number; I/O failures abort the run.
+
+Stage messages distinguish graph loading, cycle loading, repeat inference,
+candidate indexing, duplicate comparisons, and output writing. Long phases
+report progress approximately every five seconds at record/group boundaries.
+Loading reports bytes, records, and k-mers processed. No stage silently switches
+to a different support threshold or skips records to finish sooner.
+
+To rerun **cycle search** on a saved graph instead of reusing saved cycles, use
+the ordinary pipeline with `--graph`:
+
+```bash
+mcaat --graph /data/run/graph/graph --threads 24 \
+  --repeat-support 0.85 --autoclean false --output-folder /data/run-restarted
+```
+
+This starts from the graph, runs cycle enumeration again, and filters the new
+in-memory results. The `postprocess-arrays` command instead reads saved cycles.
+
 ## Validation and limits
 
 Synthetic regression tests cover threshold boundaries, duplicate cycles, observed repeat variants, unresolved anchors, exact-k repeats, short spacers, incompatible systems, overlapping candidates, reverse complements and shifted repeat boundaries. The real-SDBG integration test validates output paths, downstream edge handles, deterministic reruns, stale output cleanup and rejection of altered provenance.

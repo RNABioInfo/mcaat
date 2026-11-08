@@ -192,6 +192,16 @@ void test_boundaries_and_rejections() {
     RepeatFilter<Graph> filter(one.g,one.o);
     systems=filter.run({{1,{invalid,one.cycles[0]}}});
     check(systems.empty() && filter.stats.invalid_cycles==1,"non-simple or disconnected cycle rejected");
+    systems=filter.run({{1,{invalid,invalid,one.cycles[0]}}});
+    check(systems.empty() && filter.stats.invalid_cycles==2 && filter.stats.duplicate_cycles==0,
+          "cached invalid copies still count as invalid input cycles");
+    Fixture cached;
+    for (int i=0;i<4;++i) cached.append(cached.repeat);
+    RepeatFilter<Graph> reused(cached.g,cached.o);
+    check(reused.run({{1,cached.cycles}}).size()==1,"validation cache populated");
+    cached.g.links.erase({cached.cycles[0][35],cached.cycles[0][36]});
+    reused.run({{1,cached.cycles}});
+    check(reused.stats.invalid_cycles==1,"validation cache cleared between runs after graph changes");
     Fixture k_repeat(9,9);
     for(int i=0;i<4;++i) k_repeat.append(k_repeat.repeat);
     systems=k_repeat.run();check(systems.size()==1 && systems[0].repeat_path.size()==1,"a repeat exactly k long is a shared vertex");

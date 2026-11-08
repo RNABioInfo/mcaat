@@ -83,3 +83,48 @@ The filter remains serial and still performs inference for each candidate group.
 These benchmarks isolate the duplicate-filter scaling problem; they are not a
 prediction of runtime for the complete 57-genome read dataset. Graph building,
 cycle enumeration, and file I/O are outside these timings.
+
+## Follow-up: saved-cycle input was outside the original benchmark
+
+The earlier synthetic filter benchmark did not include the saved-cycle reader.
+In `0b0720d`, that reader still called `IndexBinarySearch` once per k-mer, even
+though the ordered k-mers already specified graph transitions. This remained a
+separate bottleneck. Loading now performs a start lookup and then walks outgoing
+edges while checking every overlap and closure. A bounded 65,536-entry lookup
+cache avoids repeated start searches. A separate bounded validity cache avoids
+revalidating identical/rotated cycles and is cleared before each filter run.
+
+On the same local Mac, compiled with LLVM Clang 20.1.8 and `-O3`, the following
+replay used the real 4,254,214-edge-slot `CP003198.1` graph. Its 614 saved records
+were repeated **100 times** to create a 98,018,400-byte input: 61,400 records and
+4,084,100 k-mer occurrences. This is a duplicate-heavy I/O stress test, not a
+new biological dataset or a measurement on the server's complete metagenome.
+
+| Timed stage | Before (`0b0720d`) | After |
+|---|---:|---:|
+| Read and resolve saved cycles | 63.80 s | 3.43 s |
+| Filter loaded cycles | 2.95 s | 0.55 s |
+| Complete post-processing, including output | 66.82 s | 4.08 s |
+
+All five output files matched byte for byte. The new loading pass performed 28
+global graph index searches and reused 61,372 cached starts. Graph loading is
+separate from these times. Runs were sequential, with one recorded run per cell.
+
+`benchmark_postprocess` runs the production post-processor, including file input
+and output; build it with the test CMake project and invoke:
+
+```bash
+build/search/benchmark_postprocess GRAPH_PREFIX CYCLES_FILE OUTPUT_DIR 0.85
+```
+
+The normal CLI now prints the active stage and periodic counts so graph loading,
+cycle parsing, repeat inference, and duplicate comparisons are distinguishable.
+
+Follow-up validation also compared all 24 available real saved-cycle files at
+85% support against `0b0720d`: all five output files matched for every dataset.
+The revised integration suite passed 46,142 checks, including walking versus
+independent k-mer lookup, malformed overlaps, non-DNA bases, unclosed paths,
+and traversal with an invalid representative edge slot. All 109 generic filter
+checks passed normally and with ASan/UBSan. The 13 CLI/pipeline cases passed,
+including a fresh cycle search from a pre-built graph and identical in-memory
+versus saved-cycle replay output.

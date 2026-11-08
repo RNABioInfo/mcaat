@@ -46,6 +46,12 @@ if(SEARCH_SANITIZERS)
 endif()
 
 if(BUILD_SDBG_BENCHMARK)
+    add_executable(benchmark_postprocess "${MCAAT_ROOT}/bench/benchmark_postprocess.cpp"
+        "${MEGAHIT_SRC}/sdbg/sdbg_raw_content.cpp"
+        "${MEGAHIT_SRC}/sdbg/sdbg_meta.cpp")
+    target_include_directories(benchmark_postprocess PRIVATE "${MCAAT_ROOT}/include")
+    target_include_directories(benchmark_postprocess SYSTEM PRIVATE "${MEGAHIT_SRC}")
+    target_link_libraries(benchmark_postprocess PRIVATE OpenMP::OpenMP_CXX)
     add_executable(test_graph_path_io test_graph_path_io.cpp
         "${MEGAHIT_SRC}/sdbg/sdbg_raw_content.cpp"
         "${MEGAHIT_SRC}/sdbg/sdbg_meta.cpp")

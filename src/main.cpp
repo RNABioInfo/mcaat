@@ -70,7 +70,11 @@ static int run_postprocess_arrays(int argc,char** argv) {
     auto prefix=fs::is_directory(settings.graph_input)?settings.graph_input+"/graph":settings.graph_input;
     if (!fs::exists(prefix+".sdbg_info")) throw std::runtime_error("Graph metadata not found: "+prefix);
     omp_set_num_threads(1);
+    std::cerr<<"[arrays] Loading graph: "<<prefix<<std::endl;
+    auto load_started=std::chrono::steady_clock::now();
     SDBG sdbg;step_load_graph(settings,sdbg);
+    std::cerr<<"[arrays] Loaded graph with "<<sdbg.size()<<" edge slots in "
+             <<std::chrono::duration<double>(std::chrono::steady_clock::now()-load_started).count()<<" s\n";
     PostProcessor processor(settings);processor.run_analysis(cycles);
     return 0;
 }

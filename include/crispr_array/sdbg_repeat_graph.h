@@ -12,7 +12,10 @@ class SdbgRepeatGraph {
     const SDBG& g_;
     std::unordered_map<Node,std::string> labels_;
     std::unordered_map<Node,Node> reverse_;
+    std::unordered_map<std::string,Node> lookups_;
+    static constexpr size_t lookup_cache_limit=65536;
 public:
+    size_t index_queries=0,lookup_hits=0,walk_steps=0;
     explicit SdbgRepeatGraph(const SDBG& graph):g_(graph) {}
     size_t k() const {return g_.k();}
     const std::string& label(Node vertex) {
@@ -29,15 +32,45 @@ public:
         }
         return labels_.emplace(vertex,std::move(result)).first->second;
     }
-    Node find(const std::string& sequence) const {
+    Node find(const std::string& sequence) {
         if (sequence.size()!=k()) return missing_node;
+        auto cached=lookups_.find(sequence);
+        if (cached!=lookups_.end()) {++lookup_hits;return cached->second;}
         std::vector<uint8_t> bases;
+        bases.reserve(k());
         for (char c:sequence) {
-            auto pos=std::string("ACGT").find(c);
-            if (pos==std::string::npos) return missing_node;
-            bases.push_back(uint8_t(pos+1));
+            switch(c) {
+                case 'A':bases.push_back(1);break;case 'C':bases.push_back(2);break;
+                case 'G':bases.push_back(3);break;case 'T':bases.push_back(4);break;
+                default:return missing_node;
+            }
         }
-        return g_.IndexBinarySearch(bases.data());
+        ++index_queries;
+        Node vertex=g_.IndexBinarySearch(bases.data());
+        // The start/RC lookup cache is bounded independently of input size.
+        if (lookups_.size()>=lookup_cache_limit) lookups_.clear();
+        lookups_.emplace(sequence,vertex);
+        return vertex;
+    }
+    // A verified suffix/prefix overlap identifies the next k-mer by its final
+    // base. Follow that edge instead of searching the entire graph again.
+    std::pair<Node,Node> step(Node from,char base) {
+        ++walk_steps;
+        uint8_t encoded;
+        switch(base) {
+            case 'A':encoded=1;break;case 'C':encoded=2;break;
+            case 'G':encoded=3;break;case 'T':encoded=4;break;
+            default:return {missing_node,missing_node};
+        }
+        if (from>=g_.size()) return {missing_node,missing_node};
+        Node slot=from;
+        do {
+            auto w=g_.GetW(slot);
+            if (w>4) w-=4;
+            if (w==encoded && g_.IsValidEdge(slot)) return {slot,g_.Forward(slot)};
+            --slot;
+        } while (slot!=missing_node && !g_.IsLastOrTip(slot));
+        return {missing_node,missing_node};
     }
     Node edge(Node from,Node to) const {
         if (from>=g_.size() || to>=g_.size()) return missing_node;

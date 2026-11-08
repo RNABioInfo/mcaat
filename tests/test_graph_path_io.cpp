@@ -22,6 +22,21 @@ int main(int argc,char**argv) {
         auto arrays=BuildFilteredArraysFromDir(settings.output_folder,graph);
         check(!arrays.empty(),"fixture has arrays");
         SdbgRepeatGraph g(graph);
+        // A saved cycle is an ordered walk, not independent global k-mer queries.
+        const std::string original_cycles=contents(argv[2]);
+        std::istringstream cycle_lines(original_cycles);std::string cycle_line;
+        std::vector<std::string> first_words;
+        while (std::getline(cycle_lines,cycle_line)) {
+            if (cycle_line.empty() || cycle_line[0]=='#') continue;
+            std::istringstream tokens(cycle_line);std::string token;std::vector<std::string> words;
+            while (tokens>>token) words.push_back(token);
+            if (first_words.empty()) first_words=words;
+            for (size_t i=1;i<words.size();++i) {
+                Node from=g.find(words[i-1]),to=g.find(words[i]);
+                auto [edge,next]=g.step(from,words[i].back());
+                check(next==to && edge==g.edge(from,to),"walking by appended base matches global lookup");
+            }
+        }
         size_t spacers=0,nodes=0;
         for(auto& a:arrays) {
             std::string repeat;
@@ -41,6 +56,21 @@ int main(int argc,char**argv) {
             }
         }
         auto dir=std::filesystem::path(settings.output_folder);
+        auto check_bad_cycles=[&](std::vector<std::string> words,const std::string& reason) {
+            auto bad=dir/"bad_cycles.txt";
+            std::ostringstream text;for (const auto& word:words) text<<word<<' ';text<<'\n';
+            write(bad,text.str());bool rejected=false;
+            try {PostProcessor(settings).run_analysis(bad.string());}
+            catch(const std::runtime_error& e) {rejected=std::string(e.what()).find("line 1")!=std::string::npos;}
+            std::filesystem::remove(bad);check(rejected,reason);
+        };
+        auto wrong_overlap=first_words;
+        wrong_overlap[1][0]=wrong_overlap[0][1]=='A'?'C':'A';
+        check_bad_cycles(wrong_overlap,"non-overlapping saved k-mers rejected with line number");
+        auto wrong_base=first_words;wrong_base[1].back()='N';
+        check_bad_cycles(wrong_base,"non-DNA appended base rejected");
+        auto open_path=first_words;
+        open_path.resize(2);check_bad_cycles(open_path,"unclosed saved path rejected");
         const auto path_table=contents(dir/"CRISPR_graph_paths.tsv");
         auto before=contents(dir/"CRISPR_Arrays_1.txt");
         write(dir/"CRISPR_Arrays_99.txt","stale");write(dir/"user_notes.txt","keep");
@@ -66,6 +96,9 @@ int main(int argc,char**argv) {
             if(graph.Forward(vertex)==target)continue;
             graph.SetInvalidEdge(vertex);
             check(g.find(label)==vertex && g.edge(vertex,target)==e,"invalid last edge slot does not erase source vertex");
+            auto target_label=g.label(target);
+            auto stepped=g.step(vertex,target_label.back());
+            check(stepped.first==e && stepped.second==target,"walking survives invalid representative slot");
             graph.SetValidEdge(vertex);tested=true;
         }
         check(tested,"branched source-vertex fixture exercised");
