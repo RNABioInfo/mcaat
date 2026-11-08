@@ -81,7 +81,7 @@ struct CandidateDecision {
     std::string status;
     std::set<size_t> competing_candidates;
     std::set<Path> retained_paths;
-    size_t removed_cycles=0, duplicate_strand_cycles=0, out_of_range_cycles=0;
+    size_t removed_cycles=0, duplicate_strand_cycles=0, out_of_range_cycles=0, invalid_length_observations=0;
 };
 struct Statistics {
     size_t input_cycles = 0, invalid_cycles = 0, duplicate_cycles = 0;
@@ -90,6 +90,8 @@ struct Statistics {
     size_t dedup_pair_checks = 0, dedup_index_builds = 0;
     size_t quality_rejected=0, overlap_rejected=0, shared_cycles_removed=0, duplicate_strand_cycles=0;
     size_t out_of_range_cycles=0, curation_out_of_range_cycles=0;
+    size_t invalid_length_observations=0, redundant_candidates=0, redundant_observations=0;
+    size_t sequence_subset_checks=0;
 };
 
 inline std::string reverse_complement(const std::string& sequence) {
@@ -202,16 +204,30 @@ public:
         decisions.clear();
         stats.quality_rejected=stats.overlap_rejected=stats.shared_cycles_removed=stats.duplicate_strand_cycles=0;
         stats.curation_out_of_range_cycles=0;
+        stats.invalid_length_observations=stats.redundant_candidates=stats.redundant_observations=stats.sequence_subset_checks=0;
         std::map<Path,std::string> keys;
         auto sequence_key=[&](const Path& cycle)->const std::string& {
             auto key=cycle_key(cycle);auto it=keys.find(key);
             if (it!=keys.end()) return it->second;
             return keys.emplace(std::move(key),circular_sequence_key(spell(cycle).substr(0,cycle.size()))).first->second;
         };
+        auto within_lengths=[&](const Observation& row) {
+            return row.repeat.size()>=o_.repeat_min && row.repeat.size()<=o_.repeat_max &&
+                   row.spacer.size()>=o_.spacer_min && row.spacer.size()<=o_.spacer_max;
+        };
         auto assess=[&](System& system) {
             std::vector<std::string> spacers;
-            for (const auto& row:system.observations) spacers.push_back(row.spacer);
-            system.quality=assess_quality(spell(system.repeat_path),std::move(spacers),system.candidate_count,o_.quality);
+            size_t invalid=0;
+            for (const auto& row:system.observations) {
+                if (within_lengths(row)) spacers.push_back(row.spacer);
+                else ++invalid;
+            }
+            const auto repeat=spell(system.repeat_path);
+            system.quality=assess_quality(repeat,std::move(spacers),system.candidate_count,o_.quality);
+            if (repeat.size()<o_.repeat_min || repeat.size()>o_.repeat_max)
+                system.quality.reason="repeat_length_range";
+            else if (invalid && system.quality.reason=="fewer_than_two_spacers")
+                system.quality.reason="repeat_spacer_length_range";
         };
         if (progress) progress("Candidate quality",0,systems.size());
         for (size_t i=0;i<systems.size();++i) {
@@ -244,6 +260,9 @@ public:
         for (size_t index:order) {
             auto& decision=decisions[index];decision.original=std::move(systems[index]);
             const auto& original=decision.original;
+            for (const auto& row:original.observations)
+                decision.invalid_length_observations+=!within_lengths(row);
+            stats.invalid_length_observations+=decision.invalid_length_observations;
             if (!original.quality.reason.empty()) {
                 decision.status=original.quality.reason;++stats.quality_rejected;
             } else {
@@ -262,6 +281,7 @@ public:
                 keep.candidate_count-=decision.removed_cycles+decision.duplicate_strand_cycles+decision.out_of_range_cycles;
                 for (const auto& row:original.observations) {
                     if (row.cycle.size()<o_.cycle_min || row.cycle.size()>o_.cycle_max) continue;
+                    if (!within_lengths(row)) continue;
                     const auto& key=sequence_key(row.cycle);
                     if (!o_.quality.strict || !owners.count(key)) {
                         auto [position,fresh]=assigned.emplace(key,keep.observations.size());
@@ -298,6 +318,7 @@ public:
             }
             if (progress) progress("Resolve shared cycles",++done,decisions.size());
         }
+        remove_sequence_subsets(accepted,sequence_key,progress);
         std::sort(accepted.begin(),accepted.end(),[](const auto& a,const auto& b) {return a.candidate_id<b.candidate_id;});
         if (!o_.quality.strict) {
             std::map<std::string,std::vector<size_t>> shared;
@@ -533,6 +554,71 @@ private:
             std::inplace_merge(keep.sources.begin(),keep.sources.begin()+middle,keep.sources.end());
             keep.sources.erase(std::unique(keep.sources.begin(),keep.sources.end()),keep.sources.end());
         }
+    }
+    template<class Key>
+    void remove_sequence_subsets(std::vector<System>& systems,Key sequence_key,const Progress& progress) {
+        // Compare complete observed repeat+spacer circles, independent of where
+        // the repeat boundary cuts them. Remove only a subset of ONE retained
+        // candidate, never a subset of the union of unrelated candidates.
+        // Unassigned source cycles are not asserted to be array observations;
+        // they and every alternative boundary remain in the decision/review files.
+        std::vector<std::set<std::string>> evidence(systems.size());
+        std::vector<std::string> repeats(systems.size());
+        for (size_t i=0;i<systems.size();++i) {
+            repeats[i]=spell(systems[i].repeat_path);
+            repeats[i]=std::min(repeats[i],reverse_complement(repeats[i]));
+            for (const auto& row:systems[i].observations) evidence[i].insert(sequence_key(row.cycle));
+        }
+        std::vector<size_t> order(systems.size());std::iota(order.begin(),order.end(),0);
+        std::sort(order.begin(),order.end(),[&](size_t a,size_t b) {
+            if (evidence[a].size()!=evidence[b].size()) return evidence[a].size()>evidence[b].size();
+            const auto& x=systems[a];const auto& y=systems[b];
+            const long double xs=static_cast<long double>(x.support_count)/x.candidate_count;
+            const long double ys=static_cast<long double>(y.support_count)/y.candidate_count;
+            if (xs!=ys) return xs>ys;
+            // Equal evidence: prefer the longer eligible repeat, then sequence
+            // order. This chooses an existing boundary; it infers no new bases.
+            if (repeats[a].size()!=repeats[b].size()) return repeats[a].size()>repeats[b].size();
+            if (repeats[a]!=repeats[b]) return repeats[a]<repeats[b];
+            return x.candidate_id<y.candidate_id;
+        });
+        std::map<std::string,std::vector<size_t>> owners;
+        std::vector<bool> keep(systems.size(),true);
+        if (progress) progress("Remove redundant sequence sets",0,systems.size());
+        size_t done=0;
+        for (size_t i:order) {
+            const std::vector<size_t>* smallest=nullptr;
+            bool missing=false;
+            for (const auto& key:evidence[i]) {
+                const auto found=owners.find(key);
+                if (found==owners.end()) {missing=true;break;}
+                if (!smallest || found->second.size()<smallest->size()) smallest=&found->second;
+            }
+            size_t parent=systems.size();
+            if (!missing && smallest) for (size_t j:*smallest) {
+                ++stats.sequence_subset_checks;
+                if (std::includes(evidence[j].begin(),evidence[j].end(),evidence[i].begin(),evidence[i].end())) {
+                    parent=j;break;
+                }
+            }
+            if (parent<systems.size()) {
+                keep[i]=false;
+                auto& decision=decisions.at(systems[i].candidate_id-1);
+                decision.status="redundant_circular_subset";
+                decision.competing_candidates.insert(systems[parent].candidate_id);
+                decision.retained_paths.clear();
+                add_sources(systems[parent],systems[i]);
+                ++stats.redundant_candidates;
+                stats.redundant_observations+=systems[i].observations.size();
+            } else for (const auto& key:evidence[i]) owners[key].push_back(i);
+            if (progress) progress("Remove redundant sequence sets",++done,systems.size());
+        }
+        size_t retained=0;
+        for (size_t i=0;i<systems.size();++i) if (keep[i]) {
+            if (retained!=i) systems[retained]=std::move(systems[i]);
+            ++retained;
+        }
+        systems.resize(retained);
     }
     void deduplicate(std::vector<System>& systems,const Progress& progress) {
         // Only compare systems sharing an entire observed cycle. A common

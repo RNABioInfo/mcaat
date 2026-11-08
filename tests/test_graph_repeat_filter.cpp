@@ -277,6 +277,90 @@ void test_curation_ownership() {
     for(const auto& row:systems[0].observations)check(row.repeat==f.repeat,"winning repeat boundary unchanged");
 }
 
+std::set<std::string> circles(const std::vector<System>& systems) {
+    std::set<std::string> result;
+    for(const auto& s:systems)for(const auto& row:s.observations)
+        result.insert(circular_sequence_key(row.repeat+row.spacer));
+    return result;
+}
+System shift_boundary(System s,size_t offset,size_t length,size_t k) {
+    s.repeat_path.clear();
+    for(auto& row:s.observations) {
+        auto sequence=row.repeat+row.spacer;
+        sequence=sequence.substr(offset)+sequence.substr(0,offset);
+        row.cycle=rotate(row.cycle,offset);row.repeat=sequence.substr(0,length);row.spacer=sequence.substr(length);
+        row.repeat_nodes=length-k+1;
+        if(s.repeat_path.empty())s.repeat_path=Path(row.cycle.begin(),row.cycle.begin()+row.repeat_nodes);
+    }
+    return s;
+}
+void test_sequence_subset_removal() {
+    Fixture f(23,28);for(int i=0;i<10;++i)f.append(f.repeat);
+    auto options=f.o;options.repeat_min=23;
+    RepeatFilter<Graph> filter(f.g,options);
+    auto parent=assigned(f,{0,1,2,3,4,5});parent.sources={10};
+    auto child=shift_boundary(assigned(f,{0,1,2}),2,26,23);child.sources={20};
+    const auto before=circles({parent,child});
+    auto result=filter.curate({child,parent});
+    check(result.size()==1 && result.front().observations.size()==6,"contained circles removed despite different boundary and spacers");
+    check(circles(result)==before,"subset removal preserves every distinct accepted circular sequence");
+    check(filter.decisions[0].status=="redundant_circular_subset" && filter.decisions[0].competing_candidates.count(2),"redundant report links to a retained parent");
+    check(filter.decisions[0].retained_paths.empty() && filter.decisions[0].original.observations.size()==3,"removed boundary alternatives remain traceable");
+    check(result[0].sources==std::vector<Node>({10,20}),"source provenance merged without increasing support");
+    check(filter.stats.redundant_candidates==1 && filter.stats.redundant_observations==3,"redundancy counts are explicit");
+    result=filter.curate(result);
+    check(result.size()==1 && filter.stats.redundant_candidates==0 && circles(result)==before,"sequence deduplication is idempotent");
+
+    auto equal=shift_boundary(parent,2,26,23);
+    for(auto input:{std::vector<System>{equal,parent},std::vector<System>{parent,equal}}) {
+        result=filter.curate(input);
+        check(result.size()==1 && filter.spell(result[0].repeat_path)==f.repeat,"equal evidence picks the same existing eligible boundary independent of input order");
+    }
+    auto reverse=child;reverse.repeat_path.clear();reverse.candidate_cycles.clear();
+    for(auto& row:reverse.observations) {
+        row.repeat=reverse_complement(row.repeat);row.spacer=reverse_complement(row.spacer);
+        row.cycle=f.g.add(row.repeat+row.spacer);reverse.candidate_cycles.push_back(cycle_key(row.cycle));
+        if(reverse.repeat_path.empty())reverse.repeat_path=Path(row.cycle.begin(),row.cycle.begin()+row.repeat_nodes);
+    }
+    result=filter.curate({reverse,parent});
+    check(result.size()==1 && circles(result)==before,"subset matching handles circular rotation and reverse complement together");
+
+    result=filter.curate({assigned(f,{0,1}),assigned(f,{1,2}),assigned(f,{0,2})});
+    check(result.size()==3,"coverage by a union of different candidates never causes deletion");
+    result=filter.curate({parent,assigned(f,{0,1,6})});
+    check(result.size()==2 && circles(result)==circles({parent,assigned(f,{0,1,6})}),"one unique circular sequence prevents subset removal");
+    result=filter.curate({assigned(f,{0,1}),assigned(f,{6,7})});
+    check(result.size()==2,"identical repeats with distinct circles are not duplicate systems");
+
+    auto unresolved=child;unresolved.candidate_count=4;unresolved.candidate_cycles.push_back(cycle_key(f.cycles[9]));
+    options.repeat_support=.6;RepeatFilter<Graph> allow_unresolved(f.g,options);
+    result=allow_unresolved.curate({unresolved,parent});
+    check(result.size()==1 && allow_unresolved.decisions[0].original.candidate_cycles.size()==4,
+          "unassigned source cycles survive in the removed candidate's review evidence");
+
+    std::vector<System> duplicates(256,parent);
+    result=filter.curate(std::move(duplicates));
+    check(result.size()==1 && filter.stats.sequence_subset_checks==255,"identical reports require linear subset checks, not a pairwise clique");
+}
+void test_curation_length_bounds() {
+    Fixture f(23,28);for(size_t n:{29,30,30,31})f.append(f.repeat,n);
+    auto options=f.o;options.repeat_min=options.repeat_max=28;
+    options.spacer_min=options.spacer_max=30;options.repeat_support=.5;
+    auto input=assigned(f,{0,1,2,3});
+    RepeatFilter<Graph> filter(f.g,options);
+    auto result=filter.curate({input});
+    check(result.size()==1 && result[0].observations.size()==2,"curation enforces inclusive spacer bounds, not just repeat inference");
+    check(result[0].candidate_count==4 && result[0].support_count==2,"invalid length assignments do not erase the original support denominator");
+    check(filter.stats.invalid_length_observations==2 && filter.decisions[0].invalid_length_observations==2,"length exclusions are counted");
+    for(const auto& row:result[0].observations)check(row.repeat.size()==28 && row.spacer.size()==30,"boundary lengths retained exactly");
+    options.repeat_min=29;options.repeat_max=30;RepeatFilter<Graph> too_short(f.g,options);
+    check(too_short.curate({input}).empty() && too_short.decisions[0].status=="repeat_length_range","below-minimum repeat rejected in curation");
+    options.repeat_min=23;options.repeat_max=27;RepeatFilter<Graph> too_long(f.g,options);
+    check(too_long.curate({input}).empty() && too_long.decisions[0].status=="repeat_length_range","above-maximum repeat rejected in curation");
+    options.repeat_max=28;options.spacer_min=options.spacer_max=32;RepeatFilter<Graph> no_spacers(f.g,options);
+    check(no_spacers.curate({input}).empty() && no_spacers.decisions[0].status=="repeat_spacer_length_range","candidate with no length-valid spacers rejected explicitly");
+}
+
 int main() {
     try {
         for(auto s:{"0","-0.1","1.01","nan","inf","85%",".6junk",""}) {
@@ -286,6 +370,7 @@ int main() {
         check(parse_repeat_support("0.85")==.85 && parse_repeat_support(".60")==.6 && parse_repeat_support("1")==1,"valid fractions");
         test_threshold_and_variants();test_joint_support();test_deduplication();test_shifted_strands();
         test_incremental_deduplication();test_boundaries_and_rejections();test_curation_ownership();
+        test_sequence_subset_removal();test_curation_length_bounds();
         std::cout<<checks<<" graph repeat-filter checks passed\n";
     }catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<'\n';return 1;}
 }

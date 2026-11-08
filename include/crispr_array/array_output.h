@@ -109,7 +109,7 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
         }
         auto decisions=array_output(staging/"CRISPR_graph_decisions.tsv");
         decisions<<"candidate_id\tstatus\tarray_id\trepeat\toriginal_cycles\toriginal_assigned\tretained_assigned\tremoved_shared_cycles"
-                   "\tcompeting_candidates\tspacer_families\tsequence_variants\tmean_spacer_similarity\tmean_repeat_spacer_similarity\tsource_start_edges\tremoved_strand_duplicates\tquality_flags\tcycles_outside_length_range\n";
+                   "\tcompeting_candidates\tspacer_families\tsequence_variants\tmean_spacer_similarity\tmean_repeat_spacer_similarity\tsource_start_edges\tremoved_strand_duplicates\tquality_flags\tcycles_outside_length_range\tobservations_outside_repeat_spacer_lengths\n";
         auto alternatives=array_output(staging/"CRISPR_graph_alternatives.tsv");
         alternatives<<"candidate_id\treason\t"<<path_header;
         auto review=array_output(staging/"CRISPR_graph_review_cycles.tsv");
@@ -126,14 +126,17 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
                 decisions<<std::setprecision(8)<<s.quality.spacer_similarity<<'\t'<<s.quality.repeat_spacer_similarity;
             else decisions<<"NA\tNA";
             decisions<<'\t'<<path_text(s.sources)<<'\t'<<d.duplicate_strand_cycles<<'\t'
-                     <<flags_text(found==accepted.end()?s.quality:found->second.second->quality)<<'\t'<<d.out_of_range_cycles<<'\n';
+                     <<flags_text(found==accepted.end()?s.quality:found->second.second->quality)<<'\t'<<d.out_of_range_cycles
+                     <<'\t'<<d.invalid_length_observations<<'\n';
             std::set<Path> assigned;size_t observation=0;
             for (const auto& row:s.observations) {
                 const auto key=cycle_key(row.cycle);assigned.insert(key);++observation;
                 if (!d.retained_paths.count(key)) {
                     alternatives<<s.candidate_id<<'\t'<<
                         ((row.cycle.size()<options.cycle_min || row.cycle.size()>options.cycle_max)?"cycle_length_range":
-                        (found==accepted.end()?d.status:"redundant_cycle_alternative"))<<'\t';
+                        ((row.repeat.size()<options.repeat_min || row.repeat.size()>options.repeat_max ||
+                          row.spacer.size()<options.spacer_min || row.spacer.size()>options.spacer_max)?"repeat_spacer_length_range":
+                        (found==accepted.end()?d.status:"redundant_cycle_alternative")))<<'\t';
                     emit_path(alternatives,row,observation);++review_observations;
                 }
             }
@@ -146,6 +149,8 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
         stats<<"metric\tvalue\nrepeat_support\t"<<std::setprecision(17)<<options.repeat_support<<"\nk\t"<<options.k
              <<"\narray_filter_mode\t"<<(options.quality.strict?"strict":"conservative")
              <<"\ncycle_min_length\t"<<options.cycle_min<<"\ncycle_max_length\t"<<options.cycle_max
+             <<"\nrepeat_min_length\t"<<options.repeat_min<<"\nrepeat_max_length\t"<<options.repeat_max
+             <<"\nspacer_min_length\t"<<options.spacer_min<<"\nspacer_max_length\t"<<options.spacer_max
              <<"\nspacer_variant_similarity\t"<<options.quality.variant_similarity<<"\nmax_spacer_similarity\t"<<options.quality.max_spacer_similarity
              <<"\nmax_repeat_spacer_similarity\t"<<options.quality.max_repeat_spacer_similarity<<"\nmax_cycles_exclusive\t"<<options.quality.max_cycles
              <<"\ninput_cycles\t"<<s.input_cycles<<"\ninvalid_cycles\t"<<s.invalid_cycles<<"\nduplicate_cycles_within_groups\t"<<s.duplicate_cycles
@@ -154,6 +159,10 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
              <<"\ncurated_candidates\t"<<filter.decisions.size()<<"\nquality_rejected\t"<<s.quality_rejected<<"\noverlap_rejected\t"<<s.overlap_rejected
              <<"\nshared_cycles_removed\t"<<s.shared_cycles_removed<<"\nduplicate_strand_cycles_removed\t"<<s.duplicate_strand_cycles
              <<"\ncycles_outside_length_range\t"<<s.out_of_range_cycles+s.curation_out_of_range_cycles
+             <<"\nobservations_outside_repeat_spacer_lengths\t"<<s.invalid_length_observations
+             <<"\nredundant_candidates_removed\t"<<s.redundant_candidates
+             <<"\nredundant_observations_removed\t"<<s.redundant_observations
+             <<"\nsequence_subset_checks\t"<<s.sequence_subset_checks
              <<"\nshared_circular_sequences\t"<<shared_count<<"\nunique_circular_sequences\t"<<cycle_arrays.size()
              <<"\nunique_spacer_sequences_across_arrays\t"<<distinct_spacers.size()
              <<"\narrays\t"<<systems.size()<<"\nspacers\t"<<variant_count
@@ -166,7 +175,8 @@ void write_array_outputs(Graph& graph,RepeatFilter<Graph>& filter,const Options&
         for (const auto& item:fs::directory_iterator(staging)) fs::rename(item.path(),destination/item.path().filename());
         fs::remove(staging);
         std::cout<<"  ▸ Graph filtering: "<<systems.size()<<" candidates, "<<families<<" spacer families, "<<variant_count<<" sequence variants\n"
-                 <<"  ▸ Review: "<<s.quality_rejected<<" quality rejections, "<<s.overlap_rejected<<" overlap rejections; "<<review_observations<<" alternative observations\n";
+                 <<"  ▸ Review: "<<s.quality_rejected<<" quality rejections, "<<s.overlap_rejected<<" overlap rejections, "
+                 <<s.redundant_candidates<<" redundant candidates removed; "<<review_observations<<" alternative observations\n";
     } catch (...) {std::error_code ec;fs::remove_all(staging,ec);throw;}
 }
 } // namespace mcaat::arrays

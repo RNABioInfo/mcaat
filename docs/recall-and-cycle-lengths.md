@@ -17,7 +17,10 @@ annotated arrays must not be equated.
   reasons to discard a candidate or remove its spacers.
 - Both strands of a circle count once within a candidate. Shared evidence
   between candidates is disclosed in `CRISPR_graph_shared_cycles.tsv` and their
-  `quality_flags`. It is not assigned to whichever candidate ranks first.
+  `quality_flags`. Candidates consisting entirely of assigned circles already
+  covered by one retained candidate are now removed as redundant reports;
+  their assignments remain in review. Partial overlaps retain their unique
+  evidence. See [the later exact-set fix](circular-sequence-deduplication.md).
 - Every distinct observed spacer appears in `CRISPR_Arrays_N.txt`; `spacers=`
   counts these strings. Similarity families, observed representatives and every
   variant are also listed in `CRISPR_spacer_variants.tsv`. Family grouping is
@@ -35,6 +38,9 @@ names without `--`. Invalid, fractional and reversed cycle bounds fail before
 graph loading. The chosen range and mode are written to output metadata.
 
 ## What the supplied reports can establish
+
+The measurements in this section describe commit `2fec173`, before the later
+exact-set deduplication fix. They concern the older 906-candidate reports.
 
 The supplied 906 candidates contain assigned cycles of length **46–77**, with
 4,014 observations exactly at 77. They cannot reveal cycles of length 78–100

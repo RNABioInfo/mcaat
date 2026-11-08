@@ -25,6 +25,9 @@ for row in accepted:
     assert row['array_id'] not in owned[key],'circular sequence repeated within candidate'
     if strict:assert not owned[key],'strict output shares a circular sequence'
     owned[key].add(row['array_id'])
+    if 'repeat_min_length' in metrics:
+        assert int(metrics['repeat_min_length'])<=len(row['repeat'])<=int(metrics['repeat_max_length'])
+        assert int(metrics['spacer_min_length'])<=len(row['spacer'])<=int(metrics['spacer_max_length'])
 shared={key:owners for key,owners in owned.items() if len(owners)>1}
 if (a.after/'CRISPR_graph_shared_cycles.tsv').exists():
     reported={r['canonical_circular_sequence']:set(r['array_ids'].split(',')) for r in rows(a.after/'CRISPR_graph_shared_cycles.tsv')}
@@ -50,4 +53,29 @@ for file in a.after.glob('CRISPR_Arrays_*.txt'):
         if line.startswith('>'):current=line[1:].split()[0]
         elif line.startswith('        ') and '\t' in line:text_observed.add((current,line.split('\t')[-1]))
 assert text_observed==observed,'main text report hides observed spacer variants'
-print(json.dumps({'original_observations':len(original),'accepted_observations':len(accepted),'review_observations':len(review),'accepted_arrays':len(new_systems),'unique_accepted_circles':len(owned),'missing_or_invented_observations':0,'shared_circular_sequences':len(shared),'duplicate_circles_within_candidate':0},indent=2))
+redundancy_checks=0
+if 'redundant_candidates_removed' in metrics:
+    per_candidate=defaultdict(set)
+    for row in accepted:per_candidate[new_ids[row['array_id']]].add(canonical(row['repeat']+row['spacer']))
+    # Independently verify each removed set has ONE surviving parent; no union
+    # of several unrelated candidates may justify removal.
+    old_evidence=defaultdict(set)
+    for row in original:
+        if not int(metrics['repeat_min_length'])<=len(row['repeat'])<=int(metrics['repeat_max_length']):continue
+        if not int(metrics['spacer_min_length'])<=len(row['spacer'])<=int(metrics['spacer_max_length']):continue
+        if not int(metrics['cycle_min_length'])<=len(row['cycle_vertices'].split(','))<=int(metrics['cycle_max_length']):continue
+        old_evidence[old_ids[row['array_id']]].add(canonical(row['repeat']+row['spacer']))
+    for decision in rows(a.after/'CRISPR_graph_decisions.tsv'):
+        if decision['status']!='redundant_circular_subset':continue
+        child=old_evidence[decision['candidate_id']]
+        assert child and any(parent in per_candidate and child<=per_candidate[parent]
+                             for parent in decision['competing_candidates'].split(',')),'removed set lacks a surviving superset'
+        redundancy_checks+=1
+    assert redundancy_checks==int(metrics['redundant_candidates_removed'])
+    indexed=defaultdict(set)
+    for name,sequence_set in per_candidate.items():
+        for key in sequence_set:indexed[key].add(name)
+    for name,sequence_set in per_candidate.items():
+        neighbors=min((indexed[key] for key in sequence_set),key=len)
+        assert not any(name!=other and sequence_set<=per_candidate[other] for other in neighbors),'redundant set remains accepted'
+print(json.dumps({'original_observations':len(original),'accepted_observations':len(accepted),'review_observations':len(review),'accepted_arrays':len(new_systems),'unique_accepted_circles':len(owned),'missing_or_invented_observations':0,'shared_circular_sequences':len(shared),'duplicate_circles_within_candidate':0,'verified_redundant_removals':redundancy_checks},indent=2))

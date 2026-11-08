@@ -77,10 +77,18 @@ it does not assert that nearby sequences are errors or delete candidates with
 two distinct observations in one display family. Within-candidate strand copies
 still count once. Original graph-compatible deduplication/merging still runs.
 
-Shared cycles across remaining candidates are preserved and explicitly listed
+Final curation also removes a candidate when every assigned circular sequence
+is contained in **one** retained candidate, regardless of repeat-boundary shifts.
+The removed candidate's original assignments and unresolved source paths remain
+in the review files. Partial overlaps with unique assigned circles survive.
+See [circular sequence deduplication](circular-sequence-deduplication.md) for the
+set rule, deterministic tie breaking, and measured results.
+
+Shared cycles across those remaining candidates are preserved and explicitly listed
 in `CRISPR_graph_shared_cycles.tsv`; both candidates get a `shared_cycle_evidence`
 flag. Alternative partitions of the same circle are not proven false merely
-because another candidate was ranked first. Large merged candidates are flagged
+because another candidate was ranked first; redundant complete reports are
+represented by their surviving superset and archived alternatives. Large merged candidates are flagged
 and quadratic grouping is skipped: each observed string is annotated as its own
 family in that case. The enumeration cap itself is unchanged.
 
@@ -156,7 +164,14 @@ Groups rejected during initial inference are still only counted in the summary.
 family and an observed representative. CAS/phage graph-path readers still receive
 all variants, as does the main text report.
 
-`CRISPR_graph_shared_cycles.tsv` lists normalized circular sequences shared by retained candidates and their IDs. Complete overlap membership is stored once per cycle rather than as a quadratic set of candidate pairs; `competing_candidates` in the decision table lists exclusive-assignment competitors only in strict mode. `unique_circular_sequences` and `unique_spacer_sequences_across_arrays` in the summary separate globally deduplicated evidence counts from per-candidate totals. These are sequence counts, not inferred physical loci.
+`CRISPR_graph_shared_cycles.tsv` lists normalized circular sequences shared by retained candidates and their IDs. Complete overlap membership is stored once per cycle rather than as a quadratic set of candidate pairs; `competing_candidates` in the decision table lists exclusive-assignment competitors in strict mode and the surviving superset for `redundant_circular_subset` decisions in either mode. `unique_circular_sequences` and `unique_spacer_sequences_across_arrays` in the summary separate globally deduplicated evidence counts from per-candidate totals. These are sequence counts, not inferred physical loci.
+
+All four repeat/spacer length limits are written to the summary and checked again
+in final curation. Invalid assignments remain in alternatives with a length
+reason; their source cycles stay in the support denominator. Repeat and spacer
+bounds are inclusive. `observations_outside_repeat_spacer_lengths`,
+`redundant_candidates_removed`, `redundant_observations_removed`, and
+`sequence_subset_checks` report the corresponding operations explicitly.
 
 `CRISPR_graph_decisions.tsv` records every candidate entering final curation,
 its original counts and sequence metrics, status, competing candidate IDs,

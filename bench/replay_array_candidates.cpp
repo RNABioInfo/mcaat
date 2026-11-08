@@ -46,20 +46,32 @@ int main(int argc,char** argv) {
         namespace fs=std::filesystem;fs::path input=argv[1],output=argv[2];
         if(fs::weakly_canonical(input)==fs::weakly_canonical(output))throw std::runtime_error("replay output must differ from input");
         Options options;options.cycle_min=47;options.cycle_max=100;
+        rows(input/"CRISPR_graph_summary.tsv",[&](const Fields& r){
+            const auto& key=r.at("metric");const auto& value=r.at("value");
+            if(key=="k")options.k=std::stoull(value);
+            else if(key=="repeat_support")options.repeat_support=parse_repeat_support(value);
+            else if(key=="repeat_min_length")options.repeat_min=std::stoull(value);
+            else if(key=="repeat_max_length")options.repeat_max=std::stoull(value);
+            else if(key=="spacer_min_length")options.spacer_min=std::stoull(value);
+            else if(key=="spacer_max_length")options.spacer_max=std::stoull(value);
+        });
         for(int i=3;i<argc;++i) {
             std::string flag=argv[i];if(++i>=argc)throw std::runtime_error("missing value: "+flag);
             if(flag=="--array-filter-mode")options.quality.strict=parse_filter_mode(argv[i]);
-            else if(flag=="--cycle-min-length" || flag=="--cycle-max-length") {
+            else if(flag=="--cycle-min-length" || flag=="--cycle-max-length" ||
+                    flag=="--min-repeat-len" || flag=="--max-repeat-len" ||
+                    flag=="--min-spacer-len" || flag=="--max-spacer-len") {
                 size_t used=0;auto n=std::stoull(argv[i],&used);
-                if(used!=std::string(argv[i]).size() || std::string(argv[i]).find_first_not_of("0123456789")!=std::string::npos || !n || n>std::numeric_limits<int>::max())throw std::runtime_error("invalid cycle length");
-                if(flag=="--cycle-min-length")options.cycle_min=n;else options.cycle_max=n;
+                if(used!=std::string(argv[i]).size() || std::string(argv[i]).find_first_not_of("0123456789")!=std::string::npos || !n || n>std::numeric_limits<int>::max())throw std::runtime_error("invalid length: "+flag);
+                if(flag=="--cycle-min-length")options.cycle_min=n;
+                else if(flag=="--cycle-max-length")options.cycle_max=n;
+                else if(flag=="--min-repeat-len")options.repeat_min=n;
+                else if(flag=="--max-repeat-len")options.repeat_max=n;
+                else if(flag=="--min-spacer-len")options.spacer_min=n;
+                else options.spacer_max=n;
             } else throw std::runtime_error("unknown option: "+flag);
         }
-
-        rows(input/"CRISPR_graph_summary.tsv",[&](const Fields& r){
-            if(r.at("metric")=="k")options.k=std::stoull(r.at("value"));
-            if(r.at("metric")=="repeat_support")options.repeat_support=parse_repeat_support(r.at("value"));
-        });
+        options.validate();
         ReportGraph graph{options.k};std::vector<System> systems;std::map<std::string,size_t> ids;
         std::vector<size_t> expected;
         rows(input/"CRISPR_graph_systems.tsv",[&](const Fields& r){
