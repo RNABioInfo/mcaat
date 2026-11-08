@@ -41,6 +41,40 @@
 // needed before the subcommand function body
 namespace fs = std::filesystem;
 
+// Re-filter saved cycles against their original graph without re-enumeration.
+static int run_postprocess_arrays(int argc,char** argv) {
+    Settings settings;
+    std::string cycles;
+    for (int i=1;i<argc;++i) {
+        std::string arg=argv[i];
+        if (arg=="--help" || arg=="-h") {
+            std::cout<<"mcaat postprocess-arrays --graph <prefix> --cycles <cycles.txt> "
+                       "--output-folder <dir> [--repeat-support 0.85]\n"
+                       "Optional: --min-repeat-len, --max-repeat-len, --min-spacer-len, --max-spacer-len\n";
+            return 0;
+        }
+        if (++i>=argc) throw std::runtime_error("Missing value for "+arg);
+        const std::string value=argv[i];
+        if (arg=="--graph") settings.graph_input=value;
+        else if (arg=="--cycles") cycles=value;
+        else if (arg=="--output-folder") settings.output_folder=value;
+        else if (arg=="--repeat-support") settings.dna_sequence_settings.repeat_support=mcaat::arrays::parse_repeat_support(value);
+        else if (arg=="--min-repeat-len") settings.dna_sequence_settings.repeat_min_length=std::stoi(value);
+        else if (arg=="--max-repeat-len") settings.dna_sequence_settings.repeat_max_length=std::stoi(value);
+        else if (arg=="--min-spacer-len") settings.dna_sequence_settings.spacer_min_length=std::stoi(value);
+        else if (arg=="--max-spacer-len") settings.dna_sequence_settings.spacer_max_length=std::stoi(value);
+        else throw std::runtime_error("Unknown postprocess-arrays option: "+arg);
+    }
+    if (settings.graph_input.empty() || cycles.empty() || settings.output_folder.empty())
+        throw std::runtime_error("postprocess-arrays requires --graph, --cycles and --output-folder");
+    auto prefix=fs::is_directory(settings.graph_input)?settings.graph_input+"/graph":settings.graph_input;
+    if (!fs::exists(prefix+".sdbg_info")) throw std::runtime_error("Graph metadata not found: "+prefix);
+    omp_set_num_threads(1);
+    SDBG sdbg;step_load_graph(settings,sdbg);
+    PostProcessor processor(settings);processor.run_analysis(cycles);
+    return 0;
+}
+
 // ── detect-cas-genes subcommand ───────────────────────────────────────────────
 
 struct CasDetectConfig {
@@ -443,12 +477,14 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "  --ram <amount>                  Memory cap: B/K/M/G suffix  [default: 95% system]\n"
                  << "  --threads <num>                 Thread count  [default: CPU cores - 2]\n"
                  << "  --cycle-max-length <int>        Maximum cycle length  [default: 77]\n"
+                 << "  --cycle-precheck <bfs|unitig>   Start-node search [default: bfs]\n"
                  << "  --cycle-min-length <int>        Minimum cycle length  [default: 27]\n"
                  << "  --threshold-multiplicity <int>  Edge multiplicity cutoff  [default: 20]\n"
                  << "  --low-abundance <true|false>    Low-abundance mode  [default: true]\n"
                  << "  --autoclean <true|false>         Remove intermediate files after run  [default: true]\n"
                  << "  --min-spacer-len <int>           Minimum spacer length  [default: 23]\n"
                  << "  --max-spacer-len <int>           Maximum spacer length  [default: 50]\n"
+                 << "  --repeat-support <fraction>      Complete repeat path support in distinct cycles [default: 0.85]\n"
                  << "  --min-repeat-len <int>           Minimum repeat length  [default: 23]\n"
                  << "  --max-repeat-len <int>           Maximum repeat length  [default: 55]\n"
                  << "  --benchmark <file>              Expected sequences for evaluation\n"
@@ -542,6 +578,13 @@ Settings parse_arguments(int argc, char* argv[]) {
                 throw runtime_error("Error: Missing value for --output-folder");
             }
         }
+        else if (arg == "--cycle-precheck") {
+            if (++i >= argc) throw runtime_error("Error: Missing value for --cycle-precheck");
+            const string value = argv[i];
+            if (value != "bfs" && value != "unitig")
+                throw runtime_error("Error: --cycle-precheck must be bfs or unitig");
+            settings.cycle_finder_settings.cycle_precheck = value;
+        }
         else if (arg == "--cycle-max-length") {
             if (++i < argc) {
                 try {
@@ -598,6 +641,9 @@ Settings parse_arguments(int argc, char* argv[]) {
                 try { settings.dna_sequence_settings.spacer_max_length = stoi(argv[i]); }
                 catch (...) { throw runtime_error("Error: Invalid value for --max-spacer-len: " + string(argv[i])); }
             } else { throw runtime_error("Error: Missing value for --max-spacer-len"); }
+        } else if (arg == "--repeat-support") {
+            if (++i >= argc) throw runtime_error("Missing value for --repeat-support");
+            settings.dna_sequence_settings.repeat_support = mcaat::arrays::parse_repeat_support(argv[i]);
         } else if (arg == "--min-repeat-len") {
             if (++i < argc) {
                 try { settings.dna_sequence_settings.repeat_min_length = stoi(argv[i]); }
@@ -757,7 +803,9 @@ std::map<uint64_t, std::vector<std::vector<uint64_t>>> createRepeatToSpacerNodes
 #ifdef DEBUG
 int main(int argc, char** argv) {
     // %% PARSE ARGUMENTS %%
-    Settings settings = parse_arguments(argc, argv);
+    Settings settings;
+    try {settings = parse_arguments(argc, argv);}
+    catch (const std::exception& e) {std::cerr << "Error: " << e.what() << "\n";return 1;}
     string name_of_genome = "test";
     if (check_for_error(settings)){
         //tell the user which folder we are deleting
@@ -895,6 +943,10 @@ int main(int argc, char** argv) {
 #else
 int main(int argc, char** argv) {
     // ── Subcommand routing ───────────────────────────────────────────────────
+    if (argc >= 2 && std::string(argv[1]) == "postprocess-arrays") {
+        try {return run_postprocess_arrays(argc - 1, argv + 1);}
+        catch (const std::exception& e) {std::cerr<<"Error: "<<e.what()<<'\n';return 1;}
+    }
     if (argc >= 2 && std::string(argv[1]) == "detect-cas-genes") {
         try {
             return run_detect_cas_genes(argc - 1, argv + 1);
@@ -960,13 +1012,15 @@ int main(int argc, char** argv) {
            << "    \"threshold_multiplicity\": " << settings.cycle_finder_settings.threshold_multiplicity << ",\n"
            << "    \"cycle_min_length\": "       << settings.cycle_finder_settings.cycle_min_length << ",\n"
            << "    \"cycle_max_length\": "       << settings.cycle_finder_settings.cycle_max_length << ",\n"
+           << "    \"cycle_precheck\": "         << jstr(settings.cycle_finder_settings.cycle_precheck) << ",\n"
            << "    \"low_abundance\": "          << (settings.cycle_finder_settings.low_abundance ? "true" : "false") << "\n"
            << "  },\n"
            << "  \"dna_sequence\": {\n"
            << "    \"spacer_min_length\": " << settings.dna_sequence_settings.spacer_min_length << ",\n"
            << "    \"spacer_max_length\": " << settings.dna_sequence_settings.spacer_max_length << ",\n"
            << "    \"repeat_min_length\": " << settings.dna_sequence_settings.repeat_min_length << ",\n"
-           << "    \"repeat_max_length\": " << settings.dna_sequence_settings.repeat_max_length << "\n"
+           << "    \"repeat_max_length\": " << settings.dna_sequence_settings.repeat_max_length << ",\n"
+           << "    \"repeat_support\": " << std::setprecision(17) << settings.dna_sequence_settings.repeat_support << "\n"
            << "  }\n"
            << "}\n";
     }

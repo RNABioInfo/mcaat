@@ -12,7 +12,9 @@
 #include <unordered_set>
 //#include "progressbar.hpp"
 #include <list>
+#ifdef __GLIBC__
 #include <malloc.h>
+#endif
 #include <bitset>
 #include <atomic> 
 // Parallel hashmap for better performance in DLS

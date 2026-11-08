@@ -5,7 +5,8 @@
  * @file array_to_nodes.h
  * @brief Bridge from MCAAT CRISPR array output files to SDBG node paths.
  *
- * Parses CRISPR_Arrays_N.txt files produced by PostProcessor and maps
+ * Prefers validated CRISPR_graph_paths.tsv observations produced by PostProcessor.
+ * For legacy runs, parses CRISPR_Arrays_N.txt and maps
  * each repeat consensus and spacer sequence back to SDBG node IDs via
  * SDBG::IndexBinarySearch, producing CRISPRPostProcessor::FilteredArray
  * structs ready for CasWorkflow::DetectAllCassettesFromFiltered.
@@ -22,6 +23,7 @@
 
 #include "cas/crispr_postprocessor.h"
 #include "sdbg/sdbg.h"
+#include "crispr_array/sdbg_repeat_graph.h"
 #include <string>
 #include <vector>
 #include <fstream>
@@ -174,6 +176,61 @@ BuildFilteredArrays(const std::string& arrays_file, const SDBG& sdbg) {
     return result;
 }
 
+// Read exact observed edge paths when graph-based post-processing supplied them.
+// Numeric IDs alone are not trusted: validate every label, edge and boundary.
+inline std::vector<CRISPRPostProcessor::FilteredArray>
+BuildFilteredArraysFromGraphPaths(const std::string& file,const SDBG& sdbg) {
+    using namespace mcaat::arrays;
+    std::ifstream input(file);
+    if (!input) throw std::runtime_error("Cannot open graph path table: "+file);
+    const std::string expected="array_id\tobservation_id\trepeat\tspacer\trepeat_vertices\tspacer_vertices"
+        "\trepeat_to_spacer_vertices\tspacer_to_repeat_vertices\tcycle_vertices\tcycle_edges\tsupports_repeat_path";
+    std::string line;
+    if (!std::getline(input,line) || line!=expected) throw std::runtime_error("Unsupported graph path table header");
+    SdbgRepeatGraph graph(sdbg);
+    Options options;options.k=sdbg.k();
+    RepeatFilter<SdbgRepeatGraph> spelling(graph,options);
+    std::vector<CRISPRPostProcessor::FilteredArray> result;
+    std::map<std::string,size_t> indices;
+    std::map<std::string,std::set<std::string>> seen_spacers;
+    while (std::getline(input,line)) {
+        std::vector<std::string> fields;
+        std::istringstream stream(line);std::string field;
+        while(std::getline(stream,field,'\t')) fields.push_back(field);
+        if(fields.size()!=11) throw std::runtime_error("Malformed graph path table row");
+        const auto& id=fields[0];const auto& repeat=fields[2];const auto& spacer=fields[3];
+        auto vertices=parse_path(fields[8]),edges=parse_path(fields[9]);
+        if(repeat.size()<sdbg.k() || vertices.size()!=repeat.size()+spacer.size() ||
+           vertices.size()!=std::set<Node>(vertices.begin(),vertices.end()).size() ||
+           graph.vertices(edges)!=vertices || spelling.spell(vertices).substr(0,vertices.size())!=repeat+spacer)
+            throw std::runtime_error("Graph path table does not match graph or sequences: "+id);
+        size_t repeat_nodes=repeat.size()-sdbg.k()+1;
+        auto parts=partition(vertices,repeat_nodes,sdbg.k());
+        if(parse_path(fields[4])!=parts.repeat || parse_path(fields[5])!=parts.spacer ||
+           parse_path(fields[6])!=parts.repeat_to_spacer || parse_path(fields[7])!=parts.spacer_to_repeat ||
+           (fields[10]!="0" && fields[10]!="1"))
+            throw std::runtime_error("Invalid repeat/spacer boundary assignment: "+id);
+        if(!indices.count(id)) {indices[id]=result.size();result.emplace_back();}
+        auto& array=result[indices.at(id)];
+        if(fields[10]=="1") {
+            if(!array.repeat_sequence.empty() && array.repeat_sequence!=repeat)
+                throw std::runtime_error("Inconsistent supported repeat: "+id);
+            if(array.repeat_path.empty()) {
+                array.repeat_sequence=repeat;
+                array.repeat_path.assign(edges.begin(),edges.begin()+repeat_nodes);
+            }
+        }
+        if(seen_spacers[id].insert(spacer).second) {
+            std::vector<Node> path;
+            for(size_t i=repeat.size();i+sdbg.k()<=edges.size();++i) path.push_back(edges[i]);
+            array.spacer_node_paths.push_back(std::move(path));
+        }
+    }
+    for(const auto& a:result) if(a.repeat_path.empty() || a.spacer_node_paths.size()<2)
+        throw std::runtime_error("Graph path table contains an unsupported or singleton array");
+    return result;
+}
+
 // ── Directory scan ────────────────────────────────────────────────────────────
 
 /**
@@ -193,6 +250,9 @@ BuildFilteredArraysFromDir(const std::string& output_dir, const SDBG& sdbg) {
 
     std::vector<CRISPRPostProcessor::FilteredArray> all;
     if (!fs::exists(output_dir) || !fs::is_directory(output_dir)) return all;
+
+    const fs::path paths=fs::path(output_dir)/"CRISPR_graph_paths.tsv";
+    if (fs::exists(paths)) return BuildFilteredArraysFromGraphPaths(paths.string(),sdbg);
 
     // Collect matching files
     std::vector<fs::path> files;

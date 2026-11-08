@@ -1,4 +1,5 @@
 #include "crispr_array/cycle_finder.h"
+#include "crispr_array/unitig_cycle_search.h"
 #include "crispr_array/filters.h"
 #include "core/settings.h"
 #include <stdexcept>
@@ -589,6 +590,10 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
     #pragma omp parallel num_threads(threads)
     {
         int tid = omp_get_thread_num();
+        // Construct only after pruning; worker-local caches need no locks and
+        // are destroyed before downstream code can mutate the graph again.
+        mcaat::UnitigCycleSearch<SDBG> unitig_search(*this->settings.sdbg);
+        const bool use_unitigs = this->settings.cycle_finder_settings.cycle_precheck == "unitig";
         #pragma omp for schedule(dynamic, chunk_size)
         for (uint64_t node = 0; node < n; node++) {
             if(!this->settings.sdbg->IsValidEdge(node)) continue;
@@ -600,7 +605,10 @@ size_t CycleFinder::ChunkStartNodes(map<int, vector<uint64_t>, greater<int>>& st
                 if(this->_IncomingNotEqualToCurrentNode(node, edge_indegree)) continue;
                 int reached_depth = 0;
 
-                bool dls = this->BidirectionalBFS(node, this->settings.cycle_finder_settings.cycle_max_length);
+                bool dls = use_unitigs
+                    ? unitig_search.has_cycle(node, mcaat::upstream_precheck_bound(
+                          this->settings.cycle_finder_settings.cycle_max_length))
+                    : this->BidirectionalBFS(node, this->settings.cycle_finder_settings.cycle_max_length);
                 if(!dls) continue;
                 int log2_mult = static_cast<int>(ceil(log2(double(this->settings.sdbg->EdgeMultiplicity(node)))));
                 local_chunks[tid][log2_mult].push_back(node);
@@ -713,7 +721,9 @@ int CycleFinder::FindApproximateCRISPRArrays()
             counter += local_processed[t];
         }
 
+#ifdef __GLIBC__
         malloc_trim(0);
+#endif
         // Summarize work performed for this multiplicity bucket and avoid printing too often
         size_t cycles_in_bucket = cumulative - cumulative_at_bucket_start;
         std::cout << "  ▸ Bucket log2=" << nodes_iterator->first << ": "

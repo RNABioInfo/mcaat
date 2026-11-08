@@ -13,14 +13,14 @@
  * post-processing step that CasWorkflow needs to run cassette detection:
  *   - repeat_path          : ordered SDBG node IDs spanning the repeat
  *   - spacer_node_paths    : per-spacer ordered SDBG node IDs
- *   - repeat_sequence      : consensus repeat nucleotide sequence
+ *   - repeat_sequence      : supported observed repeat nucleotide sequence
  */
 namespace CRISPRPostProcessor {
 
 struct FilteredArray {
-    std::string repeat_sequence;                          // Consensus repeat
-    std::vector<uint64_t> repeat_path;                   // SDBG nodes covering the repeat
-    std::vector<std::vector<uint64_t>> spacer_node_paths; // SDBG nodes per spacer
+    std::string repeat_sequence;                          // Supported observed repeat (legacy files may contain a consensus)
+    std::vector<uint64_t> repeat_path;                   // Valid SDBG edge handles whose source k-mers cover the repeat
+    std::vector<std::vector<uint64_t>> spacer_node_paths; // Valid SDBG edge handles for pure spacer k-mers
 };
 
 }  // namespace CRISPRPostProcessor

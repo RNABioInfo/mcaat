@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <cctype>
 #include "sdbg/sdbg.h"
+#include "crispr_array/graph_repeat_filter.h"
 #include <fstream>
 
 using namespace std;
@@ -37,12 +38,15 @@ struct Settings {
         bool low_abundance = true; // Flag to enable low abundance mode
         int cycle_max_length = 77; // Maximum length of a cycle
         int cycle_min_length = 27; // Minimum length of a cycle
+        // Opt-in while graph-dependent performance is evaluated.
+        std::string cycle_precheck = "bfs"; // bfs | unitig
     } cycle_finder_settings;
     struct DNASequenceSettings {
         int spacer_min_length = 23; // Minimum length of a spacer
         int spacer_max_length = 50; // Maximum length of a spacer
         int repeat_min_length = 23; // Minimum length of a repeat
         int repeat_max_length = 55; // Maximum length of a repeat
+        double repeat_support = 0.85; // Fraction of distinct candidate cycles sharing the complete repeat path
     } dna_sequence_settings;
 
     SDBG* sdbg = nullptr; // Pointer to the SDBG graph
@@ -221,6 +225,11 @@ struct Settings {
             else if (key == "output-file") { this->output_file = val; }
             else if (key == "cycle-max-length") { this->cycle_finder_settings.cycle_max_length = stoi(val); }
             else if (key == "cycle-min-length") { this->cycle_finder_settings.cycle_min_length = stoi(val); }
+            else if (key == "cycle-precheck") {
+                if (val != "bfs" && val != "unitig")
+                    throw runtime_error("cycle-precheck must be bfs or unitig");
+                this->cycle_finder_settings.cycle_precheck = val;
+            }
             else if (key == "threshold-multiplicity") { this->cycle_finder_settings.threshold_multiplicity = stoull(val); }
             else if (key == "low-abundance") {
                 std::transform(val.begin(), val.end(), val.begin(), ::tolower);
@@ -235,6 +244,9 @@ struct Settings {
             else if (key == "spacer-max-length") { this->dna_sequence_settings.spacer_max_length = stoi(val); }
             else if (key == "repeat-min-length") { this->dna_sequence_settings.repeat_min_length = stoi(val); }
             else if (key == "repeat-max-length") { this->dna_sequence_settings.repeat_max_length = stoi(val); }
+            else if (key == "repeat-support") {
+                this->dna_sequence_settings.repeat_support = mcaat::arrays::parse_repeat_support(val);
+            }
             // unknown keys are ignored for forward-compatibility
         }
         file.close();

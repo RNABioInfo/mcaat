@@ -90,6 +90,7 @@ mcaat --graph <path> [options]
 | `--cycle-max-length <int>` | `77` | Maximum cycle length to search |
 | `--cycle-min-length <int>` | `27` | Minimum cycle length to search |
 | `--threshold-multiplicity <int>` | `20` | Min edge multiplicity for cycle start nodes |
+| `--repeat-support <fraction>` | `0.85` | Minimum fraction of distinct cycles supporting the entire repeat path; range `(0, 1]` |
 | `--low-abundance <true\|false>` | `true` | Enable low-abundance mode |
 | `--autoclean <true\|false>` | `true` | Remove intermediate graph/cycle files after run. Set to `false` to keep them |
 | `--settings <path>` | — | Key=value settings file (CLI flags override it) |
@@ -100,17 +101,20 @@ mcaat --graph <path> [options]
 ```
 <output-folder>/
 ├── CRISPR_Arrays_1.txt  # detected arrays (split into numbered files if large)
-├── graph/               # succinct de Bruijn graph files
-└── cycles/              # raw cycle data
+├── CRISPR_graph_systems.tsv    # repeat support and original start IDs per candidate
+├── CRISPR_graph_paths.tsv      # observed cycles, repeat/spacer/boundary vertices and edges
+├── CRISPR_graph_candidates.tsv # assigned and unresolved candidate cycles
+├── CRISPR_graph_summary.tsv    # filtering and deduplication counts
+├── graph/                     # graph files, unless autoclean removes them
+└── cycles.txt                 # ordered k-mers, unless autoclean removes them
 ```
 
 Each `CRISPR_Arrays_N.txt` file has a short header followed by one block per array:
 
 ```
-# MCAAT — CRISPR Array Output
-# Generated : 2026-05-12 10:30:21
-# Arrays    : 42
-# Spacers   : 312
+# MCAAT graph-based CRISPR array candidates
+# Repeat support: 0.85 (distinct cycles per candidate group; not sequence identity)
+# Spacer rows have no inferred genomic order. See CRISPR_graph_*.tsv for paths.
 
 >Array_1  spacers=8
 ATCGATCGATCGATCGATCGATCG
@@ -119,7 +123,17 @@ ATCGATCGATCGATCGATCGATCG
         ATCGATCGATCGATCTATCG    GGAATTCCAATCGATCGAATACCCAC   ← repeat variant
 ```
 
-The consensus repeat sequence is on its own line. Each spacer entry shows the repeat variant (or dashes when it matches the consensus exactly) followed by the spacer sequence.
+The supported observed repeat sequence is on its own line. Each spacer entry shows its observed repeat variant (or dashes when it matches the supported repeat) followed by the spacer sequence. The text format stays compatible with existing readers. CAS and phage commands prefer the graph path table and validate its sequences, edges and boundaries against the loaded graph.
+
+See [graph-based repeat/spacer filtering](docs/graph-repeat-filtering.md) for the support definition, deduplication rules, output fields and limitations.
+
+To change support without enumerating cycles again, retain the graph and `cycles.txt` (`--autoclean false`):
+
+```bash
+mcaat postprocess-arrays --graph /data/graph/graph \
+  --cycles /data/run/cycles.txt --output-folder /data/run-support-60 \
+  --repeat-support 0.60
+```
 
 ## Settings file
 
@@ -134,6 +148,7 @@ cycle-max-length=77
 cycle-min-length=27
 threshold-multiplicity=20
 low-abundance=true
+repeat-support=0.85
 autoclean=true
 ```
 
@@ -148,4 +163,48 @@ autoclean=true
 If you use MCAAT please cite: https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558
 
 Contact: Please write an issue on our GitHub page if any problems occur.
+
+## Optional cached start-node precheck
+
+`--cycle-precheck unitig` enables cached traversal of non-branching paths during
+start-node selection. The default remains `bfs`. The settings-file equivalent is
+`cycle-precheck=unitig`; the selected mode is saved in the run configuration.
+
+The cache stores each path's endpoint, original step count and minimum
+multiplicity. It is bounded to 16,384 entries per worker and lives only during
+start-node selection, after graph pruning. A weighted bidirectional search tracks
+distances in both directions and checks their sum when the two searches meet.
+Cycle enumeration, parallel spacer paths and the original SDBG sequences are
+unchanged. Do not reuse a search object after mutating its graph without clearing
+its cache.
+
+For compatibility, the CLI mode preserves the existing bidirectional precheck's
+effective bound of `2 * (floor(cycle_max_length / 2) + 1)` steps. In particular,
+the existing default of 77 permits a 78-step precheck cycle. The underlying
+`UnitigCycleSearch::has_cycle` API uses an exact bound; correcting the existing
+precheck's length convention is a separate change.
+
+Build and run the independent correctness tests and the actual-SDBG benchmark:
+
+```sh
+cmake -S tests -B build/search -DCMAKE_BUILD_TYPE=Release
+cmake --build build/search -j 4
+ctest --test-dir build/search --output-on-failure
+build/search/benchmark_unitig_search /path/to/graph results.csv 0 5 77 quick
+```
+
+`0` tests every qualifying candidate; a positive value selects an evenly spaced
+sample. `quick` compares the original BFS with the compatible cached search.
+Omit it to also measure exact-bound search with jumps disabled, uncached jumps and
+cached jumps. Each trial starts with an empty cache, includes its construction
+cost, and validates answers. Loading, pruning and scanning times are reported
+separately. The benchmark wraps the original precheck and pruning functions from
+the current source, rather than reimplementing them.
+
+To compare full single-thread cycle and array outputs, run
+`python3 bench/check_pipeline.py build/mcaat /path/to/graph /path/to/new-output`.
+The comparison ignores only cycle-line ordering and generated timestamps.
+
+For sanitizer checks without the SDBG benchmark, configure another build with
+`-DBUILD_SDBG_BENCHMARK=OFF -DSEARCH_SANITIZERS=ON`.
 
