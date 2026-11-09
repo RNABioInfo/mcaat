@@ -46,6 +46,10 @@ struct Query {
     std::set<Node> array_edges;
     std::vector<Entry> entries;
     std::vector<Decision> decisions;
+    std::set<std::string> viable_seeds;
+    size_t compared_paths=0,compared_regions=0;
+    bool has_runner=false,comparable_runner=false,score_tie=false;
+    double runner_score=0;
     size_t eligible=0;bool truncated=false;
 };
 static void record(Query& q,const Entry& e,const Candidate& c,const std::string& outcome,
@@ -80,6 +84,34 @@ static void compact_intervals(Query& q) {
         e.paths=std::move(keep);
     }
     q.entries.erase(std::remove_if(q.entries.begin(),q.entries.end(),[](const auto& e){return e.paths.empty();}),q.entries.end());
+}
+static void select_prediction(Query& q,const Options& options) {
+    if(q.entries.empty())return;
+    size_t best_entry=0,best_path=0;std::set<std::string> regions;
+    for(size_t i=0;i<q.entries.size();++i) {
+        const auto& e=q.entries[i];q.viable_seeds.insert(e.id);
+        for(size_t j=0;j<e.paths.size();++j) {
+            const auto& c=e.paths[j];++q.compared_paths;regions.insert(canonical(c.sequence));
+            const auto& best=q.entries[best_entry];
+            if(better_prediction(c,e.seed.end-e.seed.begin,best.paths[best_path],best.seed.end-best.seed.begin,options)) {best_entry=i;best_path=j;}
+        }
+    }
+    q.compared_regions=regions.size();
+    const auto& winner=q.entries[best_entry].paths[best_path];auto winner_key=canonical(winner.sequence);
+    const Candidate* runner=nullptr;size_t runner_matched=0;
+    for(const auto& e:q.entries)for(const auto& c:e.paths) {
+        if(canonical(c.sequence)==winner_key)continue;
+        auto matched=e.seed.end-e.seed.begin;
+        if(!runner || better_prediction(c,matched,*runner,runner_matched,options)){runner=&c;runner_matched=matched;}
+    }
+    if(runner) {
+        q.has_runner=true;q.runner_score=runner->score;
+        q.comparable_runner=options.pair_weight==0 || bool(winner.pair_support)==bool(runner->pair_support);
+        q.score_tie=q.comparable_runner && std::abs(winner.score-runner->score)<1e-12;
+    }
+    Entry selected=std::move(q.entries[best_entry]);Candidate chosen=std::move(selected.paths[best_path]);
+    selected.paths.clear();selected.paths.push_back(std::move(chosen));
+    q.entries.clear();q.entries.push_back(std::move(selected));
 }
 static std::vector<Query> load_queries(const fs::path& folder) {
     std::map<std::string,Query> queries;std::set<std::string> ids;
@@ -215,8 +247,10 @@ int run_extension_module(int argc,char** argv) {
             std::cout<<"mcaat phage-curate --arrays DIR --graph PREFIX [--output DIR]\n"
                 "Exact protospacer seeds and bounded bidirectional extension; partial results retained.\n"
                 "Primary outputs require an external flank. Unresolved seeds are reported separately.\n"
+                "Select ONE prediction per distinct spacer across all seed intervals, ranked by multiplicity stability.\n"
                 "--threads 1 --beam-width 32 --max-length 2500 --max-states 50000\n"
-                "--max-paths 16 --max-seeds 128 --max-query-states 200000 --min-match-bp 0 (0 = graph k)\n"
+                "--max-paths 16 (internal shortlist per seed; final output is one per spacer)\n"
+                "--max-seeds 128 --max-query-states 200000 --min-match-bp 0 (0 = graph k)\n"
                 "--max-retained-bases 50000000 (abort explicitly before excessive result storage)\n"
                 "--coverage-model auto|poisson|negative-binomial --coverage-window 7\n"
                 "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
@@ -341,7 +375,7 @@ int run_extension_module(int argc,char** argv) {
                     if(!c.external_right && c.right_length) {
                         trim_right(c,graph.k());c.right.context="array";c.right.stop="array_context_only";
                     }
-                    c.score=c.left.coverage.score()+c.right.coverage.score();
+                    c.score=stability(c.left.coverage,c.right.coverage).score();
                 }
                 // A work-limited or failed-join seed is diagnostic information,
                 // never a detection in the primary FASTA/association outputs.
@@ -358,7 +392,7 @@ int run_extension_module(int argc,char** argv) {
                 entry.paths.erase(std::remove_if(entry.paths.begin(),entry.paths.end(),[&](const auto& c){return !unique_paths.insert(c.path).second;}),entry.paths.end());
                 size_t bases=0;for(const auto& c:entry.paths)bases+=c.sequence.size();
                 if(retained_bases.fetch_add(bases)+bases>max_retained_bases)throw std::runtime_error("results exceed --max-retained-bases; increase the budget or lower --beam-width/--max-seeds");
-                if(!entry.paths.empty())q.entries.push_back(std::move(entry));
+                if(!entry.paths.empty()){q.viable_seeds.insert(entry.id);q.entries.push_back(std::move(entry));}
             }
             if(!q.entries.empty())q.status="candidate";
             else if(q.truncated || std::any_of(q.decisions.begin(),q.decisions.end(),[](const auto& d){return d.outcome=="unresolved";}))q.status="unresolved";
@@ -380,19 +414,17 @@ int run_extension_module(int argc,char** argv) {
         for(auto& c:e.paths) {
             bool match=false;for(const auto& s:q.sources)match|=pam_status(q,e,c,s,rules).first=="match";
             if(match){c.pam_bonus=options.pam_weight;c.score+=c.pam_bonus;}
+            c.score-=1.-double(e.seed.end-e.seed.begin)/q.sequence.size();
         }
         std::sort(e.paths.begin(),e.paths.end(),[&](const Candidate& a,const Candidate& b){
-            // Supplied physical linkage takes precedence over an uncalibrated
-            // coverage preference; unsupported candidates remain alternatives.
-            if(options.pair_weight>0 && bool(a.pair_support)!=bool(b.pair_support))return bool(a.pair_support);
-            if(a.score!=b.score)return a.score>b.score;
-            return a.sequence.size()!=b.sequence.size()?a.sequence.size()>b.sequence.size():a.sequence<b.sequence;
+            return better_prediction(a,e.seed.end-e.seed.begin,b,e.seed.end-e.seed.begin,options);
         });
         if(e.paths.size()>options.max_paths){e.paths.resize(options.max_paths);for(auto& c:e.paths)c.search_limited=true;}
     }
     // Only suppress a redundant interval once its replacement has survived
     // evidence ranking and output limits.
     for(auto& q:queries)compact_intervals(q);
+    for(auto& q:queries)select_prediction(q,options);
     fs::create_directories(destination);
     auto staging=destination/(".protospacer-stage-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     fs::create_directory(staging);
@@ -408,6 +440,8 @@ int run_extension_module(int argc,char** argv) {
         unresolved_out<<"seed_id\tquery_id\tquery_begin\tquery_end\tsequence\treasons\n";
         auto decisions=output(staging/"protospacer_decisions.tsv");
         decisions<<"query_id\tseed_id\tquery_begin\tquery_end\toutcome\treason\tleft_stop\tright_stop\texpanded_states\treplacement_seed_id\n";
+        auto selection=output(staging/"protospacer_selection.tsv");
+        selection<<"query_id\tseed_id\tregion_id\tcompared_paths\tcompared_regions\ttotal_score\tstability_score\twithin_flank_variance\tadjacent_change\tleft_right_difference\tsample_penalty\tleft_samples\tright_samples\tleft_multiplicity\tright_multiplicity\tquery_coverage\tmultiplicity_evidence\trunner_up_score\tscore_gap\tscore_tie\tsearch_limited\n";
         auto regions_out=output(staging/"protospacer_regions.tsv");
         regions_out<<"region_id\tlength\tsequence\tvertices\tedges\tviral_status\n";
         auto fasta=output(staging/"ContiguousPaths.fasta");
@@ -422,17 +456,16 @@ int run_extension_module(int argc,char** argv) {
                 full_matched_queries+=std::any_of(q.entries.begin(),q.entries.end(),[&](const auto& e){return e.seed.begin==0 && e.seed.end==q.sequence.size();});
             }
             unresolved_queries+=q.status=="unresolved";
-            std::set<std::string> retained,context_rejected;
-            for(const auto& e:q.entries)retained.insert(e.id);
+            std::set<std::string> context_rejected;
             std::map<std::string,std::vector<const Decision*>> pending;
             for(const auto& d:q.decisions) {
                 decisions<<query_id<<'\t'<<d.seed<<'\t'<<d.begin<<'\t'<<d.end<<'\t'<<d.outcome<<'\t'<<d.reason<<'\t'<<d.left_stop<<'\t'<<d.right_stop<<'\t'<<d.expanded<<'\t'<<d.replacement<<'\n';
-                if(d.outcome=="unresolved" && !retained.count(d.seed))pending[d.seed].push_back(&d);
+                if(d.outcome=="unresolved" && !q.viable_seeds.count(d.seed))pending[d.seed].push_back(&d);
                 if(d.reason=="source_array_context")context_rejected.insert(d.seed);
                 redundant_paths+=d.outcome=="redundant";
             }
             for(auto it=context_rejected.begin();it!=context_rejected.end();) {
-                if(retained.count(*it) || pending.count(*it))it=context_rejected.erase(it);else ++it;
+                if(q.viable_seeds.count(*it) || pending.count(*it))it=context_rejected.erase(it);else ++it;
             }
             unresolved_seeds+=pending.size();rejected_context_seeds+=context_rejected.size();
             for(const auto& [seed,items]:pending) {
@@ -459,6 +492,16 @@ int run_extension_module(int argc,char** argv) {
                         fasta<<'>'<<id<<'\n'<<c.sequence<<'\n';
                     }
                     bool flip=c.sequence!=it->second.second;
+                    auto stable=stability(c.left.coverage,c.right.coverage);
+                    const auto& lp=(flip?c.right:c.left).coverage.profile;const auto& rp=(flip?c.left:c.right).coverage.profile;
+                    bool left_enough=lp.samples>=options.coverage_window,right_enough=rp.samples>=options.coverage_window;
+                    selection<<query_id<<'\t'<<e.id<<'\t'<<id<<'\t'<<q.compared_paths<<'\t'<<q.compared_regions<<'\t'<<c.score<<'\t'
+                        <<stable.score()<<'\t'<<stable.within<<'\t'<<stable.jumps<<'\t'<<stable.between<<'\t'<<stable.support<<'\t'
+                        <<lp.samples<<'\t'<<rp.samples<<'\t'<<lp.level()<<'\t'<<rp.level()<<'\t'<<double(e.seed.end-e.seed.begin)/q.sequence.size()<<'\t'
+                        <<(left_enough&&right_enough?"both_flanks":left_enough||right_enough?"one_flank":"insufficient")<<'\t';
+                    if(q.has_runner)selection<<q.runner_score;else selection<<"NA";
+                    selection<<'\t';if(q.has_runner && q.comparable_runner)selection<<c.score-q.runner_score;else selection<<"NA";
+                    selection<<'\t'<<q.score_tie<<'\t'<<(c.search_limited||q.truncated)<<'\n';
                     for(const auto& source:q.sources) {
                         ++links;size_t qb=source.reverse?q.sequence.size()-e.seed.end:e.seed.begin;
                         size_t qe=source.reverse?q.sequence.size()-e.seed.begin:e.seed.end;
@@ -470,13 +513,13 @@ int run_extension_module(int argc,char** argv) {
                             <<(l&&r?"two_sided":"one_sided")<<'\t'<<(flip?c.right.stop:c.left.stop)<<'\t'<<(flip?c.left.stop:c.right.stop)<<'\t'
                             <<(flip?c.right.coverage:c.left.coverage).mean()<<'\t'<<(flip?c.left.coverage:c.right.coverage).mean()<<'\t'<<(flip?c.right.coverage:c.left.coverage).dispersion()<<'\t'<<(flip?c.left.coverage:c.right.coverage).dispersion()<<'\t'
                             <<c.left.coverage.scored+c.right.coverage.scored<<'\t'<<c.left.coverage.score()+c.right.coverage.score()<<'\t'<<(c.score-c.pam_bonus+(pam.first=="match"?options.pam_weight:0))<<'\t'<<rank<<'\t'<<(c.search_limited||q.truncated)<<'\t'<<c.expanded<<'\t'
-                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(e.paths.size()>1?"multiple_retained_paths":(c.search_limited||q.truncated)?"search_limited":"single_retained_path")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
+                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(q.score_tie?"selected_score_tie":q.compared_regions>1?"selected_best_of_alternatives":(c.search_limited||q.truncated)?"search_limited":"single_candidate")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
                     }
                 }
             }
         }
         auto parameters=output(staging/"protospacer_parameters.json");
-        parameters<<"{\n  \"schema\": 2,\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
+        parameters<<"{\n  \"schema\": 3,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
             <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases
@@ -490,11 +533,11 @@ int run_extension_module(int argc,char** argv) {
             <<",\n  \"rejected_context_seed_intervals\": "<<rejected_context_seeds<<",\n  \"redundant_interval_paths\": "<<redundant_paths
             <<",\n  \"seed_candidates\": "<<seeds<<",\n  \"regions\": "<<regions.size()<<",\n  \"associations\": "<<links<<"\n}\n";
         query_out.close();seed_out.close();seed_fasta.close();regions_out.close();fasta.close();associations.close();parameters.close();
-        matched_fasta.close();unresolved_fasta.close();unresolved_out.close();decisions.close();
+        matched_fasta.close();unresolved_fasta.close();unresolved_out.close();decisions.close();selection.close();
         for(const auto& item:fs::directory_iterator(staging))fs::rename(item.path(),destination/item.path().filename());
         fs::remove(staging);
         std::cout<<"Matched "<<matched_queries<<" / "<<queries.size()<<" distinct spacers ("<<full_matched_queries<<" with full-length matches; "<<matched_queries-full_matched_queries<<" partial-only)\n"
-            <<"Saved "<<seeds<<" matched intervals, "<<regions.size()<<" unique regions, "<<links<<" source associations to "<<destination<<'\n'
+            <<"Selected one prediction per matched spacer: "<<seeds<<" predictions, "<<regions.size()<<" unique regions, "<<links<<" source associations to "<<destination<<'\n'
             <<"Separate unresolved intervals: "<<unresolved_seeds<<"; source-array intervals rejected: "<<rejected_context_seeds<<"; redundant interval paths suppressed: "<<redundant_paths<<'\n';
     }catch(...){std::error_code ec;fs::remove_all(staging,ec);throw;}
     return 0;

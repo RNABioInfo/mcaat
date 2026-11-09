@@ -72,6 +72,7 @@ for name,genomes in [('negative',hosts),('positive',[hosts[0],target])]:
         assert any(q['spacer']==spacer and q['mapping_status']=='candidate' for q in queries),'true target lost together with array path'
         assert all(q['mapping_status']=='no_external_flank' for q in queries if q['spacer'] in (indel_spacer,exact_spacer))
         assert regions and all(r['sequence'] in target or rc(r['sequence']) in target for r in regions),'source/chimeric context survived in positive control'
+        assert len(regions)==len(seeds)==1,'multiple final paths for the same spacer'
         assert any(int(r['length'])>=1000 for r in regions),'target reduced to tiny fragment'
         assert {r['array_id'] for r in links}=={'Array_1','Array_RC'},'opposite-strand source lost'
         assert all(r['status']!='seed_only' for r in links)

@@ -176,9 +176,37 @@ void test_interval_compaction() {
     check(index.replacement("AACCGGTT",4,1,3,"shifted").empty(),"different alignment retained");
     check(index.replacement("AACCGGTT",5,3,6,"overlap").empty(),"overlap without containment retained");
 }
+void test_stability_selection() {
+    Options o;o.max_coverage_penalty=100000;
+    auto profile=[&](std::vector<double> values) {Coverage c;for(double v:values)c.observe(v,o);return c;};
+    auto flat=profile(std::vector<double>(20,20)),high=profile(std::vector<double>(20,200));
+    auto varied=profile({5,40,5,40,5,40,5,40,5,40,5,40,5,40,5,40,5,40,5,40});
+    check(stability(flat,flat).score()>stability(varied,varied).score(),"stable multiplicity outranks variable multiplicity");
+    check(stability(flat,flat).score()>stability(flat,high).score(),"individually stable but incompatible flank levels penalized");
+    check(std::abs(stability(flat,flat).score()-stability(high,high).score())<1e-12,"higher absolute multiplicity is not itself rewarded");
+    auto short_flat=profile({20}),empty=profile({});
+    check(stability(flat,flat).score()>stability(short_flat,short_flat).score(),"one observation cannot masquerade as strongest stable evidence");
+    check(stability(flat,flat).score()>stability(empty,empty).score(),"absent coverage cannot earn perfect stability");
+    auto blocks=profile({10,10,10,10,30,30,30,30}),alternating=profile({10,30,10,30,10,30,10,30});
+    check(std::abs(blocks.profile.variance()-alternating.profile.variance())<1e-12,"equal count distributions have equal variance");
+    check(stability(blocks,blocks).score()>stability(alternating,alternating).score(),"repeated jumps penalized beyond overall variance");
+    auto noisy_baseline=profile({1,20,50});
+    check(noisy_baseline.profile.variance()>0 && noisy_baseline.scored==0,"initial baseline variation participates in final ranking");
+    Candidate a,b;a.sequence="ACGT";b.sequence="ACGA";a.left.coverage=a.right.coverage=flat;b.left.coverage=flat;b.right.coverage=high;
+    a.score=stability(a.left.coverage,a.right.coverage).score();b.score=stability(b.left.coverage,b.right.coverage).score();
+    check(better_prediction(a,30,b,30,o),"cross-flank stability drives prediction comparison");
+    b.pair_support=2;check(better_prediction(b,30,a,30,o),"supplied physical linkage remains explicit ranking evidence");
+    Graph g;g.k_=23;auto spacer=dna(34),l1=dna(260),r1=dna(280),l2=dna(270),r2=dna(250);
+    g.add(l1+spacer+r1,12);g.add(l2+spacer+r2,80);
+    Path seed;for(size_t i=0;i+g.k()<=spacer.size();++i)seed.push_back(g.ids.at(spacer.substr(i,g.k())));
+    o.max_bp=1000;auto seeds=isolate(g,seed,{},o);auto candidates=reconstruct(g,seeds.seeds.front(),{},o);
+    check(candidates.size()>=4,"fixture explores both matching and crossed flank combinations");
+    auto best=std::min_element(candidates.begin(),candidates.end(),[&](const auto& x,const auto& y){return better_prediction(x,spacer.size(),y,spacer.size(),o);});
+    check(best!=candidates.end() && (best->sequence==l1+spacer+r1 || best->sequence==l2+spacer+r2),"stable matching flank pair wins over chimeric low/high combinations");
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});

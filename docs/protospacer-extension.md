@@ -73,18 +73,61 @@ protospacers.
    They are excluded from the primary detection FASTAs and associations. A
    completed search showing only array context is `no_external_flank`; a query
    with no accepted result and unfinished searches is `unresolved`.
-6. Optionally score reads/read pairs and PAM models, then retain up to `max-paths`
-   alternatives **per seed**. Deduplicate complete region sequences, including
-   reverse complements, without discarding their source associations.
+6. Score multiplicity stability on the emitted flanks, including variation
+   within each flank, adjacent changes and agreement between the two flanks.
+   Optionally incorporate reads/read pairs and supplied PAM models. Retain up
+   to `max-paths` candidates per seed **internally** for final comparison.
 7. Consolidate nested intervals only when they produced the identical retained
    extension sequence at the same query alignment. Different paths/alignments
-   remain alternatives. This happens after evidence ranking/output limits, so
-   the recorded replacement is guaranteed to survive. Report distinct matched
-   spacer counts separately from interval and region counts.
+   remain candidates. Then compare candidates across **all seed intervals of
+   the spacer** and select exactly one prediction. Write only selected predictions
+   to the primary FASTA/TSV outputs. Identical final sequences, including reverse
+   complements, share a region without losing their source associations.
 
 Connectivity is evidence for a candidate path, not proof that its complete
 sequence occurs in a single genome. Shared sequences can connect unrelated
-flanks. Alternative paths, unresolved limits and all source links remain visible.
+flanks. Selecting the best available prediction does not establish its true
+genomic origin. Comparison counts, score ties and search limits remain visible.
+
+## Selecting one final prediction
+
+Use sampled edge multiplicities outside the seed and known source-array context.
+For each flank, transform each count `c` to `x = log2(1 + c)` and record its mean,
+population variance and mean squared difference between consecutive observations.
+Initial baseline observations participate in this calculation. All statistics are
+recomputed on the emitted sequence, after any trimming.
+
+```text
+within  = (variance_left + variance_right) / 2
+jumps   = (mean_squared_step_left + mean_squared_step_right) / 2
+between = (mean_left - mean_right)^2          # when both sides have observations
+support = 1/(n_left + 1) + 1/(n_right + 1)
+stability_score = -(within + jumps + between + support)
+match_penalty = 1 - matched_bases / input_spacer_length
+total_score = stability_score - match_penalty + optional_read_pair_PAM_score
+```
+
+Higher is better. Stability rewards consistent multiplicity, not higher absolute
+multiplicity. The between-flank term penalizes joining a stable low-depth flank
+to a stable high-depth flank. The support penalty prevents tiny or unobserved
+flanks from receiving a perfect score; one-sided reconstructions remain eligible.
+Missing-side variance/step terms are zero, and missing observations contribute
+through `support`. These are explicit ranking heuristics, not posterior
+probabilities, p-values or calibrated confidence intervals.
+
+With supplied read pairs and positive `pair-weight`, pair-supported candidates
+still rank ahead of unsupported candidates. Within that tier, compare total
+score; exact ties prefer more matched spacer bases, more sampled observations,
+then a longer region and finally sequence order for reproducibility. Choose one
+winner for the complete spacer query, including all its partial seed intervals.
+`--max-paths 1` alone would not do this, because it limits candidates per seed.
+
+`protospacer_selection.tsv` gives the selected seed/region, score components,
+sample counts, multiplicity levels, number of compared shortlisted candidates, and the
+runner-up score for a different region sequence. `score_gap` is reported only
+within the same pair-support tier. Numerical score ties are disclosed even though
+the deterministic tie-break chooses one sequence. Low coverage evidence is
+labelled `insufficient`, rather than presented as demonstrated stability.
 
 ## Coverage model
 
@@ -111,12 +154,13 @@ NB:      x log(x/mu) - (x+r) log((x+r)/(mu+r))
 
 The zero-count logarithm contributes zero. After collecting the baseline, an
 individual observation above `max-coverage-penalty` stops that branch before the
-incompatible edge. The coverage score is minus the mean loss per side, summed
+incompatible edge. The diagnostic `coverage_score` is minus the mean loss per side, summed
 over the two emitted flanks. Trimmed parts do not contribute. A side with too few
 observations to finish its baseline has score zero and no scored samples; zero
 is **not** a confidence statement. These are ranking heuristics, not calibrated
 probabilities. Nearby k-mer counts remain correlated, and systematic coverage
-changes can still stop a true extension.
+changes can still stop a true extension. Final selection uses the stability score
+above; the Poisson/NB model supplies the branch-stopping test.
 
 ## Optional read and read-pair evidence
 
@@ -140,16 +184,16 @@ must agree after removing `/1` and `/2` suffixes.
   facing inward and within the specified outer insert span. Each pair contributes
   at most once per region. `unique_pair_support` means only one **retained region**
   supports that pair, not uniqueness in the complete metagenome.
-- With positive `pair-weight`, pair-supported alternatives rank ahead of
-  unsupported alternatives within the same seed. Within that tier, the score is
-  coverage score + `read-weight * fraction_supported_junctions` +
+- With positive `pair-weight`, pair-supported candidates rank ahead of
+  unsupported candidates across all seeds of the same spacer. Within that tier, the score is
+  stability score - match penalty + `read-weight * fraction_supported_junctions` +
   `pair-weight * log(1 + pair_support)` + any PAM bonus. Supporting several
   overlapping regions does not erase a pair's evidence.
 
 These reads rerank graph-generated alternatives; they cannot recover an already
 pruned path. Full-read matching does not tolerate sequencing errors or perform
 alignment. A pair supporting part of a region does not validate its unspanned
-ends. Unsupported candidates remain alternatives unless removed by output limits.
+ends. All candidates compete for the single final prediction per spacer.
 
 ## Optional PAM rules
 
@@ -177,7 +221,7 @@ statuses. PAM mismatch is not a hard exclusion. A match adds `pam-weight`.
 Several models for one array are allowed; a matching model wins. Ranking is
 shared by sources of the same query and uses a match from any source. The
 reported association's `total_score` and PAM status use only that source's model,
-so per-source total scores need not follow the shared `alternative_rank`.
+so per-source total scores can differ from the score used for the shared selection.
 No subtype, orientation or PAM model is inferred from an unlabelled graph.
 
 ## Source-array repeat similarity
@@ -206,7 +250,7 @@ applied to each path; another external path for the same spacer is preserved.
 | `--max-query-states` | 200000 | Edge expansions across all intervals of one canonical spacer |
 | `--max-seeds` | 128 | Retained intervals per canonical spacer |
 | `--min-match-bp` | graph k | Minimum exact matched interval; CLI value 0 means graph k |
-| `--max-paths` | 16 | Final alternatives per seed |
+| `--max-paths` | 16 | Internal shortlist per seed; final output remains one prediction per spacer |
 | `--coverage-window` | 7 | Baseline count observations per flank; minimum 3 |
 | `--array-repeat-identity` | 0.85 | Source-repeat edit similarity threshold, allowed range 0.5–1 |
 | `--max-coverage-penalty` | 20 | Per-observation branch stopping threshold |
@@ -224,20 +268,23 @@ output pruning set `search_limited`; they do not claim an exhaustive result.
 | Output | Contents |
 |---|---|
 | `protospacer_queries.tsv` | Every source observation, its canonical query ID and mapping status |
-| `protospacer_candidates.tsv`, `Protospacers.fasta` | Accepted exact seed intervals with an external flank, and graph vertices |
+| `protospacer_candidates.tsv`, `Protospacers.fasta` | One selected exact seed interval per matched spacer, with an external flank and graph vertices |
 | `MatchedSpacers.fasta` | One complete input spacer per matched canonical query; partial-only queries are counted separately in JSON |
 | `protospacer_regions.tsv`, `ContiguousPaths.fasta` | Unique accepted extended/partial region sequences, vertices and edges |
 | `protospacer_associations.tsv` | Source → seed → region links, coordinates, strand, scores, rank, ambiguity, stop reasons and evidence |
 | `protospacer_unresolved.tsv`, `UnresolvedSeeds.fasta` | Unresolved intervals without a retained detection, including unperformed searches and failed joins |
 | `protospacer_decisions.tsv` | Rejected source contexts, unresolved path outcomes, and redundant intervals with their retained replacement seed |
+| `protospacer_selection.tsv` | One row per selected prediction: stability components, comparison counts, runner-up score and ties |
 | `protospacer_parameters.json` | Effective settings, input paths and result counts |
 
-Output schema 2 distinguishes `matched_queries`, `full_length_matched_queries`,
+Output schema 3 declares `selection=one_prediction_per_distinct_spacer` and distinguishes `matched_queries`, `full_length_matched_queries`,
 `partial_only_matched_queries`, `unresolved_queries` and
 `unresolved_seed_intervals`. The matched-query denominator is `unique_queries`,
 with identical spacers and reverse complements processed together. Counting
-`Protospacers.fasta` gives intervals; counting `MatchedSpacers.fasta` gives
-distinct input spacers with at least one accepted interval. A full input spacer
+`Protospacers.fasta` gives selected intervals; counting `MatchedSpacers.fasta` gives
+distinct input spacers with a selected prediction. Both counts are now equal;
+the number of unique sequences in `ContiguousPaths.fasta` cannot exceed that count.
+A full input spacer
 in `MatchedSpacers.fasta` is not a claim that its entire length matched: consult
 the seed table's coverage. No `seed_only` rows occur in primary associations.
 
@@ -253,17 +300,23 @@ Stop reasons distinguish dead ends, cycles, source-array context, coverage break
 length limits, work limits and incompatible flanks. `coverage_samples` counts
 scored observations after baseline collection. `expanded_states` is the total
 edge work for that seed search, repeated on its associations, not additive across
-rows. A single retained path may still have pruned alternatives.
+rows. A single selected path may still have pruned alternatives. The association
+`ambiguity` reports `selected_best_of_alternatives` or `selected_score_tie` when
+appropriate; `alternative_rank` remains 1 for the selected result. Selecting one
+path does not imply that it was the only feasible path.
 `left_context` and `right_context` distinguish `external`, `array`, and
 `incomplete` context tests in the stored region orientation. `pending` with zero
 flank bases denotes a side where extension did not start. Repeat-compatible
 parts trimmed from an accepted one-sided region do not contribute coverage.
 The decision report can contain multiple outcomes for one seed; a successful
 alternative and a rejected array alternative can coexist. The unresolved FASTA
-only contains intervals with no retained detection. Completely skipped intervals
+only contains intervals with no viable detection; a lower-ranked valid candidate
+does not become unresolved because another candidate won. Completely skipped intervals
 beyond `max-seeds` are disclosed by `eligible_intervals` and `seed_limit_reached`.
+The decision report's interval-consolidation references describe the internal
+shortlist; a referenced seed need not be the final winner.
 
-Successful reruns replace the module's eleven named files, including empty FASTAs;
+Successful reruns replace the module's twelve named files, including empty FASTAs;
 they do not append old results. Computation/input failures before publication
 leave previous results intact. Files are staged then individually renamed; this
 is not a filesystem-wide atomic transaction. Array and graph inputs are unchanged.
@@ -300,25 +353,27 @@ The production fixture checks both array input formats, actual SDBG traversal,
 source/region coordinates, reverse-complement deduplication, deterministic
 threads/reruns, explicit caps and failed/empty rerun behavior.
 
-In the general controlled fixture, five source observations yield four seed
-intervals, 12 regions and 21 source associations. Eight regions are entirely
-contained in the known source sequences; four graph-compatible alternatives are
-recombined. Source-array exclusion cannot resolve every graph ambiguity.
-With the supplied pairs, the first-ranked full-spacer target for the two opposite
-strand source observations is a true target segment. This demonstrates retention,
-ranking and ambiguity handling, **not biological sensitivity or precision**.
-The fixture deliberately keeps alternatives rather than presenting them as
-confirmed phages. Metagenome-scale runtime and accuracy require server testing.
+In the general controlled fixture, five source observations yield two selected
+seed intervals, two regions and three source associations. Without reads, one
+selected region is contained in a known source sequence and one is recombinant.
+The fixture deliberately shares a 23-mer between different spacers: stable
+multiplicity alone cannot resolve every graph ambiguity. With the supplied
+pairs, the selected full-spacer target for the two opposite-strand source
+observations is a true target segment. This demonstrates selection and physical
+evidence handling, **not biological sensitivity or precision**. Metagenome-scale
+runtime and accuracy require server testing.
 
 The separate context regression uses a repeat/spacer context observed in a
 failing output. Host-only loci with substituted, indel-containing and exact
 repeat copies now produce zero detections. Adding an independent target for the
-same spacer retains one matched interval and three region alternatives, all
-contained in the true target sequence, with both source strands preserved.
+same spacer retains one matched interval and one selected region, contained in
+the true target sequence, with both source strands preserved.
 Setting repeat identity to 1 reproduces variant-repeat leakage, exercising the
 configured threshold. Unit tests also cover a genuine target sharing more than
 `k` bases with a repeat prefix, short unresolved contexts, spacer variation in
-partial matches, and conservative interval consolidation.
+partial matches, and interval consolidation. Selection tests compare matching
+against crossed low/high-multiplicity flanks, penalize within-flank instability,
+and verify that absent or short coverage profiles do not get a perfect score.
 
 The release build also excludes an unused experimental debug translation unit
 with obsolete interfaces and guards Linux-only `malloc.h`/`malloc_trim` calls.
@@ -327,10 +382,12 @@ The graph builder's memory conversion is also corrected: settings store GiB,
 while the underlying MEGAHIT `--host_mem` argument takes bytes. Existing-graph
 `phage-curate` runs do not invoke that builder.
 
-After the repair, local smoke checks used existing graphs CP058556.1 and
+After the selection change, local smoke checks used existing graphs CP058556.1 and
 CP071793.1 with two threads, a 500-bp output limit, 2,000 expansions per side and
-8,000 per query. Of 317 and 277 distinct input spacers, respectively, 22 and 49
-had retained candidates. All emitted source coordinates, sequence/path lengths,
+8,000 per query. Of 317 and 277 distinct input spacers, respectively, 22 and 51
+had selected predictions. The selector compared 229 and 784 shortlisted paths;
+the final FASTAs contain 18 and 46 distinct region sequences because different
+spacers can select the same region. All emitted source coordinates, sequence/path lengths,
 distinct-spacer counts and edge-work bounds passed checks; no unextended seeds
 occurred in detection outputs. These counts do not establish target accuracy:
 the array input itself includes candidate detections, and these genome fixtures
@@ -339,5 +396,5 @@ are much smaller than a full pooled metagenome.
 Replaying the shared C++ context classifier on the saved failing run recognized
 all 694 previously identified repeat-flanked regions as array context on both
 sides. This checked saved sequences, not a rerun of the original graph search;
-the original graph was not available locally. The core suite passes 146 checks
+the original graph was not available locally. The core suite passes 158 checks
 in both the release and AddressSanitizer/UndefinedBehaviorSanitizer builds.

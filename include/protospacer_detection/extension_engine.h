@@ -82,8 +82,22 @@ SeedSearch isolate(Graph& graph,const Path& full,const std::set<Node>& array_edg
     return result;
 }
 
+struct MultiplicityProfile {
+    size_t samples=0;
+    double mean_log=0,m2=0,step_sum=0,previous=0;
+    void observe(double count) {
+        double value=std::log2(1+std::max(0.,count));
+        if(samples)step_sum+=(value-previous)*(value-previous);
+        ++samples;double delta=value-mean_log;mean_log+=delta/samples;m2+=delta*(value-mean_log);previous=value;
+    }
+    double variance() const {return samples?std::max(0.,m2/samples):0;}
+    double roughness() const {return samples>1?step_sum/(samples-1):0;}
+    double level() const {return samples?std::exp2(mean_log)-1:0;}
+    double loss() const {return variance()+roughness()+1./(samples+1);}
+};
 struct Coverage {
     std::vector<double> baseline;
+    MultiplicityProfile profile;
     double penalty=0;size_t scored=0;
     double mean() const {return median(baseline);}
     double dispersion() const {
@@ -102,6 +116,7 @@ struct Coverage {
         return std::max(0.,(count?count*std::log(count/mean):0)-(count+r)*std::log((count+r)/(mean+r)));
     }
     double observe(double count,const Options& options) {
+        profile.observe(count);
         if(baseline.size()<options.coverage_window) {baseline.push_back(count);return 0;}
         double alpha=options.coverage_model=="poisson"?0:dispersion();
         // Explicit NB uses a weak overdispersion floor when local MAD is zero.
@@ -110,6 +125,19 @@ struct Coverage {
     }
     double score() const {return scored?-penalty/scored:0;}
 };
+struct Stability {
+    double within=0,jumps=0,between=0,support=0;
+    double score() const {return -(within+jumps+between+support);}
+};
+inline Stability stability(const Coverage& left,const Coverage& right) {
+    const auto& l=left.profile;const auto& r=right.profile;
+    Stability s;
+    s.within=(l.variance()+r.variance())/2;
+    s.jumps=(l.roughness()+r.roughness())/2;
+    if(l.samples && r.samples)s.between=(l.mean_log-r.mean_log)*(l.mean_log-r.mean_log);
+    // A short/absent flank must not earn a perfect score from zero observations.
+    s.support=1./(l.samples+1)+1./(r.samples+1);return s;
+}
 struct Side {
     Path nodes; // starts at seed endpoint, grows outwards
     Coverage coverage;
@@ -121,7 +149,7 @@ struct Side {
 struct WalkResult {std::vector<Side> paths;size_t expanded=0;bool beam_pruned=false,work_limited=false;};
 inline bool better_side(const Side& a,const Side& b) {
     if((a.nodes.size()>1)!=(b.nodes.size()>1))return a.nodes.size()>1;
-    if(a.coverage.score()!=b.coverage.score())return a.coverage.score()>b.coverage.score();
+    if(a.coverage.profile.loss()!=b.coverage.profile.loss())return a.coverage.profile.loss()<b.coverage.profile.loss();
     if(a.nodes.size()!=b.nodes.size())return a.nodes.size()>b.nodes.size();
     return a.nodes<b.nodes;
 }
@@ -232,6 +260,15 @@ struct Candidate {
     std::string sequence;
     size_t junctions=0,supported_junctions=0,read_support=0,pair_support=0,unique_pairs=0;
 };
+inline bool better_prediction(const Candidate& a,size_t a_matched,const Candidate& b,size_t b_matched,const Options& options) {
+    if(options.pair_weight>0 && bool(a.pair_support)!=bool(b.pair_support))return bool(a.pair_support);
+    if(a.score!=b.score)return a.score>b.score;
+    if(a_matched!=b_matched)return a_matched>b_matched;
+    auto an=a.left.coverage.profile.samples+a.right.coverage.profile.samples;
+    auto bn=b.left.coverage.profile.samples+b.right.coverage.profile.samples;
+    if(an!=bn)return an>bn;
+    return a.sequence.size()!=b.sequence.size()?a.sequence.size()>b.sequence.size():a.sequence<b.sequence;
+}
 class RetainedIntervalContexts {
     struct Kept {size_t begin,end;std::string id;};
     std::map<std::pair<std::string,int64_t>,std::vector<Kept>> contexts_;
@@ -293,7 +330,7 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         if(!seen.emplace(c.path,c.left.context,c.right.context).second)continue;
         c.sequence=graph.spell(c.path);
         if(c.sequence.size()!=c.path.size()+graph.k()-1)throw std::runtime_error("incorrect reconstructed length");
-        c.score=c.left.coverage.score()+c.right.coverage.score();
+        c.score=stability(c.left.coverage,c.right.coverage).score();
         c.expanded=left.expanded+right.expanded;
         c.search_limited=left.beam_pruned||right.beam_pruned||left.work_limited||right.work_limited||combination_limit;
         results.push_back(std::move(c));

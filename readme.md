@@ -153,18 +153,20 @@ build/mcaat phage-curate \
   --threads 24
 ```
 
-This uses the existing graph without rerunning cycle search. The output includes
-short/one-sided regions, alternative paths and source associations; viral origin
-is not inferred from graph connectivity. Use `phage-curate --help` for limits and
-optional evidence inputs.
+This uses the existing graph without rerunning cycle search. It compares candidate
+extensions by multiplicity stability within and between their flanks and selects
+**one final prediction per distinct spacer**, across all seed intervals. Short or
+one-sided regions remain eligible. Use `phage-curate --help` for limits and optional
+evidence inputs. Selection is a ranking heuristic, not proof of viral origin.
 
 Source-array repeat variants are excluded using configurable edit similarity
 (`--array-repeat-identity 0.85`). Unresolved seeds, including searches stopped
 by work limits without an external flank, are written to `UnresolvedSeeds.fasta`
 and diagnostic TSVs, separately from detections.
 `MatchedSpacers.fasta` and the JSON summary report distinct matched input spacers;
-`Protospacers.fasta` contains accepted matched intervals and can have several per
-spacer. A partial match is not promoted to a full-spacer match.
+`Protospacers.fasta` contains the one selected interval for each matched spacer.
+`protospacer_selection.tsv` reports score components, comparison counts and ties.
+A partial match is not promoted to a full-spacer match.
 
 ## Citation
 
