@@ -27,11 +27,21 @@ inline double median(std::vector<double> x) {
     if(x.empty())return 0;
     std::sort(x.begin(),x.end());return x.size()%2?x[x.size()/2]:(x[x.size()/2-1]+x[x.size()/2])/2;
 }
+struct AdapterPattern {
+    std::string sequence;
+    size_t exact_begin=0,exact_end=0,max_mismatches=0;
+};
 struct Options {
     size_t max_bp=2500,beam_width=32,max_states=50000,max_paths=16,max_seeds=128,min_match=0;
     size_t coverage_window=7,max_query_states=200000;
     double max_coverage_penalty=20,read_weight=1,pair_weight=2,pam_weight=1,array_repeat_identity=.85;
     std::string coverage_model="auto";
+    // Require the exact 13-base Illumina core AND six confirming adapter bases
+    // (at least four must match). The short core alone can occur biologically.
+    // Nextera and user-supplied adapters are exact. Empty explicitly disables.
+    std::vector<AdapterPattern> adapters={{"AGATCGGAAGAGCACACGT",0,13,2},
+                                         {"AGATCGGAAGAGCGTCGTG",0,13,2},
+                                         {"CTGTCTCTTATACACATCT"}};
     void validate() const {
         if(!max_bp || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
             throw std::invalid_argument("extension sizes must be positive; coverage-window must be >=3");
@@ -43,6 +53,53 @@ struct Options {
             throw std::invalid_argument("coverage-model must be auto, poisson or negative-binomial");
         if(!std::isfinite(array_repeat_identity) || array_repeat_identity<.5 || array_repeat_identity>1)
             throw std::invalid_argument("array-repeat-identity must be in [0.5, 1]");
+        if(adapters.size()>64)throw std::invalid_argument("at most 64 adapter sequences are supported");
+        for(const auto& p:adapters) {
+            const auto& s=p.sequence;
+            if(s.size()<12 || s.size()>256 || s.find_first_not_of("ACGT")!=std::string::npos)
+                throw std::invalid_argument("adapter sequences must contain 12-256 ACGT bases");
+            if(p.exact_begin>p.exact_end || p.exact_end>s.size() || p.max_mismatches>s.size()-(p.exact_end-p.exact_begin))
+                throw std::invalid_argument("invalid adapter anchor or mismatch allowance");
+        }
+    }
+};
+class AdapterGuard {
+    std::vector<AdapterPattern> motifs_;
+    size_t width_=0;
+    static bool matches(const std::string& s,size_t start,const AdapterPattern& p) {
+        size_t errors=0;
+        for(size_t i=0;i<p.sequence.size();++i)if(s[start+i]!=p.sequence[i]) {
+            if(i>=p.exact_begin && i<p.exact_end)return false;
+            if(++errors>p.max_mismatches)return false;
+        }
+        return true;
+    }
+public:
+    AdapterGuard(const std::vector<AdapterPattern>& sequences,bool backward=false) {
+        for(const auto& p:sequences)for(bool rc:{false,true}) {
+            auto pattern=p;
+            if(rc)pattern.sequence=reverse_complement(pattern.sequence);
+            if(backward)std::reverse(pattern.sequence.begin(),pattern.sequence.end());
+            if(rc!=backward) {
+                pattern.exact_begin=p.sequence.size()-p.exact_end;
+                pattern.exact_end=p.sequence.size()-p.exact_begin;
+            }
+            width_=std::max(width_,pattern.sequence.size());motifs_.push_back(std::move(pattern));
+        }
+    }
+    bool empty() const {return motifs_.empty();}
+    bool contains(const std::string& s) const {
+        for(const auto& m:motifs_)for(size_t i=0;i+m.sequence.size()<=s.size();++i)if(matches(s,i,m))return true;
+        return false;
+    }
+    std::string suffix(const std::string& s) const {return s.substr(s.size()>width_?s.size()-width_:0);}
+    std::string append(std::string& tail,char base) const {
+        if(empty())return {};
+        tail+=base;if(tail.size()>width_)tail.erase(0,tail.size()-width_);
+        std::string match;
+        for(const auto& m:motifs_)if(m.sequence.size()<=tail.size() && m.sequence.size()>match.size() &&
+            matches(tail,tail.size()-m.sequence.size(),m))match=tail.substr(tail.size()-m.sequence.size());
+        return match;
     }
 };
 struct Arc {Node to,edge;double count;};
@@ -145,9 +202,39 @@ struct Side {
     std::string stop;
     std::string context="unexamined",context_prefix;
     size_t context_clear_at=0;
+    std::string adapter_tail;
+    bool adapter_overlaps_seed=false;
 };
+struct AdapterStop {
+    bool backward=false,overlaps_seed=false;
+    std::string motif; // in the query's forward orientation, even on the left
+    size_t clean_flank_bp=0;
+    Node clean_endpoint=missing,detected_node=missing;
+};
+struct SearchDiagnostics {
+    size_t adapter_stops=0;
+    std::vector<AdapterStop> adapters;
+    // Bound diagnostics independently of search work. Counts remain complete.
+    void record(AdapterStop stop) {++adapter_stops;if(adapters.size()<4096)adapters.push_back(std::move(stop));}
+};
+template<class Graph>
+Coverage path_coverage(Graph& graph,const Path& nodes,size_t length,bool backwards,size_t clear_at,
+                       const std::set<Node>* shared_context,const Options& options) {
+    Coverage cov;size_t since=0;
+    for(size_t i=1;i<=length;++i) {
+        if(i<clear_at)continue;
+        Arc chosen{missing,missing,0};
+        for(auto a:graph.neighbors(nodes[i-1],backwards))if(a.to==nodes[i]){chosen=a;break;}
+        if(chosen.to==missing)throw std::runtime_error("missing coverage path edge");
+        if(shared_context && shared_context->count(chosen.edge)){++since;continue;}
+        if(!cov.baseline.empty() && since<graph.k()+1){++since;continue;}
+        cov.observe(chosen.count,options);since=0;
+    }
+    return cov;
+}
 struct WalkResult {std::vector<Side> paths;size_t expanded=0;bool beam_pruned=false,work_limited=false;};
 inline bool better_side(const Side& a,const Side& b) {
+    if(a.adapter_overlaps_seed!=b.adapter_overlaps_seed)return !a.adapter_overlaps_seed;
     if((a.nodes.size()>1)!=(b.nodes.size()>1))return a.nodes.size()>1;
     if(a.coverage.profile.loss()!=b.coverage.profile.loss())return a.coverage.profile.loss()<b.coverage.profile.loss();
     if(a.nodes.size()!=b.nodes.size())return a.nodes.size()>b.nodes.size();
@@ -157,11 +244,16 @@ inline bool better_side(const Side& a,const Side& b) {
 template<class Graph>
 WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                   const std::set<Node>& array_edges,const Options& options,const std::set<Node>* shared_context=nullptr,
-                  const std::vector<FlankContext>* contexts=nullptr) {
+                  const std::vector<FlankContext>* contexts=nullptr,SearchDiagnostics* diagnostics=nullptr) {
     WalkResult result;
     const auto& first=backward?seed.left:seed.right;
     Node endpoint=backward?seed.path.front():seed.path.back();
     Side initial;initial.nodes={endpoint};
+    AdapterGuard adapter_guard(options.adapters,backward);
+    if(!adapter_guard.empty()) {
+        auto sequence=graph.spell(seed.path);if(backward)std::reverse(sequence.begin(),sequence.end());
+        initial.adapter_tail=adapter_guard.suffix(sequence);
+    }
     if(contexts && !contexts->empty())initial.context="pending";
     if(!budget || first.empty()) {
         initial.stop=budget?"no_external_flank":"length_limit";
@@ -176,7 +268,7 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
             if(state.context=="array")reason="source_array_context";
         }
         state.stop=std::move(reason);
-        for(const auto& old:result.paths)if(old.nodes==state.nodes && old.stop==state.stop && old.context==state.context)return;
+        for(const auto& old:result.paths)if(old.nodes==state.nodes && old.stop==state.stop && old.context==state.context && old.adapter_overlaps_seed==state.adapter_overlaps_seed)return;
         result.paths.push_back(std::move(state));
         // Bound terminal storage as well as the frontier.
         if(result.paths.size()>options.beam_width*2) {
@@ -213,9 +305,28 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 if(result.expanded>=options.max_states){result.work_limited=true;break;}
                 ++result.expanded;
                 Side next=branch?current:std::move(current);
+                char base=0;
+                if(!adapter_guard.empty() || next.context=="pending")base=graph.extension_base(a,backward);
+                auto adapter=adapter_guard.append(next.adapter_tail,base);
+                if(!adapter.empty()) {
+                    // The completing base has not been appended to nodes yet.
+                    // Roll back the entire motif, not just its final nucleotide.
+                    const size_t extended=next.nodes.size();
+                    next.adapter_overlaps_seed=adapter.size()>extended;
+                    size_t keep=extended>adapter.size()?extended-adapter.size():0;
+                    next.nodes.resize(keep+1);
+                    if(backward)std::reverse(adapter.begin(),adapter.end());
+                    if(diagnostics)diagnostics->record({backward,next.adapter_overlaps_seed,adapter,keep,next.nodes.back(),a.to});
+                    if(next.context_prefix.size()>keep)next.context_prefix.resize(keep);
+                    if(contexts && !contexts->empty() && keep<next.context_clear_at) {
+                        auto state=context_state(next.context_prefix,*contexts,options.array_repeat_identity);
+                        next.context=state==ContextState::external?"external":state==ContextState::array?"array":"pending";
+                    }
+                    next.coverage=path_coverage(graph,next.nodes,keep,backward,next.context_clear_at,shared_context,options);
+                    finish(std::move(next),"sequencing_adapter");continue;
+                }
                 if(next.context=="pending") {
-                    auto label=graph.label(a.to);
-                    next.context_prefix+=backward?label.front():label.back();
+                    next.context_prefix+=base;
                     auto state=context_state(next.context_prefix,*contexts,options.array_repeat_identity);
                     if(state==ContextState::array) {
                         next.context="array";finish(std::move(next),"source_array_context");continue;
@@ -246,8 +357,8 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
     }
     std::sort(result.paths.begin(),result.paths.end(),better_side);
     // The same partial path can stop before several incompatible successors.
-    std::set<std::pair<Path,std::string>> seen;std::vector<Side> unique;
-    for(auto& side:result.paths)if(seen.emplace(side.nodes,side.context).second)unique.push_back(std::move(side));
+    std::set<std::tuple<Path,std::string,bool>> seen;std::vector<Side> unique;
+    for(auto& side:result.paths)if(seen.emplace(side.nodes,side.context,side.adapter_overlaps_seed).second)unique.push_back(std::move(side));
     if(unique.size()>options.beam_width){unique.resize(options.beam_width);result.beam_pruned=true;}
     result.paths=std::move(unique);return result;
 }
@@ -284,13 +395,18 @@ public:
 };
 template<class Graph>
 std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<Node>& array_edges,const Options& options,const std::set<Node>* shared_context=nullptr,
-                                   const std::vector<FlankContext>* left_context=nullptr,const std::vector<FlankContext>* right_context=nullptr) {
+                                   const std::vector<FlankContext>* left_context=nullptr,const std::vector<FlankContext>* right_context=nullptr,
+                                   SearchDiagnostics* diagnostics=nullptr) {
     size_t seed_bp=seed.path.size()+graph.k()-1;
     size_t budget=options.max_bp>seed_bp?options.max_bp-seed_bp:0;
     // Each side can use the whole budget; combination trims symmetrically and
     // transfers spare capacity, so a blocked side never erases the other flank.
-    auto left=extend(graph,seed,true,budget,array_edges,options,shared_context,left_context);
-    auto right=extend(graph,seed,false,budget,array_edges,options,shared_context,right_context);
+    if(AdapterGuard(options.adapters).contains(graph.spell(seed.path))) {
+        Candidate c;c.path=seed.path;c.sequence=graph.spell(seed.path);c.seed_end=seed_bp;
+        c.left.stop=c.right.stop="adapter_in_seed";return {c};
+    }
+    auto left=extend(graph,seed,true,budget,array_edges,options,shared_context,left_context,diagnostics);
+    auto right=extend(graph,seed,false,budget,array_edges,options,shared_context,right_context,diagnostics);
     std::vector<Candidate> results;std::set<std::tuple<Path,std::string,std::string>> seen;size_t combinations=0;
     bool combination_limit=left.paths.size()*right.paths.size()>options.beam_width*4;
     for(size_t diagonal=0;diagonal<left.paths.size()+right.paths.size();++diagonal)
@@ -298,6 +414,7 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         size_t ri=diagonal-li;if(ri>=right.paths.size())continue;
         if(combinations++>=options.beam_width*4)continue;
         const auto& l=left.paths[li];const auto& r=right.paths[ri];
+        if(l.adapter_overlaps_seed || r.adapter_overlaps_seed)continue;
         size_t ln=std::min(l.nodes.size()-1,budget/2);
         size_t rn=std::min(r.nodes.size()-1,budget-ln);
         ln=std::min(l.nodes.size()-1,budget-rn);
@@ -306,19 +423,8 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         if(rn+1<r.nodes.size())c.right.stop="length_limit";
         c.left_length=ln;c.right_length=rn;
         // Recompute evidence only on emitted flanks, excluding trimmed suffixes.
-        auto evidence=[&](const Path& nodes,size_t length,bool backwards,size_t clear_at) {
-            Coverage cov;size_t since=0;
-            for(size_t i=1;i<=length;++i) {
-                if(i<clear_at)continue;
-                Node edge=missing;for(auto a:graph.neighbors(nodes[i-1],backwards))if(a.to==nodes[i]){edge=a.edge;break;}
-                if(shared_context && shared_context->count(edge)){++since;continue;}
-                if(!cov.baseline.empty() && since<graph.k()+1){++since;continue;}
-                double count=backwards?graph.count(nodes[i],nodes[i-1]):graph.count(nodes[i-1],nodes[i]);
-                cov.observe(count,options);since=0;
-            }
-            return cov;
-        };
-        c.left.coverage=evidence(l.nodes,ln,true,l.context_clear_at);c.right.coverage=evidence(r.nodes,rn,false,r.context_clear_at);
+        c.left.coverage=path_coverage(graph,l.nodes,ln,true,l.context_clear_at,shared_context,options);
+        c.right.coverage=path_coverage(graph,r.nodes,rn,false,r.context_clear_at,shared_context,options);
         Path{}.swap(c.left.nodes);Path{}.swap(c.right.nodes);
         for(size_t i=ln;i>0;--i)c.path.push_back(l.nodes[i]);
         c.seed_begin=ln;c.seed_end=ln+seed_bp;
@@ -347,6 +453,11 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
     if(results.empty()) {
         Candidate c;c.path=seed.path;c.sequence=graph.spell(c.path);c.seed_end=seed_bp;
         c.left.stop=c.right.stop="incompatible_flanks";c.search_limited=true;
+        auto contaminated=[](const WalkResult& walk){return !walk.paths.empty() && std::all_of(walk.paths.begin(),walk.paths.end(),[](const auto& s){return s.adapter_overlaps_seed;});};
+        if(contaminated(left) || contaminated(right)) {
+            c.left.stop=c.right.stop="adapter_in_seed";
+            c.search_limited=left.beam_pruned||right.beam_pruned||left.work_limited||right.work_limited||combination_limit;
+        }
         c.expanded=left.expanded+right.expanded;
         results.push_back(std::move(c));
     }

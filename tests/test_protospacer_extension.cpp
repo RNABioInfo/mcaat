@@ -20,6 +20,7 @@ struct Graph {
         std::vector<Arc> result;for(auto [ends,a]:arcs)if((backward?ends.second:ends.first)==v){a.to=backward?ends.first:ends.second;result.push_back(a);}return result;
     }
     std::string label(Node v)const{return labels.at(v);}
+    char extension_base(const Arc& a,bool backward)const{return backward?label(a.to).front():label(a.to).back();}
     double count(Node a,Node b)const{return arcs.at({a,b}).count;}
     std::string spell(const Path& p)const {
         if(p.empty())return {};std::string s=label(p[0]);
@@ -204,9 +205,64 @@ void test_stability_selection() {
     auto best=std::min_element(candidates.begin(),candidates.end(),[&](const auto& x,const auto& y){return better_prediction(x,spacer.size(),y,spacer.size(),o);});
     check(best!=candidates.end() && (best->sequence==l1+spacer+r1 || best->sequence==l2+spacer+r2),"stable matching flank pair wins over chimeric low/high combinations");
 }
+void test_adapter_branches() {
+    const std::string adapter="AGATCGGAAGAGC";
+    const std::string observed_seed="AAACCATCGTTAGTTGTGATGCTACGAAT";
+    // The failing exported path changes from a Shah-reference-matched seed
+    // directly into this adapter prefix. Synthetic flanks isolate the mechanism.
+    const std::string observed_tail="AGATCGGAAGAGCACAAGTCTGAACACCAGTCACAGATCAGTATCTCGGATGCCGTCTTA";
+    for(size_t k:{11,23})for(bool reverse:{false,true}) {
+        Graph g;g.k_=k;Options o;o.max_bp=900;o.max_coverage_penalty=100000;
+        auto clean=dna(120)+observed_seed,sequence=clean+observed_tail+dna(150);
+        auto spacer=observed_seed;
+        if(reverse){sequence=reverse_complement(sequence);spacer=reverse_complement(spacer);clean=reverse_complement(clean);}
+        g.add(sequence,12);Path p;
+        for(size_t i=0;i+k<=spacer.size();++i)p.push_back(g.ids.at(spacer.substr(i,k)));
+        auto seed=isolate(g,p,{},o).seeds.front();SearchDiagnostics diag;
+        auto candidates=reconstruct(g,seed,{},o,nullptr,nullptr,nullptr,&diag);
+        check(candidates.size()==1 && candidates[0].sequence==clean,"observed adapter branch rolled back to exact insert boundary on both strands");
+        check(diag.adapter_stops==1 && diag.adapters[0].clean_flank_bp==0 && !diag.adapters[0].overlaps_seed,"boundary and contamination reason recorded");
+        check((reverse?candidates[0].left:candidates[0].right).stop=="sequencing_adapter","adapter stop survives reconstruction");
+        check((reverse?candidates[0].left:candidates[0].right).coverage.profile.samples==0,"removed adapter samples cannot improve ranking");
+        o.adapters.clear();auto unsafe=reconstruct(g,seed,{},o);
+        check(std::any_of(unsafe.begin(),unsafe.end(),[&](const auto& c){return c.sequence==sequence;}),"disabled guard reproduces original contaminated walk");
+    }
+    // Stable contaminating coverage must not beat a genuine continuation, even
+    // when the valid path shares 12 adapter bases and diverges at the last one.
+    Graph g;g.k_=23;Options o;o.max_bp=1000;o.max_coverage_penalty=100000;
+    auto s=dna(34),left=dna(180),prefix=dna(150);
+    auto real=left+s+prefix+adapter.substr(0,12)+"A"+dna(180);
+    auto wrong=left+s+prefix+observed_tail+dna(180);
+    g.add(real,12);g.add(wrong,12);Path p;
+    for(auto& [ends,arc]:g.arcs)arc.count=12; // isolate adapter evidence at identical coverage
+    for(size_t i=0;i+g.k()<=s.size();++i)p.push_back(g.ids.at(s.substr(i,g.k())));
+    auto seed=isolate(g,p,{},o).seeds.front();SearchDiagnostics diag;
+    auto candidates=reconstruct(g,seed,{},o,nullptr,nullptr,nullptr,&diag);
+    check(std::any_of(candidates.begin(),candidates.end(),[&](const auto& c){return c.sequence==real;}),"genuine branch survives an almost-matching adapter prefix");
+    check(std::none_of(candidates.begin(),candidates.end(),[&](const auto& c){return AdapterGuard(o.adapters).contains(c.sequence);}),"no reconstructed candidate crosses a complete adapter");
+    check(diag.adapter_stops>0 && diag.adapters[0].clean_flank_bp==prefix.size(),"internal adapter boundary recorded in nucleotide coordinates");
+    auto best=std::min_element(candidates.begin(),candidates.end(),[&](const auto& a,const auto& b){return better_prediction(a,s.size(),b,s.size(),o);});
+    check(best->sequence==real,"clean full continuation wins over adapter-truncated alternative");
+    // Adapter detection must include the seed/flank boundary, not just the
+    // appended bases. It cannot silently relabel adapter bases as a protospacer.
+    Graph overlap;overlap.k_=23;auto contaminated=dna(30)+adapter.substr(0,8);
+    overlap.add(dna(100)+contaminated+observed_tail.substr(8)+dna(100));p.clear();
+    for(size_t i=0;i+overlap.k()<=contaminated.size();++i)p.push_back(overlap.ids.at(contaminated.substr(i,overlap.k())));
+    seed=isolate(overlap,p,{},o).seeds.front();diag={};
+    candidates=reconstruct(overlap,seed,{},o,nullptr,nullptr,nullptr,&diag);
+    check(candidates.size()==1 && candidates[0].sequence==contaminated && candidates[0].left.stop=="adapter_in_seed","seed-overlapping adapter rejected instead of retaining contaminated seed with clean opposite flank");
+    check(diag.adapters.size()==1 && diag.adapters[0].overlaps_seed,"seed overlap diagnostic explicit");
+    for(const auto& motif:o.adapters) {
+        AdapterGuard guard(o.adapters);check(guard.contains("TT"+motif.sequence+"AA") && guard.contains(reverse_complement(motif.sequence)),"all default adapters checked on both strands");
+    }
+    check(!AdapterGuard(o.adapters).contains(adapter+"AAAAAA"),"isolated short core without adapter context is not enough to cut a biological path");
+    check(AdapterGuard(o.adapters).contains(observed_tail),"observed adapter variant recognized with exact core and confirming bases");
+    invalid([]{Options bad;bad.adapters={{"ACGT"}};bad.validate();});
+    invalid([]{Options bad;bad.adapters={{"AGATCGGAAGANC"}};bad.validate();});
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});

@@ -66,6 +66,9 @@ protospacers.
    stretches in place; keep alternatives at branches. New flanks cannot revisit
    seed or flank vertices. Repeated k-mers already present in the input spacer
    are allowed. Joining left and right flanks rejects intersections between them.
+   Check sequencing adapters during the walk. Roll back the complete detected
+   adapter and stop only that branch; retain other continuations and the clean
+   opposite flank. Recompute coverage on the retained sequence before ranking.
 5. Retain one-sided and short reconstructions only when at least one emitted
    flank establishes an external context. A short flank still compatible with a
    source repeat is unresolved. Failed joins, work-limited seeds with no usable
@@ -240,6 +243,69 @@ length differences, repeat divergence beyond the tolerance, incomplete array
 input, and unrelated graph recombinations remain limitations. The threshold is
 applied to each path; another external path for the same spacer is preserved.
 
+## Adapter-mediated extension failure and guard
+
+An audit of 217 exported regions found the Illumina adapter core in 191 regions.
+All 191 also contain confirming adapter context: an exact 13-base core followed
+by six bases with at most two differences from a TruSeq adapter. In one
+2,500-base region, a 387-base exact viral-reference match ends immediately before
+the adapter. Multiplicity stability did not prevent this walk: a contaminating
+adapter can itself have stable coverage and create connections between inserts.
+This establishes a concrete failure mode, not an explanation for every unmatched
+region. Reference absence and unrelated graph ambiguities remain possible.
+
+The default guard recognizes both strands of these patterns:
+
+| Sequence | Required evidence |
+|---|---|
+| `AGATCGGAAGAGCACACGT` | Exact first 13 bases; at least 4 of the next 6 agree |
+| `AGATCGGAAGAGCGTCGTG` | Exact first 13 bases; at least 4 of the next 6 agree |
+| `CTGTCTCTTATACACATCT` | Exact 19-base Nextera sequence |
+
+The confirming bases matter: the 13-base Illumina core alone also occurs in
+biological genomes. See the [Cutadapt TruSeq documentation](https://cutadapt.readthedocs.io/en/stable/guide.html#illumina-truseq)
+for adapter sequences and that limitation. The anchored mismatch allowance here
+handles variants observed in the graph; it is a heuristic, not a posterior
+probability of contamination. Short partial adapters, indels, and variants beyond
+the allowance can escape it. Reads should still be adapter-trimmed before building
+new graphs; this guard also works on an existing graph without changing its files.
+
+Checks include sequence crossing the seed/flank boundary. If an adapter overlaps
+the matched seed, that branch combination is rejected rather than outputting
+adapter bases as a protospacer. A complete input spacer containing a recognized
+adapter is reported with `mapping_status=adapter_in_spacer`. Adapter-free branches
+for other queries remain searchable. The algorithm still selects one final
+prediction per matched spacer; it does not label a retained region as confirmed
+viral DNA merely because it passed the guard.
+
+`--adapter-sequences SEQ[,SEQ...]` replaces the defaults with exact user-supplied
+motifs, checked on both strands. Motifs must be 12–256 ACGT bases; at most 64 are
+allowed. `--adapter-sequences none` explicitly disables the guard for comparisons.
+The effective patterns, exact anchor coordinates, and mismatch allowances are
+saved in `protospacer_parameters.json`.
+
+`protospacer_adapter_stops.tsv` records each blocked branch's seed, left/right
+side in canonical query orientation, observed adapter motif, clean flank length,
+whether it overlaps the seed, last clean endpoint vertex, and vertex completing
+detection. These are actual graph vertex IDs from the current run. At most 4,096
+diagnostic rows are stored per query; the JSON total `adapter_blocked_branches`
+is not capped, and `adapter_diagnostic_rows` discloses any truncation. Repeated
+interval searches can encounter the same adapter and are counted separately.
+
+Production regression (including a pre-fix comparison when supplied):
+
+```bash
+python3 bench/validate_protospacer_adapters.py \
+  build/protospacer/mcaat build/adapter-validation \
+  --before-binary /path/to/pre-fix/mcaat
+```
+
+This builds a real SDBG from synthetic reads, including the observed failing
+spacer/adapter boundary. It checks both extension directions, a genuine competing
+branch, Nextera, a contaminated input spacer, coordinate/path consistency,
+deterministic threaded output, and unchanged graph files. It is not a rerun of
+the original metagenomic graph, which was not available in the local audit data.
+
 ## Bounds and outputs
 
 | Option | Default | Meaning |
@@ -253,6 +319,7 @@ applied to each path; another external path for the same spacer is preserved.
 | `--max-paths` | 16 | Internal shortlist per seed; final output remains one prediction per spacer |
 | `--coverage-window` | 7 | Baseline count observations per flank; minimum 3 |
 | `--array-repeat-identity` | 0.85 | Source-repeat edit similarity threshold, allowed range 0.5–1 |
+| `--adapter-sequences` | Confirmed Illumina / exact Nextera patterns above | Replace with comma-separated exact motifs, or `none` to disable |
 | `--max-coverage-penalty` | 20 | Per-observation branch stopping threshold |
 | `--max-retained-bases` | 50000000 | Global intermediate region sequence budget; error if exceeded |
 | `--max-read-index` | 5000000 | Indexed candidate positions; error if exceeded |
@@ -275,6 +342,7 @@ output pruning set `search_limited`; they do not claim an exhaustive result.
 | `protospacer_unresolved.tsv`, `UnresolvedSeeds.fasta` | Unresolved intervals without a retained detection, including unperformed searches and failed joins |
 | `protospacer_decisions.tsv` | Rejected source contexts, unresolved path outcomes, and redundant intervals with their retained replacement seed |
 | `protospacer_selection.tsv` | One row per selected prediction: stability components, comparison counts, runner-up score and ties |
+| `protospacer_adapter_stops.tsv` | Blocked adapter branches and their actual graph endpoint/detection vertices |
 | `protospacer_parameters.json` | Effective settings, input paths and result counts |
 
 Output schema 3 declares `selection=one_prediction_per_distinct_spacer` and distinguishes `matched_queries`, `full_length_matched_queries`,
@@ -296,7 +364,7 @@ region's seed matches the source directly or as a reverse complement.
 `query_coverage` is a fraction, not a percentage; `identity=1` describes an exact
 interval, not full query coverage. Stable IDs are sequence-derived hashes.
 
-Stop reasons distinguish dead ends, cycles, source-array context, coverage breaks,
+Stop reasons distinguish dead ends, cycles, source-array context, `sequencing_adapter`, coverage breaks,
 length limits, work limits and incompatible flanks. `coverage_samples` counts
 scored observations after baseline collection. `expanded_states` is the total
 edge work for that seed search, repeated on its associations, not additive across

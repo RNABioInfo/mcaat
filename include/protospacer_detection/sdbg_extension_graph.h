@@ -50,6 +50,12 @@ public:
         return result;
     }
     Node edge(Node a,Node b) const {for(auto e:neighbors(a,false))if(e.to==b)return e.edge;return missing;}
+    char extension_base(const Arc& arc,bool backward) const {
+        if(backward)return label(arc.to).front();
+        auto b=graph_.GetW(arc.edge);if(b>4)b-=4;
+        if(b<1 || b>4)throw std::runtime_error("non-DNA extension edge");
+        return "ACGT"[b-1];
+    }
     double count(Node a,Node b) const {for(auto e:neighbors(a,false))if(e.to==b)return e.count;throw std::runtime_error("missing path edge");}
     Path trace(const std::string& s) const {
         if(s.size()<k())return {};
