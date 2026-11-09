@@ -35,8 +35,8 @@ struct Settings {
     struct CycleFinderSettings {
         uint64_t threshold_multiplicity = 20; // Minimum multiplicity threshold
         bool low_abundance = true; // Flag to enable low abundance mode
-        int cycle_max_length = 77; // Maximum length of a cycle
-        int cycle_min_length = 27; // Minimum length of a cycle
+        int cycle_max_length = 100; // Maximum length of a cycle
+        int cycle_min_length = 46; // Minimum length of a cycle
     } cycle_finder_settings;
     struct DNASequenceSettings {
         int spacer_min_length = 23; // Minimum length of a spacer
