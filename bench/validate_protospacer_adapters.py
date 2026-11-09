@@ -58,6 +58,11 @@ targets = [truth[0] + tail + dna(1500),
            dna(1000) + bad + dna(1000)]
 spacers = [s1, s2, s3, s4, bad]
 hosts = [dna(200) + repeat + s + repeat + dna(200) for s in spacers]
+incomplete = dna(35)
+# Only five source-repeat-compatible bases exist on the left. An adapter on
+# the right must not turn that unresolved left context into a completed negative.
+targets.append(repeat[-5:] + incomplete + tail + dna(1500))
+spacers.append(incomplete)
 reads = out / 'reads.fasta'
 with reads.open('w') as f:
     for index, sequence in enumerate(targets + hosts):
@@ -94,6 +99,7 @@ for name, flags, exe in cases:
         assert contaminated == 0, 'adapter sequence retained'
         assert len(seeds) == len({s['query_id'] for s in seeds}) == 4, 'clean spacer lost or multiple final predictions'
         assert any(q['spacer'] == bad and q['mapping_status'] == 'adapter_in_spacer' for q in queries)
+        assert any(q['spacer'] == incomplete and q['mapping_status'] == 'unresolved' for q in queries), 'opposite incomplete flank incorrectly treated as a completed negative'
         assert all(any(r['sequence'] in t or rc(r['sequence']) in t for t in truth) for r in regions), 'incorrect flank retained'
         assert all(int(r['length']) >= 250 for r in regions), 'clean flank erased with contaminating side'
         by_region = {r['region_id']: r for r in regions}

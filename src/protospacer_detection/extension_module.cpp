@@ -405,7 +405,10 @@ int run_extension_module(int argc,char** argv) {
                     if(c.left.stop=="adapter_in_seed" || c.right.stop=="adapter_in_seed" ||
                        c.left.stop=="sequencing_adapter" || c.right.stop=="sequencing_adapter") {
                         reason="sequencing_adapter";
-                        unresolved=c.search_limited;
+                        bool seed_contaminated=c.left.stop=="adapter_in_seed" || c.right.stop=="adapter_in_seed";
+                        unresolved=c.search_limited || (!seed_contaminated &&
+                            ((c.left.context=="incomplete" && c.left.stop!="sequencing_adapter") ||
+                             (c.right.context=="incomplete" && c.right.stop!="sequencing_adapter")));
                     }
                     record(q,entry,c,unresolved?"unresolved":"rejected",reason);return true;
                 }),entry.paths.end());
