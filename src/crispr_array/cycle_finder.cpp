@@ -713,7 +713,9 @@ int CycleFinder::FindApproximateCRISPRArrays()
             counter += local_processed[t];
         }
 
+#ifdef __linux__
         malloc_trim(0);
+#endif
         // Summarize work performed for this multiplicity bucket and avoid printing too often
         size_t cycles_in_bucket = cumulative - cumulative_at_bucket_start;
         std::cout << "  ▸ Bucket log2=" << nodes_iterator->first << ": "

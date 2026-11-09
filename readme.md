@@ -141,7 +141,22 @@ autoclean=true
 
 ## v2.0.0 (planned)
 - **CAS detection**: identify and annotate CAS genes flanking detected CRISPR arrays
-- **Protospacer detection**: map spacers back to reads/contigs to find protospacer sequences and PAM sites
+- **Protospacer detection (development branch)**: exact graph-based seeds and
+  bounded bidirectional target extension, with optional read-pair and PAM evidence.
+  See [usage, scoring, output fields and validation](docs/protospacer-extension.md).
+
+```bash
+build/mcaat phage-curate \
+  --arrays /path/to/array-results \
+  --graph /path/to/previous-run/graph/graph \
+  --output /path/to/protospacer-results \
+  --threads 24
+```
+
+This uses the existing graph without rerunning cycle search. The output includes
+short/one-sided regions, alternative paths and source associations; viral origin
+is not inferred from graph connectivity. Use `phage-curate --help` for limits and
+optional evidence inputs.
 
 ## Citation
 

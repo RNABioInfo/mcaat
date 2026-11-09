@@ -89,6 +89,11 @@ include_directories(${phmap_SOURCE_DIR})
 # ── Source globs ──────────────────────────────────────────────────────────────
 
 file(GLOB_RECURSE MAIN_SOURCE          "src/*.cpp")
+if(NOT ENABLE_DEBUG)
+    # Experimental debug workflows use obsolete interfaces and are not part of
+    # the release CLI. Do not compile them into the production executable.
+    list(REMOVE_ITEM MAIN_SOURCE "${CMAKE_SOURCE_DIR}/src/core/main_run_and_debug.cpp")
+endif()
 file(GLOB_RECURSE SOURCES_WITHOUT_MAIN "src/*.cpp")
 list(REMOVE_ITEM SOURCES_WITHOUT_MAIN "${CMAKE_SOURCE_DIR}/src/main.cpp")
 
