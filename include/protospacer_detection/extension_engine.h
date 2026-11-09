@@ -10,6 +10,8 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <tuple>
+#include "protospacer_detection/array_context.h"
 
 namespace mcaat::proto {
 using Node=uint64_t;
@@ -28,7 +30,7 @@ inline double median(std::vector<double> x) {
 struct Options {
     size_t max_bp=2500,beam_width=32,max_states=50000,max_paths=16,max_seeds=128,min_match=0;
     size_t coverage_window=7,max_query_states=200000;
-    double max_coverage_penalty=20,read_weight=1,pair_weight=2,pam_weight=1;
+    double max_coverage_penalty=20,read_weight=1,pair_weight=2,pam_weight=1,array_repeat_identity=.85;
     std::string coverage_model="auto";
     void validate() const {
         if(!max_bp || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
@@ -39,6 +41,8 @@ struct Options {
             if(!std::isfinite(d) || d<0)throw std::invalid_argument("extension score settings must be finite and nonnegative");
         if(coverage_model!="auto" && coverage_model!="poisson" && coverage_model!="negative-binomial")
             throw std::invalid_argument("coverage-model must be auto, poisson or negative-binomial");
+        if(!std::isfinite(array_repeat_identity) || array_repeat_identity<.5 || array_repeat_identity>1)
+            throw std::invalid_argument("array-repeat-identity must be in [0.5, 1]");
     }
 };
 struct Arc {Node to,edge;double count;};
@@ -50,8 +54,9 @@ struct Seed {
 struct SeedSearch {std::vector<Seed> seeds;bool truncated=false;size_t eligible=0;};
 
 // Keep distinct intervals and branches, even when they overlap other spacers.
-// The caller masks pure-repeat edges. Mixed repeat/spacer boundary k-mers can
-// be shared with a target flank and must remain traversable until divergence.
+// Optional edge exclusions are supported. Production source-array exclusion
+// evaluates the complete local sequence context, so shared prefixes remain
+// traversable until divergence or a sufficiently similar repeat is established.
 template<class Graph>
 SeedSearch isolate(Graph& graph,const Path& full,const std::set<Node>& array_edges,const Options& options) {
     SeedSearch result;if(full.empty())return result;
@@ -110,9 +115,12 @@ struct Side {
     Coverage coverage;
     size_t branches=0,since_sample=0;
     std::string stop;
+    std::string context="unexamined",context_prefix;
+    size_t context_clear_at=0;
 };
 struct WalkResult {std::vector<Side> paths;size_t expanded=0;bool beam_pruned=false,work_limited=false;};
 inline bool better_side(const Side& a,const Side& b) {
+    if((a.nodes.size()>1)!=(b.nodes.size()>1))return a.nodes.size()>1;
     if(a.coverage.score()!=b.coverage.score())return a.coverage.score()>b.coverage.score();
     if(a.nodes.size()!=b.nodes.size())return a.nodes.size()>b.nodes.size();
     return a.nodes<b.nodes;
@@ -120,15 +128,28 @@ inline bool better_side(const Side& a,const Side& b) {
 
 template<class Graph>
 WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
-                  const std::set<Node>& array_edges,const Options& options,const std::set<Node>* shared_context=nullptr) {
+                  const std::set<Node>& array_edges,const Options& options,const std::set<Node>* shared_context=nullptr,
+                  const std::vector<FlankContext>* contexts=nullptr) {
     WalkResult result;
     const auto& first=backward?seed.left:seed.right;
     Node endpoint=backward?seed.path.front():seed.path.back();
     Side initial;initial.nodes={endpoint};
-    if(!budget || first.empty()) {initial.stop=budget?"no_external_flank":"length_limit";result.paths={initial};return result;}
+    if(contexts && !contexts->empty())initial.context="pending";
+    if(!budget || first.empty()) {
+        initial.stop=budget?"no_external_flank":"length_limit";
+        if(!budget && !first.empty())initial.context="incomplete";
+        result.paths={initial};return result;
+    }
     std::vector<Side> frontier{initial};
     auto finish=[&](Side state,std::string reason) {
-        state.stop=std::move(reason);result.paths.push_back(std::move(state));
+        if(state.context=="pending")state.context=reason=="array_context"?"array":"incomplete";
+        if(state.context=="array" || state.context=="incomplete") {
+            state.nodes.resize(1);state.coverage={};
+            if(state.context=="array")reason="source_array_context";
+        }
+        state.stop=std::move(reason);
+        for(const auto& old:result.paths)if(old.nodes==state.nodes && old.stop==state.stop && old.context==state.context)return;
+        result.paths.push_back(std::move(state));
         // Bound terminal storage as well as the frontier.
         if(result.paths.size()>options.beam_width*2) {
             std::sort(result.paths.begin(),result.paths.end(),better_side);
@@ -164,7 +185,19 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 if(result.expanded>=options.max_states){result.work_limited=true;break;}
                 ++result.expanded;
                 Side next=branch?current:std::move(current);
+                if(next.context=="pending") {
+                    auto label=graph.label(a.to);
+                    next.context_prefix+=backward?label.front():label.back();
+                    auto state=context_state(next.context_prefix,*contexts,options.array_repeat_identity);
+                    if(state==ContextState::array) {
+                        next.context="array";finish(std::move(next),"source_array_context");continue;
+                    }
+                    if(state==ContextState::external) {
+                        next.context="external";next.context_clear_at=next.nodes.size();
+                    }
+                }
                 bool sample=(!shared_context || !shared_context->count(a.edge)) &&
+                    next.context!="pending" &&
                     (next.coverage.baseline.empty() || next.since_sample>=graph.k()+1);
                 auto before=next.coverage;
                 double penalty=sample?next.coverage.observe(a.count,options):0;
@@ -185,8 +218,8 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
     }
     std::sort(result.paths.begin(),result.paths.end(),better_side);
     // The same partial path can stop before several incompatible successors.
-    std::set<Path> seen;std::vector<Side> unique;
-    for(auto& side:result.paths)if(seen.insert(side.nodes).second)unique.push_back(std::move(side));
+    std::set<std::pair<Path,std::string>> seen;std::vector<Side> unique;
+    for(auto& side:result.paths)if(seen.emplace(side.nodes,side.context).second)unique.push_back(std::move(side));
     if(unique.size()>options.beam_width){unique.resize(options.beam_width);result.beam_pruned=true;}
     result.paths=std::move(unique);return result;
 }
@@ -199,15 +232,29 @@ struct Candidate {
     std::string sequence;
     size_t junctions=0,supported_junctions=0,read_support=0,pair_support=0,unique_pairs=0;
 };
+class RetainedIntervalContexts {
+    struct Kept {size_t begin,end;std::string id;};
+    std::map<std::pair<std::string,int64_t>,std::vector<Kept>> contexts_;
+public:
+    // Call in decreasing matched-interval length, AFTER output limits.
+    std::string replacement(const std::string& sequence,size_t seed_begin,
+                            size_t begin,size_t end,const std::string& id) {
+        auto& previous=contexts_[{sequence,int64_t(seed_begin)-int64_t(begin)}];
+        for(const auto& parent:previous)
+            if(parent.begin<=begin && parent.end>=end)return parent.id;
+        previous.push_back({begin,end,id});return {};
+    }
+};
 template<class Graph>
-std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<Node>& array_edges,const Options& options,const std::set<Node>* shared_context=nullptr) {
+std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<Node>& array_edges,const Options& options,const std::set<Node>* shared_context=nullptr,
+                                   const std::vector<FlankContext>* left_context=nullptr,const std::vector<FlankContext>* right_context=nullptr) {
     size_t seed_bp=seed.path.size()+graph.k()-1;
     size_t budget=options.max_bp>seed_bp?options.max_bp-seed_bp:0;
     // Each side can use the whole budget; combination trims symmetrically and
     // transfers spare capacity, so a blocked side never erases the other flank.
-    auto left=extend(graph,seed,true,budget,array_edges,options,shared_context);
-    auto right=extend(graph,seed,false,budget,array_edges,options,shared_context);
-    std::vector<Candidate> results;std::set<Path> seen;size_t combinations=0;
+    auto left=extend(graph,seed,true,budget,array_edges,options,shared_context,left_context);
+    auto right=extend(graph,seed,false,budget,array_edges,options,shared_context,right_context);
+    std::vector<Candidate> results;std::set<std::tuple<Path,std::string,std::string>> seen;size_t combinations=0;
     bool combination_limit=left.paths.size()*right.paths.size()>options.beam_width*4;
     for(size_t diagonal=0;diagonal<left.paths.size()+right.paths.size();++diagonal)
       for(size_t li=0;li<left.paths.size() && li<=diagonal;++li) {
@@ -222,9 +269,10 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         if(rn+1<r.nodes.size())c.right.stop="length_limit";
         c.left_length=ln;c.right_length=rn;
         // Recompute evidence only on emitted flanks, excluding trimmed suffixes.
-        auto evidence=[&](const Path& nodes,size_t length,bool backwards) {
+        auto evidence=[&](const Path& nodes,size_t length,bool backwards,size_t clear_at) {
             Coverage cov;size_t since=0;
             for(size_t i=1;i<=length;++i) {
+                if(i<clear_at)continue;
                 Node edge=missing;for(auto a:graph.neighbors(nodes[i-1],backwards))if(a.to==nodes[i]){edge=a.edge;break;}
                 if(shared_context && shared_context->count(edge)){++since;continue;}
                 if(!cov.baseline.empty() && since<graph.k()+1){++since;continue;}
@@ -233,7 +281,7 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
             }
             return cov;
         };
-        c.left.coverage=evidence(l.nodes,ln,true);c.right.coverage=evidence(r.nodes,rn,false);
+        c.left.coverage=evidence(l.nodes,ln,true,l.context_clear_at);c.right.coverage=evidence(r.nodes,rn,false,r.context_clear_at);
         Path{}.swap(c.left.nodes);Path{}.swap(c.right.nodes);
         for(size_t i=ln;i>0;--i)c.path.push_back(l.nodes[i]);
         c.seed_begin=ln;c.seed_end=ln+seed_bp;
@@ -242,7 +290,7 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         // Repeated k-mers already present in the supplied spacer are allowed;
         // new flank vertices must still be disjoint from seed and opposite flank.
         if(std::set<Node>(c.path.begin(),c.path.end()).size()!=std::set<Node>(seed.path.begin(),seed.path.end()).size()+ln+rn)continue;
-        if(!seen.insert(c.path).second)continue;
+        if(!seen.emplace(c.path,c.left.context,c.right.context).second)continue;
         c.sequence=graph.spell(c.path);
         if(c.sequence.size()!=c.path.size()+graph.k()-1)throw std::runtime_error("incorrect reconstructed length");
         c.score=c.left.coverage.score()+c.right.coverage.score();
@@ -251,7 +299,11 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         results.push_back(std::move(c));
     }
     if(results.size()>options.beam_width) {
-        std::sort(results.begin(),results.end(),[](const auto& a,const auto& b){if(a.score!=b.score)return a.score>b.score;return a.sequence.size()!=b.sequence.size()?a.sequence.size()>b.sequence.size():a.sequence<b.sequence;});
+        std::sort(results.begin(),results.end(),[&](const auto& a,const auto& b){
+            if((a.sequence.size()>seed_bp)!=(b.sequence.size()>seed_bp))return a.sequence.size()>seed_bp;
+            if(a.score!=b.score)return a.score>b.score;
+            return a.sequence.size()!=b.sequence.size()?a.sequence.size()>b.sequence.size():a.sequence<b.sequence;
+        });
         results.resize(options.beam_width);for(auto& c:results)c.search_limited=true;
     }
     // Never erase the seed if two otherwise valid flanks intersect.

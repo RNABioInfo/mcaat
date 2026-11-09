@@ -127,13 +127,63 @@ void test_reads_and_pam() {
     for(char c:std::string("ACGTRYSWKMBDHVN"))check(iupac(c,'A') || iupac(c,'C') || iupac(c,'G') || iupac(c,'T'),"IUPAC motif supported");
     invalid([]{iupac('Z','A');});
 }
+void test_array_context() {
+    const std::string repeat="CGGTTCATCCCCGCTTGCGCGGGGAACTC";
+    const std::string left="CGGTTCATCCCCGCTGGCGCGGGGAACTC";
+    const std::string right="CGGGTAATCCCCGCTTGCGCGGGGAACTC";
+    check(context_state(left,{{"",repeat}},.85)==ContextState::array,"observed repeat with one substitution rejected");
+    check(context_state(right,{{"",repeat}},.85)==ContextState::array,"observed repeat with two substitutions rejected");
+    check(context_state(repeat.substr(0,10)+"A"+repeat.substr(10),{{"",repeat}},.85)==ContextState::array,"repeat insertion handled");
+    check(context_state(repeat.substr(0,10)+repeat.substr(11),{{"",repeat}},.85)==ContextState::array,"repeat deletion handled");
+    check(context_state(repeat.substr(0,12),{{"",repeat}},.85)==ContextState::pending,"short repeat-compatible flank unresolved");
+    check(context_state("TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",{{"",repeat}},.85)==ContextState::external,"unrelated target flank retained");
+    check(context_state("ACGT"+left,{{"ACGT",repeat}},.85)==ContextState::array,"partial seed continuing source spacer reaches its repeat");
+    check(context_state("ATGT"+left,{{"ACGT",repeat}},.85)==ContextState::array,"related spacer variant remains array context");
+    check(context_state("ATGT"+std::string(30,'A'),{{"ACGT",repeat}},.85)==ContextState::external,"partial target with unrelated flank retained");
+    check(context_state(left,{{"",repeat}},1)==ContextState::external,"repeat similarity is user adjustable");
+    auto backwards=flank_contexts("ACGT",2,4,{repeat},true);
+    auto reversed=left;std::reverse(reversed.begin(),reversed.end());
+    check(context_state("CA"+reversed,backwards,.85)==ContextState::array,"backward context reverses bases without complementing twice");
+    Graph graph;graph.k_=23;Options o;o.max_bp=500;
+    auto spacer=std::string("ACTACTTCGCTGGAAACGCTAGAGGTGCGTTTT");
+    auto host=graph.add(dna(70)+left+spacer+right+dna(70));
+    Path path;for(size_t i=0;i+graph.k()<=spacer.size();++i)path.push_back(graph.ids.at(spacer.substr(i,graph.k())));
+    auto seeds=isolate(graph,path,{},o);check(!seeds.seeds.empty(),"variant host seed present");
+    auto lc=flank_contexts(spacer,0,spacer.size(),{repeat},true),rc=flank_contexts(spacer,0,spacer.size(),{repeat},false);
+    auto candidates=reconstruct(graph,seeds.seeds[0],{},o,nullptr,&lc,&rc);
+    check(candidates.size()==1 && candidates[0].sequence==spacer,"source array cannot become an extended target");
+    check(candidates[0].left.context=="array" && candidates[0].right.context=="array","both variant repeats recognized");
+    auto zero_budget=o;zero_budget.max_bp=spacer.size();
+    auto untested=reconstruct(graph,seeds.seeds[0],{},zero_budget,nullptr,&lc,&rc);
+    check(untested[0].left.context=="incomplete" || untested[0].right.context=="incomplete","zero extension budget is unresolved, not a negative result");
+    auto target_left=dna(60),target_right=dna(80);graph.add(target_left+spacer+target_right);
+    seeds=isolate(graph,path,{},o);candidates=reconstruct(graph,seeds.seeds[0],{},o,nullptr,&lc,&rc);
+    check(std::any_of(candidates.begin(),candidates.end(),[&](const auto& c){return c.sequence==target_left+spacer+target_right;}),"true target for the same spacer survives source-array filtering");
+    // An exact prefix longer than k can be shared by a genuine flank. Only the
+    // complete repeat similarity decision may block it, not a global edge mask.
+    Graph shared;shared.k_=11;auto r=dna(40),s=dna(32),suffix=r.substr(0,18)+dna(50);
+    auto true_path=shared.add(dna(50)+s+suffix);shared.add(r+s+r);
+    path.clear();for(size_t i=0;i+shared.k()<=s.size();++i)path.push_back(shared.ids.at(s.substr(i,shared.k())));
+    seeds=isolate(shared,path,{},o);lc=flank_contexts(s,0,s.size(),{r},true);rc=flank_contexts(s,0,s.size(),{r},false);
+    candidates=reconstruct(shared,seeds.seeds[0],{},o,nullptr,&lc,&rc);
+    check(std::any_of(candidates.begin(),candidates.end(),[&](const auto& c){return c.sequence==shared.spell(true_path);}),"long shared repeat prefix can diverge to a real target");
+}
+void test_interval_compaction() {
+    RetainedIntervalContexts index;
+    check(index.replacement("AACCGGTT",2,0,4,"full").empty(),"maximal interval retained");
+    check(index.replacement("AACCGGTT",3,1,3,"partial")=="full","nested interval with identical context consolidated");
+    check(index.replacement("AACCGGTA",3,1,3,"other").empty(),"different target path retained");
+    check(index.replacement("AACCGGTT",4,1,3,"shifted").empty(),"different alignment retained");
+    check(index.replacement("AACCGGTT",5,3,6,"overlap").empty(),"overlap without containment retained");
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});
         invalid([]{Options o;o.coverage_model="bad";o.validate();});
+        invalid([]{Options o;o.array_repeat_identity=1.1;o.validate();});
         std::cout<<checks<<" protospacer checks passed\n";
     }catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<'\n';return 1;}
 }

@@ -52,6 +52,10 @@ by_source={r['source_id']:r for r in queries};by_seed={r['seed_id']:r for r in s
 assert any(r['spacer']==missing and r['mapping_status']=='not_fully_mapped' for r in queries)
 assert any(r['spacer']==s3 and r['mapping_status']=='no_external_flank' for r in queries)
 assert links and regions
+assert all(r['status'] in ('one_sided','two_sided') for r in links),'unextended seed leaked into detections'
+params=json.loads((out/'protospacer_parameters.json').read_text())
+assert params['matched_queries']==len({r['query_id'] for r in seeds})
+assert (out/'MatchedSpacers.fasta').read_text().count('>')==params['matched_queries']
 for r in regions:
     assert int(r['length'])==len(r['sequence'])<=500
     assert len(r['sequence'])==len(r['vertices'].split(','))+22
@@ -104,8 +108,18 @@ tsv=a.output/'tsv_arrays';tsv.mkdir()
 run('tsv',['protospacer-curate','--arrays',tsv,'--graph',graph,'--output',a.output/'tsv','--max-length','500','--coverage-window','3'])
 assert (a.output/'tsv/ContiguousPaths.fasta').read_bytes()==(out/'ContiguousPaths.fasta').read_bytes(),'input formats give different regions'
 limited=a.output/'limited';run('limited',[*common,'--output',limited,'--max-query-states','2'])
-assert any(r['search_limited']=='1' for r in table(limited/'protospacer_associations.tsv')),'cap not disclosed'
-for i,flags in enumerate([['--beam-width','0'],['--coverage-model','garbage'],['--max-coverage-penalty','nan'],['--reads2',r2],['--threads','-1'],['--max-length','10']]):
+assert table(limited/'protospacer_unresolved.tsv'),'cap not disclosed separately'
+assert not table(limited/'protospacer_associations.tsv'),'unresolved seed counted as a detection'
+assert not (limited/'Protospacers.fasta').read_text() and (limited/'UnresolvedSeeds.fasta').read_text()
+assert any(r['mapping_status']=='unresolved' for r in table(limited/'protospacer_queries.tsv'))
+short=a.output/'short';run('short',[*common,'--output',short,'--max-length','36'])
+short_pending=table(short/'protospacer_unresolved.tsv')
+assert all(any(r['sequence'] in (s,rc(s)) and 'length_limit' in r['reasons'] for r in short_pending) for s in (s1,s2,s3)), 'complete-spacer seeds lack enough flank context at this length'
+assert json.loads((short/'protospacer_parameters.json').read_text())['full_length_matched_queries']==0
+# A shorter seed can still have enough bases to establish a genuinely different
+# flank within 36 bp. Do not turn that positive partial match into a negative.
+assert all(r['status'] in ('one_sided','two_sided') for r in table(short/'protospacer_associations.tsv'))
+for i,flags in enumerate([['--beam-width','0'],['--coverage-model','garbage'],['--max-coverage-penalty','nan'],['--reads2',r2],['--threads','-1'],['--max-length','10'],['--array-repeat-identity','1.1']]):
     run(f'invalid-{i}',[*common,'--output',a.output/f'invalid-{i}',*flags],False)
 bad=a.output/'bad_R2.fq';bad.write_text('@wrong/2\nACGT\n+\nIIII\n')
 run('bad-mates',[*common,'--output',supported,'--reads1',r1,'--reads2',bad],False)
@@ -117,6 +131,8 @@ assert table(supported/'protospacer_associations.tsv')==supported_links,'read-wo
 empty=a.output/'host_only';empty.mkdir();(empty/'CRISPR_Arrays_1.txt').write_text(f'>Array_1\n{repeat}\n        {repeat}\t{s3}\n')
 run('empty-rerun',['phage-curate','--arrays',empty,'--graph',graph,'--output',parallel])
 assert (parallel/'ContiguousPaths.fasta').read_text()=='' and (parallel/'Protospacers.fasta').read_text()=='','empty rerun left stale candidates'
+run('resolved-rerun',[*common,'--output',limited])
+assert (limited/'UnresolvedSeeds.fasta').read_bytes()==(out/'UnresolvedSeeds.fasta').read_bytes(),'rerun left stale unresolved intervals'
 summary={'checks':'production SDBG mapping, exact reconstruction, partial targets, overlapping sources, reverse complements, all coordinates, deterministic reruns and threads, read pairs, PAM, budgets, input errors',
          'sources':len(queries),'seeds':len(seeds),'regions':len(regions),'regions_wholly_matching_a_truth_sequence':exact_regions,
          'regions_not_wholly_matching_a_truth_sequence':len(regions)-exact_regions,'associations':len(links),'runtime_seconds':runtime,

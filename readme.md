@@ -158,6 +158,14 @@ short/one-sided regions, alternative paths and source associations; viral origin
 is not inferred from graph connectivity. Use `phage-curate --help` for limits and
 optional evidence inputs.
 
+Source-array repeat variants are excluded using configurable edit similarity
+(`--array-repeat-identity 0.85`). Unresolved seeds, including searches stopped
+by work limits without an external flank, are written to `UnresolvedSeeds.fasta`
+and diagnostic TSVs, separately from detections.
+`MatchedSpacers.fasta` and the JSON summary report distinct matched input spacers;
+`Protospacers.fasta` contains accepted matched intervals and can have several per
+spacer. A partial match is not promoted to a full-spacer match.
+
 ## Citation
 
 If you use MCAAT please cite: https://academic.oup.com/microlife/article/doi/10.1093/femsml/uqaf016/8205558

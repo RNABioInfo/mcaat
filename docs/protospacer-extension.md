@@ -53,22 +53,34 @@ protospacers.
    connections. Internal fragments need external connections at both ends;
    one-sided intervals must reach the corresponding original spacer end. Longer
    intervals are considered first. The default minimum match is the graph's `k`.
-3. Mark the observed `repeat|spacer|repeat` boundary context on both strands.
-   Pure-repeat edges are excluded from extension. Mixed boundary k-mers remain
-   traversable: a real target flank can initially share bases with the repeat.
-   Known array-context counts never set the target coverage baseline. A side
-   containing only that context is trimmed from the reported target region.
+3. Test the local source-array context on each growing flank, on both strands.
+   Repeat copies are aligned with substitutions and indels allowed by
+   `--array-repeat-identity` (default 0.85). For a partial seed, the unmatched
+   spacer length places the expected repeat boundary; differences in those
+   unaligned spacer bases do not by themselves establish an external target.
+   A repeat-like flank is stopped and removed. Its opposite flank can still be
+   retained if it establishes an external context. A shared repeat prefix is
+   traversable until the path diverges or qualifies as a repeat copy. This is a
+   per-path decision, not a global deletion of repeat edges or an entire spacer.
 4. Extend both sides with a bounded, coverage-ranked beam. Walk nonbranching
    stretches in place; keep alternatives at branches. New flanks cannot revisit
    seed or flank vertices. Repeated k-mers already present in the input spacer
    are allowed. Joining left and right flanks rejects intersections between them.
-5. Retain one-sided and short reconstructions. If search limits or an incompatible
-   join prevent reconstruction, retain an unresolved seed with an explicit reason.
-   A completed search showing only the original array context is reported as
-   `no_external_flank`, not as a new target.
+5. Retain one-sided and short reconstructions only when at least one emitted
+   flank establishes an external context. A short flank still compatible with a
+   source repeat is unresolved. Failed joins, work-limited seeds with no usable
+   flank, and other unextended intervals go into separate diagnostic outputs.
+   They are excluded from the primary detection FASTAs and associations. A
+   completed search showing only array context is `no_external_flank`; a query
+   with no accepted result and unfinished searches is `unresolved`.
 6. Optionally score reads/read pairs and PAM models, then retain up to `max-paths`
    alternatives **per seed**. Deduplicate complete region sequences, including
    reverse complements, without discarding their source associations.
+7. Consolidate nested intervals only when they produced the identical retained
+   extension sequence at the same query alignment. Different paths/alignments
+   remain alternatives. This happens after evidence ranking/output limits, so
+   the recorded replacement is guaranteed to survive. Report distinct matched
+   spacer counts separately from interval and region counts.
 
 Connectivity is evidence for a candidate path, not proof that its complete
 sequence occurs in a single genome. Shared sequences can connect unrelated
@@ -78,7 +90,8 @@ flanks. Alternative paths, unresolved limits and all source links remain visible
 
 Each flank has its own frozen local baseline: the median of the first
 `coverage-window` eligible counts, sampled at least `k+2` edges apart. Counts on
-known array boundaries and the matched spacer are excluded. The robust variance
+known array boundaries, the matched spacer, and the prefix before source-context
+divergence are excluded. The robust variance
 estimate is `(1.4826 * MAD)^2`; the overdispersion estimate is
 `alpha = max(0, (variance - median) / median^2)`.
 
@@ -167,6 +180,22 @@ reported association's `total_score` and PAM status use only that source's model
 so per-source total scores need not follow the shared `alternative_rank`.
 No subtype, orientation or PAM model is inferred from an unlabelled graph.
 
+## Source-array repeat similarity
+
+`--array-repeat-identity 0.85` permits an edit distance of at most
+`floor((1 - 0.85) * repeat_length)` to a reported repeat. Substitutions,
+insertions and deletions each cost one; alignment is anchored at the expected
+boundary and cannot freely clip the repeat. Both repeat orientations and all
+repeat observations belonging to the spacer are considered. This is a sequence
+similarity setting, distinct from the array detector's cycle-support fraction.
+
+Lowering the value recognizes more divergent copies as array context; raising
+it can let variant array paths through. A value of 1 tests exact copies only.
+This is a configurable exclusion heuristic, not proof of origin. Large spacer
+length differences, repeat divergence beyond the tolerance, incomplete array
+input, and unrelated graph recombinations remain limitations. The threshold is
+applied to each path; another external path for the same spacer is preserved.
+
 ## Bounds and outputs
 
 | Option | Default | Meaning |
@@ -179,6 +208,7 @@ No subtype, orientation or PAM model is inferred from an unlabelled graph.
 | `--min-match-bp` | graph k | Minimum exact matched interval; CLI value 0 means graph k |
 | `--max-paths` | 16 | Final alternatives per seed |
 | `--coverage-window` | 7 | Baseline count observations per flank; minimum 3 |
+| `--array-repeat-identity` | 0.85 | Source-repeat edit similarity threshold, allowed range 0.5–1 |
 | `--max-coverage-penalty` | 20 | Per-observation branch stopping threshold |
 | `--max-retained-bases` | 50000000 | Global intermediate region sequence budget; error if exceeded |
 | `--max-read-index` | 5000000 | Indexed candidate positions; error if exceeded |
@@ -194,10 +224,22 @@ output pruning set `search_limited`; they do not claim an exhaustive result.
 | Output | Contents |
 |---|---|
 | `protospacer_queries.tsv` | Every source observation, its canonical query ID and mapping status |
-| `protospacer_candidates.tsv`, `Protospacers.fasta` | Exact matched seed intervals and graph vertices |
-| `protospacer_regions.tsv`, `ContiguousPaths.fasta` | Unique extended/partial region sequences, vertices and edges |
+| `protospacer_candidates.tsv`, `Protospacers.fasta` | Accepted exact seed intervals with an external flank, and graph vertices |
+| `MatchedSpacers.fasta` | One complete input spacer per matched canonical query; partial-only queries are counted separately in JSON |
+| `protospacer_regions.tsv`, `ContiguousPaths.fasta` | Unique accepted extended/partial region sequences, vertices and edges |
 | `protospacer_associations.tsv` | Source → seed → region links, coordinates, strand, scores, rank, ambiguity, stop reasons and evidence |
+| `protospacer_unresolved.tsv`, `UnresolvedSeeds.fasta` | Unresolved intervals without a retained detection, including unperformed searches and failed joins |
+| `protospacer_decisions.tsv` | Rejected source contexts, unresolved path outcomes, and redundant intervals with their retained replacement seed |
 | `protospacer_parameters.json` | Effective settings, input paths and result counts |
+
+Output schema 2 distinguishes `matched_queries`, `full_length_matched_queries`,
+`partial_only_matched_queries`, `unresolved_queries` and
+`unresolved_seed_intervals`. The matched-query denominator is `unique_queries`,
+with identical spacers and reverse complements processed together. Counting
+`Protospacers.fasta` gives intervals; counting `MatchedSpacers.fasta` gives
+distinct input spacers with at least one accepted interval. A full input spacer
+in `MatchedSpacers.fasta` is not a claim that its entire length matched: consult
+the seed table's coverage. No `seed_only` rows occur in primary associations.
 
 Coordinates are **zero-based, half-open**. Seed-table query coordinates refer to
 the canonical spacer orientation; association query coordinates refer to the
@@ -207,13 +249,21 @@ region's seed matches the source directly or as a reverse complement.
 `query_coverage` is a fraction, not a percentage; `identity=1` describes an exact
 interval, not full query coverage. Stable IDs are sequence-derived hashes.
 
-Stop reasons distinguish dead ends, cycles, pure-array context, coverage breaks,
+Stop reasons distinguish dead ends, cycles, source-array context, coverage breaks,
 length limits, work limits and incompatible flanks. `coverage_samples` counts
 scored observations after baseline collection. `expanded_states` is the total
 edge work for that seed search, repeated on its associations, not additive across
 rows. A single retained path may still have pruned alternatives.
+`left_context` and `right_context` distinguish `external`, `array`, and
+`incomplete` context tests in the stored region orientation. `pending` with zero
+flank bases denotes a side where extension did not start. Repeat-compatible
+parts trimmed from an accepted one-sided region do not contribute coverage.
+The decision report can contain multiple outcomes for one seed; a successful
+alternative and a rejected array alternative can coexist. The unresolved FASTA
+only contains intervals with no retained detection. Completely skipped intervals
+beyond `max-seeds` are disclosed by `eligible_intervals` and `seed_limit_reached`.
 
-Successful reruns replace the module's seven named files, including empty FASTAs;
+Successful reruns replace the module's eleven named files, including empty FASTAs;
 they do not append old results. Computation/input failures before publication
 leave previous results intact. Files are staged then individually renamed; this
 is not a filesystem-wide atomic transaction. Array and graph inputs are unchanged.
@@ -237,6 +287,10 @@ ctest --test-dir build/protospacer-sanitizers --output-on-failure
 # The output directory must be empty. Builds a real SDBG from 150-bp reads.
 python3 bench/validate_protospacer_extension.py \
   build/protospacer/mcaat build/protospacer-validation
+
+# Variant-repeat regression: host-only negatives and a target for the same spacer.
+python3 bench/validate_protospacer_context.py \
+  build/protospacer/mcaat build/protospacer-context-validation
 ```
 
 Core checks cover overlapping seeds, bidirectional/one-sided reconstruction,
@@ -246,23 +300,44 @@ The production fixture checks both array input formats, actual SDBG traversal,
 source/region coordinates, reverse-complement deduplication, deterministic
 threads/reruns, explicit caps and failed/empty rerun behavior.
 
-In the controlled fixture, five source observations yield four seed candidates,
-16 regions and 24 source associations. Eight regions are entirely contained in
-the known source sequences; eight graph-compatible alternatives are recombined.
+In the general controlled fixture, five source observations yield four seed
+intervals, 12 regions and 21 source associations. Eight regions are entirely
+contained in the known source sequences; four graph-compatible alternatives are
+recombined. Source-array exclusion cannot resolve every graph ambiguity.
 With the supplied pairs, the first-ranked full-spacer target for the two opposite
 strand source observations is a true target segment. This demonstrates retention,
 ranking and ambiguity handling, **not biological sensitivity or precision**.
 The fixture deliberately keeps alternatives rather than presenting them as
 confirmed phages. Metagenome-scale runtime and accuracy require server testing.
 
+The separate context regression uses a repeat/spacer context observed in a
+failing output. Host-only loci with substituted, indel-containing and exact
+repeat copies now produce zero detections. Adding an independent target for the
+same spacer retains one matched interval and three region alternatives, all
+contained in the true target sequence, with both source strands preserved.
+Setting repeat identity to 1 reproduces variant-repeat leakage, exercising the
+configured threshold. Unit tests also cover a genuine target sharing more than
+`k` bases with a repeat prefix, short unresolved contexts, spacer variation in
+partial matches, and conservative interval consolidation.
+
 The release build also excludes an unused experimental debug translation unit
 with obsolete interfaces and guards Linux-only `malloc.h`/`malloc_trim` calls.
 Those portability fixes do not change the array-search/filter algorithms.
+The graph builder's memory conversion is also corrected: settings store GiB,
+while the underlying MEGAHIT `--host_mem` argument takes bytes. Existing-graph
+`phage-curate` runs do not invoke that builder.
 
-Additional local smoke checks used existing graphs CP058556.1 and CP071793.1
-with two threads, a 500-bp output limit, 2,000 expansions per side and 8,000 per
-query. They processed 317 and 277 source spacers in approximately 1.7 and 4.7
-seconds respectively, including graph loading. All emitted source coordinates,
-sequence/path lengths and edge-work bounds passed checks. These runs do not
-establish target accuracy: the array input itself includes candidate detections,
-and these genome fixtures are much smaller than a full pooled metagenome.
+After the repair, local smoke checks used existing graphs CP058556.1 and
+CP071793.1 with two threads, a 500-bp output limit, 2,000 expansions per side and
+8,000 per query. Of 317 and 277 distinct input spacers, respectively, 22 and 49
+had retained candidates. All emitted source coordinates, sequence/path lengths,
+distinct-spacer counts and edge-work bounds passed checks; no unextended seeds
+occurred in detection outputs. These counts do not establish target accuracy:
+the array input itself includes candidate detections, and these genome fixtures
+are much smaller than a full pooled metagenome.
+
+Replaying the shared C++ context classifier on the saved failing run recognized
+all 694 previously identified repeat-flanked regions as array context on both
+sides. This checked saved sequences, not a rerun of the original graph search;
+the original graph was not available locally. The core suite passes 146 checks
+in both the release and AddressSanitizer/UndefinedBehaviorSanitizer builds.

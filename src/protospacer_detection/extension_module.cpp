@@ -36,13 +36,51 @@ static std::string identifier(const std::string& value,const char* prefix) {
 static std::string path_text(const Path& p) {std::ostringstream out;for(size_t i=0;i<p.size();++i){if(i)out<<',';out<<p[i];}return out.str().empty()?"-":out.str();}
 struct Source {std::string id,array,observation,repeat,spacer;bool reverse=false;};
 struct Entry {Seed seed;std::string id;std::vector<Candidate> paths;};
+struct Decision {
+    std::string seed,outcome,reason,left_stop,right_stop,replacement;
+    size_t begin=0,end=0,expanded=0;
+};
 struct Query {
     std::string sequence,status="unmapped",error;
     std::vector<Source> sources;
-    std::set<Node> array_edges,repeat_edges;
+    std::set<Node> array_edges;
     std::vector<Entry> entries;
+    std::vector<Decision> decisions;
     size_t eligible=0;bool truncated=false;
 };
+static void record(Query& q,const Entry& e,const Candidate& c,const std::string& outcome,
+                   const std::string& reason,const std::string& replacement="-") {
+    q.decisions.push_back({e.id,outcome,reason,c.left.stop,c.right.stop,replacement,e.seed.begin,e.seed.end,c.expanded});
+}
+static void trim_left(Candidate& c) {
+    size_t remove=c.seed_begin;c.path.erase(c.path.begin(),c.path.begin()+remove);
+    c.sequence.erase(0,remove);c.seed_end-=remove;c.seed_begin=0;c.left_length=0;
+    c.left.coverage={};c.external_left=0;
+}
+static void trim_right(Candidate& c,size_t k) {
+    c.sequence.resize(c.seed_end);c.path.resize(c.seed_end-k+1);c.right_length=0;
+    c.right.coverage={};c.external_right=0;
+}
+static void compact_intervals(Query& q) {
+    // Equivalent complete paths at the same query alignment can arise from
+    // nested seed intervals. Retain maximal intervals for that exact context;
+    // a different extension sequence or alignment remains a separate candidate.
+    std::sort(q.entries.begin(),q.entries.end(),[](const auto& a,const auto& b) {
+        auto al=a.seed.end-a.seed.begin,bl=b.seed.end-b.seed.begin;
+        return al!=bl?al>bl:a.id<b.id;
+    });
+    RetainedIntervalContexts contexts;
+    for(auto& e:q.entries) {
+        std::vector<Candidate> keep;
+        for(auto& c:e.paths) {
+            auto replacement=contexts.replacement(c.sequence,c.seed_begin,e.seed.begin,e.seed.end,e.id);
+            if(!replacement.empty())record(q,e,c,"redundant","nested_interval_same_path",replacement);
+            else keep.push_back(std::move(c));
+        }
+        e.paths=std::move(keep);
+    }
+    q.entries.erase(std::remove_if(q.entries.begin(),q.entries.end(),[](const auto& e){return e.paths.empty();}),q.entries.end());
+}
 static std::vector<Query> load_queries(const fs::path& folder) {
     std::map<std::string,Query> queries;std::set<std::string> ids;
     auto add=[&](Source source) {
@@ -176,10 +214,12 @@ int run_extension_module(int argc,char** argv) {
         if(flag=="--help" || flag=="-h") {
             std::cout<<"mcaat phage-curate --arrays DIR --graph PREFIX [--output DIR]\n"
                 "Exact protospacer seeds and bounded bidirectional extension; partial results retained.\n"
+                "Primary outputs require an external flank. Unresolved seeds are reported separately.\n"
                 "--threads 1 --beam-width 32 --max-length 2500 --max-states 50000\n"
                 "--max-paths 16 --max-seeds 128 --max-query-states 200000 --min-match-bp 0 (0 = graph k)\n"
                 "--max-retained-bases 50000000 (abort explicitly before excessive result storage)\n"
                 "--coverage-model auto|poisson|negative-binomial --coverage-window 7\n"
+                "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
                 "--max-coverage-penalty 20\n"
                 "Optional evidence: --reads1 FILE [--reads2 FILE] --min-insert 0 --max-insert 1000\n"
                 "--max-read-index 5000000 --max-read-work 1000000 --read-weight 1 --pair-weight 2\n"
@@ -203,6 +243,7 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--min-match-bp")options.min_match=integer(flag,value,true);
         else if(flag=="--coverage-window")options.coverage_window=integer(flag,value);
         else if(flag=="--coverage-model")options.coverage_model=value;
+        else if(flag=="--array-repeat-identity")options.array_repeat_identity=number(flag,value);
         else if(flag=="--max-coverage-penalty")options.max_coverage_penalty=number(flag,value);
         else if(flag=="--reads1")reads1=value;
         else if(flag=="--reads2")reads2=value;
@@ -240,24 +281,51 @@ int run_extension_module(int argc,char** argv) {
             if(q.sequence.size()<graph.k()){q.status="shorter_than_k";return;}
             Path full=graph.trace(q.sequence);if(full.empty()){q.status="not_fully_mapped";return;}
             std::set<std::pair<std::string,std::string>> contexts;
+            std::set<std::string> repeat_set;
             for(const auto& source:q.sources)if(contexts.emplace(source.repeat,source.spacer).second) {
                 auto edges=graph.array_context(source.repeat,source.spacer);
-                q.array_edges.insert(edges.first.begin(),edges.first.end());q.repeat_edges.insert(edges.second.begin(),edges.second.end());
+                q.array_edges.insert(edges.first.begin(),edges.first.end());
+                repeat_set.insert(source.reverse?reverse_complement(source.repeat):source.repeat);
             }
-            auto isolated=isolate(graph,full,q.repeat_edges,options);q.eligible=isolated.eligible;q.truncated=isolated.truncated;
+            std::vector<std::string> repeats(repeat_set.begin(),repeat_set.end());
+            auto isolated=isolate(graph,full,{},options);q.eligible=isolated.eligible;q.truncated=isolated.truncated;
             q.status=isolated.seeds.empty()?"no_external_flank":"candidate";
             size_t used=0;
             for(auto& seed:isolated.seeds) {
                 if(cancelled)return;
                 Entry entry;entry.id=identifier(q.sequence+":"+std::to_string(seed.begin)+":"+std::to_string(seed.end),"seed_");
                 entry.seed=std::move(seed);
+                auto left_context=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,true);
+                auto right_context=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,false);
                 if(used+2>options.max_query_states) {
                     Candidate c;c.path=entry.seed.path;c.sequence=graph.spell(c.path);c.seed_end=c.sequence.size();
                     c.left.stop=c.right.stop="query_work_limit";c.search_limited=true;entry.paths.push_back(std::move(c));
                 } else {
                     auto local=options;local.max_states=std::min(options.max_states,(options.max_query_states-used)/2);
-                    entry.paths=reconstruct(graph,entry.seed,q.repeat_edges,local,&q.array_edges);
+                    entry.paths=reconstruct(graph,entry.seed,{},local,&q.array_edges,&left_context,&right_context);
                     if(!entry.paths.empty())used+=entry.paths.front().expanded;
+                }
+                // Recheck the EMITTED flanks: the joined length budget may have
+                // trimmed away the bases that originally established divergence.
+                for(auto& c:entry.paths) {
+                    auto left=c.sequence.substr(0,c.seed_begin);std::reverse(left.begin(),left.end());
+                    if(!left.empty()) {
+                        auto state=context_state(left,left_context,options.array_repeat_identity);
+                        if(state!=ContextState::external) {
+                            c.left.context=state==ContextState::array?"array":"incomplete";
+                            if(state==ContextState::array)c.left.stop="source_array_context";
+                            trim_left(c);
+                        }
+                    }
+                    auto right=c.sequence.substr(c.seed_end);
+                    if(!right.empty()) {
+                        auto state=context_state(right,right_context,options.array_repeat_identity);
+                        if(state!=ContextState::external) {
+                            c.right.context=state==ContextState::array?"array":"incomplete";
+                            if(state==ContextState::array)c.right.stop="source_array_context";
+                            trim_right(c,graph.k());
+                        }
+                    }
                 }
                 for(auto& c:entry.paths)for(size_t pos=1;pos<c.path.size();++pos) {
                     if(q.array_edges.count(graph.edge(c.path[pos-1],c.path[pos])))continue;
@@ -268,26 +336,33 @@ int run_extension_module(int argc,char** argv) {
                     // An array-only prefix/suffix is not a reconstructed target
                     // flank. Keep the seed and independently supported side.
                     if(!c.external_left && c.left_length) {
-                        size_t remove=c.seed_begin;c.path.erase(c.path.begin(),c.path.begin()+remove);
-                        c.sequence.erase(0,remove);c.seed_end-=remove;c.seed_begin=0;c.left_length=0;
-                        c.left.coverage={};c.left.stop="array_context_only";
+                        trim_left(c);c.left.context="array";c.left.stop="array_context_only";
                     }
                     if(!c.external_right && c.right_length) {
-                        c.sequence.resize(c.seed_end);c.path.resize(c.seed_end-graph.k()+1);c.right_length=0;
-                        c.right.coverage={};c.right.stop="array_context_only";
+                        trim_right(c,graph.k());c.right.context="array";c.right.stop="array_context_only";
                     }
                     c.score=c.left.coverage.score()+c.right.coverage.score();
                 }
+                // A work-limited or failed-join seed is diagnostic information,
+                // never a detection in the primary FASTA/association outputs.
+                entry.paths.erase(std::remove_if(entry.paths.begin(),entry.paths.end(),[&](const auto& c) {
+                    if(c.external_left || c.external_right)return false;
+                    bool unresolved=c.search_limited || c.left.context=="incomplete" || c.right.context=="incomplete";
+                    std::string reason=(c.left.context=="array" || c.right.context=="array")?"source_array_context":"no_external_flank";
+                    if(unresolved)reason=c.left.stop=="query_work_limit"?"query_work_limit":
+                        c.left.stop=="incompatible_flanks"?"incompatible_flanks":
+                        (c.left.stop=="length_limit" || c.right.stop=="length_limit")?"length_limit":"incomplete_search_or_context";
+                    record(q,entry,c,unresolved?"unresolved":"rejected",reason);return true;
+                }),entry.paths.end());
                 std::set<Path> unique_paths;
                 entry.paths.erase(std::remove_if(entry.paths.begin(),entry.paths.end(),[&](const auto& c){return !unique_paths.insert(c.path).second;}),entry.paths.end());
-                // Traversing only known repeat/spacer boundary edges adds no
-                // target-context evidence. A capped search stays unresolved.
-                entry.paths.erase(std::remove_if(entry.paths.begin(),entry.paths.end(),[](const auto& c){return !c.external_left && !c.external_right && !c.search_limited;}),entry.paths.end());
                 size_t bases=0;for(const auto& c:entry.paths)bases+=c.sequence.size();
                 if(retained_bases.fetch_add(bases)+bases>max_retained_bases)throw std::runtime_error("results exceed --max-retained-bases; increase the budget or lower --beam-width/--max-seeds");
                 if(!entry.paths.empty())q.entries.push_back(std::move(entry));
             }
-            if(q.entries.empty())q.status="no_external_flank";
+            if(!q.entries.empty())q.status="candidate";
+            else if(q.truncated || std::any_of(q.decisions.begin(),q.decisions.end(),[](const auto& d){return d.outcome=="unresolved";}))q.status="unresolved";
+            else q.status="no_external_flank";
         }(); }catch(const std::exception& e){q.error=e.what();cancelled=true;}
         ++completed;
         #pragma omp critical(proto_progress)
@@ -315,24 +390,60 @@ int run_extension_module(int argc,char** argv) {
         });
         if(e.paths.size()>options.max_paths){e.paths.resize(options.max_paths);for(auto& c:e.paths)c.search_limited=true;}
     }
+    // Only suppress a redundant interval once its replacement has survived
+    // evidence ranking and output limits.
+    for(auto& q:queries)compact_intervals(q);
     fs::create_directories(destination);
     auto staging=destination/(".protospacer-stage-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     fs::create_directory(staging);
     try {
         auto query_out=output(staging/"protospacer_queries.tsv");
-        query_out<<"source_id\tarray_id\tobservation_id\tquery_id\tspacer\tmapping_status\teligible_intervals\tseed_limit_reached\n";
+        query_out<<"source_id\tarray_id\tobservation_id\tquery_id\tspacer\tmapping_status\teligible_intervals\tseed_limit_reached\tretained_intervals\tunresolved_intervals\n";
         auto seed_out=output(staging/"protospacer_candidates.tsv");
         seed_out<<"seed_id\tquery_id\tquery_begin\tquery_end\tmatched_bases\tquery_coverage\tidentity\tsequence\tsource_count\tseed_vertices\n";
         auto seed_fasta=output(staging/"Protospacers.fasta");
+        auto matched_fasta=output(staging/"MatchedSpacers.fasta");
+        auto unresolved_fasta=output(staging/"UnresolvedSeeds.fasta");
+        auto unresolved_out=output(staging/"protospacer_unresolved.tsv");
+        unresolved_out<<"seed_id\tquery_id\tquery_begin\tquery_end\tsequence\treasons\n";
+        auto decisions=output(staging/"protospacer_decisions.tsv");
+        decisions<<"query_id\tseed_id\tquery_begin\tquery_end\toutcome\treason\tleft_stop\tright_stop\texpanded_states\treplacement_seed_id\n";
         auto regions_out=output(staging/"protospacer_regions.tsv");
         regions_out<<"region_id\tlength\tsequence\tvertices\tedges\tviral_status\n";
         auto fasta=output(staging/"ContiguousPaths.fasta");
         auto associations=output(staging/"protospacer_associations.tsv");
-        associations<<"source_id\tarray_id\tseed_id\tregion_id\tquery_begin\tquery_end\tseed_begin\tseed_end\tstrand\tstatus\tleft_stop\tright_stop\tleft_coverage\tright_coverage\tleft_dispersion\tright_dispersion\tcoverage_samples\tcoverage_score\ttotal_score\talternative_rank\tsearch_limited\texpanded_states\tread_evidence\tsupported_junctions\tjunctions\tread_support\tpair_support\tunique_pair_support\tpam_status\tsubtype\texternal_left_edges\texternal_right_edges\tambiguity\n";
+        associations<<"source_id\tarray_id\tseed_id\tregion_id\tquery_begin\tquery_end\tseed_begin\tseed_end\tstrand\tstatus\tleft_stop\tright_stop\tleft_coverage\tright_coverage\tleft_dispersion\tright_dispersion\tcoverage_samples\tcoverage_score\ttotal_score\talternative_rank\tsearch_limited\texpanded_states\tread_evidence\tsupported_junctions\tjunctions\tread_support\tpair_support\tunique_pair_support\tpam_status\tsubtype\texternal_left_edges\texternal_right_edges\tambiguity\tleft_context\tright_context\n";
         std::map<std::string,std::pair<std::string,std::string>> regions;size_t seeds=0,links=0,sources=0;
+        size_t matched_queries=0,full_matched_queries=0,unresolved_queries=0,unresolved_seeds=0,rejected_context_seeds=0,redundant_paths=0;
         for(const auto& q:queries) {
+            auto query_id=identifier(q.sequence,"query_");
+            if(!q.entries.empty()) {
+                ++matched_queries;matched_fasta<<'>'<<query_id<<'\n'<<q.sequence<<'\n';
+                full_matched_queries+=std::any_of(q.entries.begin(),q.entries.end(),[&](const auto& e){return e.seed.begin==0 && e.seed.end==q.sequence.size();});
+            }
+            unresolved_queries+=q.status=="unresolved";
+            std::set<std::string> retained,context_rejected;
+            for(const auto& e:q.entries)retained.insert(e.id);
+            std::map<std::string,std::vector<const Decision*>> pending;
+            for(const auto& d:q.decisions) {
+                decisions<<query_id<<'\t'<<d.seed<<'\t'<<d.begin<<'\t'<<d.end<<'\t'<<d.outcome<<'\t'<<d.reason<<'\t'<<d.left_stop<<'\t'<<d.right_stop<<'\t'<<d.expanded<<'\t'<<d.replacement<<'\n';
+                if(d.outcome=="unresolved" && !retained.count(d.seed))pending[d.seed].push_back(&d);
+                if(d.reason=="source_array_context")context_rejected.insert(d.seed);
+                redundant_paths+=d.outcome=="redundant";
+            }
+            for(auto it=context_rejected.begin();it!=context_rejected.end();) {
+                if(retained.count(*it) || pending.count(*it))it=context_rejected.erase(it);else ++it;
+            }
+            unresolved_seeds+=pending.size();rejected_context_seeds+=context_rejected.size();
+            for(const auto& [seed,items]:pending) {
+                const auto& first=*items.front();auto seq=q.sequence.substr(first.begin,first.end-first.begin);
+                std::set<std::string> reasons;for(auto item:items)reasons.insert(item->reason);
+                std::string joined;for(const auto& reason:reasons){if(!joined.empty())joined+=',';joined+=reason;}
+                unresolved_fasta<<'>'<<seed<<'\n'<<seq<<'\n';
+                unresolved_out<<seed<<'\t'<<query_id<<'\t'<<first.begin<<'\t'<<first.end<<'\t'<<seq<<'\t'<<joined<<'\n';
+            }
             for(const auto& source:q.sources) {
-                ++sources;query_out<<source.id<<'\t'<<source.array<<'\t'<<source.observation<<'\t'<<identifier(q.sequence,"query_")<<'\t'<<source.spacer<<'\t'<<q.status<<'\t'<<q.eligible<<'\t'<<q.truncated<<'\n';
+                ++sources;query_out<<source.id<<'\t'<<source.array<<'\t'<<source.observation<<'\t'<<query_id<<'\t'<<source.spacer<<'\t'<<q.status<<'\t'<<q.eligible<<'\t'<<q.truncated<<'\t'<<q.entries.size()<<'\t'<<pending.size()<<'\n';
             }
             for(const auto& e:q.entries) {
                 ++seeds;auto seq=q.sequence.substr(e.seed.begin,e.seed.end-e.seed.begin);
@@ -356,28 +467,35 @@ int run_extension_module(int argc,char** argv) {
                         auto pam=pam_status(q,e,c,source,rules);
                         bool l=c.external_left>0,r=c.external_right>0;
                         associations<<source.id<<'\t'<<source.array<<'\t'<<e.id<<'\t'<<id<<'\t'<<qb<<'\t'<<qe<<'\t'<<sb<<'\t'<<se<<'\t'<<((source.reverse^flip)?"-":"+")<<'\t'
-                            <<(l&&r?"two_sided":l||r?"one_sided":"seed_only")<<'\t'<<(flip?c.right.stop:c.left.stop)<<'\t'<<(flip?c.left.stop:c.right.stop)<<'\t'
+                            <<(l&&r?"two_sided":"one_sided")<<'\t'<<(flip?c.right.stop:c.left.stop)<<'\t'<<(flip?c.left.stop:c.right.stop)<<'\t'
                             <<(flip?c.right.coverage:c.left.coverage).mean()<<'\t'<<(flip?c.left.coverage:c.right.coverage).mean()<<'\t'<<(flip?c.right.coverage:c.left.coverage).dispersion()<<'\t'<<(flip?c.left.coverage:c.right.coverage).dispersion()<<'\t'
                             <<c.left.coverage.scored+c.right.coverage.scored<<'\t'<<c.left.coverage.score()+c.right.coverage.score()<<'\t'<<(c.score-c.pam_bonus+(pam.first=="match"?options.pam_weight:0))<<'\t'<<rank<<'\t'<<(c.search_limited||q.truncated)<<'\t'<<c.expanded<<'\t'
-                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(e.paths.size()>1?"multiple_retained_paths":(c.search_limited||q.truncated)?"search_limited":"single_retained_path")<<'\n';
+                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(e.paths.size()>1?"multiple_retained_paths":(c.search_limited||q.truncated)?"search_limited":"single_retained_path")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
                     }
                 }
             }
         }
         auto parameters=output(staging/"protospacer_parameters.json");
-        parameters<<"{\n  \"schema\": 1,\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
+        parameters<<"{\n  \"schema\": 2,\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
             <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases
             <<",\n  \"coverage_model\": "<<json_string(options.coverage_model)<<",\n  \"coverage_window\": "<<options.coverage_window<<",\n  \"max_coverage_penalty\": "<<options.max_coverage_penalty
+            <<",\n  \"array_repeat_identity\": "<<options.array_repeat_identity
             <<",\n  \"threads\": "<<threads<<",\n  \"reads1\": "<<json_string(reads1.string())<<",\n  \"reads2\": "<<json_string(reads2.string())
             <<",\n  \"min_insert\": "<<min_insert<<",\n  \"max_insert\": "<<max_insert<<",\n  \"max_read_index\": "<<max_index<<",\n  \"max_read_work\": "<<max_read_work
             <<",\n  \"read_weight\": "<<options.read_weight<<",\n  \"pair_weight\": "<<options.pair_weight<<",\n  \"pam_rules\": "<<json_string(pam_file.string())<<",\n  \"pam_weight\": "<<options.pam_weight
-            <<",\n  \"source_observations\": "<<sources<<",\n  \"unique_queries\": "<<queries.size()<<",\n  \"seed_candidates\": "<<seeds<<",\n  \"regions\": "<<regions.size()<<",\n  \"associations\": "<<links<<"\n}\n";
+            <<",\n  \"source_observations\": "<<sources<<",\n  \"unique_queries\": "<<queries.size()<<",\n  \"matched_queries\": "<<matched_queries<<",\n  \"full_length_matched_queries\": "<<full_matched_queries
+            <<",\n  \"partial_only_matched_queries\": "<<matched_queries-full_matched_queries<<",\n  \"unresolved_queries\": "<<unresolved_queries<<",\n  \"unresolved_seed_intervals\": "<<unresolved_seeds
+            <<",\n  \"rejected_context_seed_intervals\": "<<rejected_context_seeds<<",\n  \"redundant_interval_paths\": "<<redundant_paths
+            <<",\n  \"seed_candidates\": "<<seeds<<",\n  \"regions\": "<<regions.size()<<",\n  \"associations\": "<<links<<"\n}\n";
         query_out.close();seed_out.close();seed_fasta.close();regions_out.close();fasta.close();associations.close();parameters.close();
+        matched_fasta.close();unresolved_fasta.close();unresolved_out.close();decisions.close();
         for(const auto& item:fs::directory_iterator(staging))fs::rename(item.path(),destination/item.path().filename());
         fs::remove(staging);
-        std::cout<<"Saved "<<seeds<<" exact seed candidates, "<<regions.size()<<" unique regions, "<<links<<" source associations to "<<destination<<'\n';
+        std::cout<<"Matched "<<matched_queries<<" / "<<queries.size()<<" distinct spacers ("<<full_matched_queries<<" with full-length matches; "<<matched_queries-full_matched_queries<<" partial-only)\n"
+            <<"Saved "<<seeds<<" matched intervals, "<<regions.size()<<" unique regions, "<<links<<" source associations to "<<destination<<'\n'
+            <<"Separate unresolved intervals: "<<unresolved_seeds<<"; source-array intervals rejected: "<<rejected_context_seeds<<"; redundant interval paths suppressed: "<<redundant_paths<<'\n';
     }catch(...){std::error_code ec;fs::remove_all(staging,ec);throw;}
     return 0;
 }

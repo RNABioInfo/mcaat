@@ -206,7 +206,9 @@ void SDBGBuild::BuildSDBG()
     // megahit_core read2sdbg --host_mem 128000000000 --read_lib_file outfile_prefix -m 1 -k 21 --num_cpu_threads 48
     // convert double to string 
 
-    std::string host_mem = std::to_string(settings.ram);
+    // Settings stores GiB; MEGAHIT's --host_mem expects bytes. Passing e.g. 2
+    // for --ram 2G forced the builder into its minimum-memory fallback.
+    std::string host_mem = std::to_string(static_cast<uint64_t>(settings.ram * 1024.0 * 1024.0 * 1024.0));
     std::string num_cpu_threads = std::to_string(settings.threads);
     std::string read2sdbg = "read2sdbg";
     std::string host_mem_flag = "--host_mem";
