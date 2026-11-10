@@ -194,16 +194,20 @@ struct MultiplicityProfile {
 };
 struct Coverage {
     std::vector<double> baseline;
+    std::vector<double> recent;
     MultiplicityProfile profile;
     double penalty=0;size_t scored=0;
     double mean() const {return median(baseline);}
-    double dispersion() const {
-        if(baseline.size()<3)return 0;
-        const double m=mean();std::vector<double> delta;
-        for(double c:baseline)delta.push_back(std::abs(c-m));
+    static double dispersion_of(const std::vector<double>& values) {
+        if(values.size()<3)return 0;
+        const double m=median(values);std::vector<double> delta;
+        for(double c:values)delta.push_back(std::abs(c-m));
         double sigma=1.4826*median(delta);
         return m>0?std::max(0.,(sigma*sigma-m)/(m*m)):0;
     }
+    double dispersion() const {return dispersion_of(baseline);}
+    double local_mean() const {return recent.empty()?mean():median(recent);}
+    double local_dispersion() const {return recent.empty()?dispersion():dispersion_of(recent);}
     // Log-likelihood loss relative to a saturated mean, evaluated at separated
     // count observations. This is a ranking score, not a calibrated posterior.
     static double loss(double count,double mean,double dispersion) {
@@ -214,11 +218,18 @@ struct Coverage {
     }
     double observe(double count,const Options& options) {
         profile.observe(count);
-        if(baseline.size()<options.coverage_window) {baseline.push_back(count);return 0;}
-        double alpha=options.coverage_model=="poisson"?0:dispersion();
+        if(baseline.size()<options.coverage_window) {baseline.push_back(count);recent.push_back(count);return 0;}
+        double alpha=options.coverage_model=="poisson"?0:local_dispersion();
         // Explicit NB uses a weak overdispersion floor when local MAD is zero.
         if(options.coverage_model=="negative-binomial")alpha=std::max(alpha,.05);
-        double value=loss(count,mean(),alpha);penalty+=value;++scored;return value;
+        double value=loss(count,local_mean(),alpha);penalty+=value;++scored;
+        // Test before adapting: a rejected jump cannot move the local baseline.
+        // Keep the initial baseline separately for the two-flank comparison.
+        if(value<=options.max_coverage_penalty) {
+            if(recent.size()>=options.coverage_window)recent.erase(recent.begin());
+            recent.push_back(count);
+        }
+        return value;
     }
     double score() const {return scored?-penalty/scored:0;}
 };
@@ -309,7 +320,7 @@ BranchProbe probe_branch(Graph& graph,const Side& current,Arc first,bool backwar
     std::string prefix=current.context_prefix,context=current.context,tail=current.adapter_tail;
     MultiplicityProfile local;double loss=0;
     const bool baseline=current.coverage.baseline.size()>=3;
-    double alpha=options.coverage_model=="poisson"?0:current.coverage.dispersion();
+    double alpha=options.coverage_model=="poisson"?0:current.coverage.local_dispersion();
     if(options.coverage_model=="negative-binomial")alpha=std::max(alpha,.05);
     Arc arc=first;
     for(size_t step=0;step<std::min(budget,options.branch_lookahead);++step) {
@@ -330,7 +341,7 @@ BranchProbe probe_branch(Graph& graph,const Side& current,Arc first,bool backwar
             if(state==ContextState::external)context="external";
         }
         if(context!="pending" && (!shared_context || !shared_context->count(arc.edge))) {
-            double penalty=baseline?Coverage::loss(arc.count,current.coverage.mean(),alpha):0;
+            double penalty=baseline?Coverage::loss(arc.count,current.coverage.local_mean(),alpha):0;
             if(baseline && penalty>options.max_coverage_penalty) {
                 result.viable=false;result.status="coverage_break";return result;
             }
@@ -444,6 +455,7 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 usable={usable[chosen]};
             }
             std::vector<Side> children;
+            std::vector<std::pair<Side,std::string>> rejected;
             for(const auto& a:usable) {
                 if(result.expanded>=options.max_states){result.work_limited=true;break;}
                 ++result.expanded;
@@ -466,13 +478,13 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                         next.context=state==ContextState::external?"external":state==ContextState::array?"array":"pending";
                     }
                     next.coverage=path_coverage(graph,next.nodes,keep,backward,next.context_clear_at,shared_context,options);
-                    finish(std::move(next),"sequencing_adapter");continue;
+                    rejected.emplace_back(std::move(next),"sequencing_adapter");continue;
                 }
                 if(next.context=="pending") {
                     next.context_prefix+=base;
                     auto state=context_state(next.context_prefix,*contexts,options.array_repeat_identity);
                     if(state==ContextState::array) {
-                        next.context="array";finish(std::move(next),"source_array_context");continue;
+                        next.context="array";rejected.emplace_back(std::move(next),"source_array_context");continue;
                     }
                     if(state==ContextState::external) {
                         next.context="external";next.context_clear_at=next.nodes.size();
@@ -485,9 +497,14 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 auto before=next.coverage;
                 double penalty=sample?next.coverage.observe(a.count,options):0;
                 if(sample)next.since_sample=0;else ++next.since_sample;
-                if(penalty>options.max_coverage_penalty) {next.coverage=std::move(before);finish(std::move(next),"coverage_break");continue;}
+                if(penalty>options.max_coverage_penalty) {next.coverage=std::move(before);rejected.emplace_back(std::move(next),"coverage_break");continue;}
                 next.nodes.push_back(a.to);children.push_back(std::move(next));
             }
+            // A rejected successor is not a reason to stop a prefix that still
+            // has an accepted successor. Otherwise low-count error branches
+            // manufacture short terminal paths which can outrank the genuine
+            // continuation solely because their multiplicity varies less.
+            if(children.empty())for(auto& stop:rejected)finish(std::move(stop.first),std::move(stop.second));
             if(!branch && children.size()==1) {
                 current=std::move(children.front());visited.insert(current.nodes.back());continue;
             }

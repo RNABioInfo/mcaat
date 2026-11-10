@@ -123,7 +123,7 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
             extensions<<'\n';
         }
         auto params=output(staging/"protospacer_parameters.json");
-        params<<"{\n  \"schema\": 6,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
+        params<<"{\n  \"schema\": 7,\n  \"extension_algorithm\": \"supported_successors_local_median_v2\",\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
             <<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())<<",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())
             <<",\n  \"graph_k\": "<<graph.k()
             <<",\n  \"input_records\": "<<targets.size()<<",\n  \"retained_records\": "<<targets.size()<<",\n  \"extended_records\": "<<extended

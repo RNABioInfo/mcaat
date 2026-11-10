@@ -64,7 +64,7 @@ a shorter interval. The repeat and adapter checks do not establish viral origin.
 
 The saved 81-match baseline is in `bench/fixtures/protospacer-baseline-81/`.
 Its original reference matches are preserved by keeping exactly those sequences,
-not by claiming to rediscover them on an unavailable graph. Five intervals are
+independently of extension success. Five intervals are
 shorter than k=23. The corresponding manifest records thresholds and the FASTA
 hash. No reference sequence is used to choose extension paths.
 
@@ -78,6 +78,51 @@ python3 bench/check_retained_protospacers.py \
 
 This checker verifies retention and output consistency. It does not assess
 reference-match quality of the extended flanks.
+
+### SRR14017553 graph investigation (2026-11-10)
+
+The downloaded k=23 graph and its matching 49-array/530-spacer report were used
+to rerun the fixed 81-protospacer set. Two traversal defects were reproduced:
+
+1. A rejected successor produced a terminal copy of the shared path even when
+   another successor passed. Those artificial short candidates could outrank the
+   continuing path. Now a rejection terminates the shared prefix only when no
+   successor passes; rejected alternatives still cannot be traversed.
+2. The fixed initial depth window could stop a continuing path after gradual
+   depth drift. The walking gate now uses the median and MAD of the most recent
+   accepted observations. It tests an edge **before** updating that window.
+   The initial window remains separate for comparing the two flanks.
+
+Both changes apply to ordinary discovery and `--protospacers` extension.
+Parameters schema 7 identifies `supported_successors_local_median_v2`.
+Source-repeat checks still examine complete repeats: a shared prefix alone can
+also occur on a valid target and is not sufficient to discard it.
+
+On the complete real graph, all 81 supplied sequences and IDs remained unchanged.
+There were 45 extended input records, represented by 43 unique regions, and 36
+without an accepted extension (31 context/adapter/extension failures and five
+inputs shorter than k). Local BLAST against the saved Shah reference at >=90%
+identity and >=50% single-HSP query coverage retained the same six matching
+regions. It did **not** increase that match count. Four improved:
+
+| Input seed suffix | Extension length, before → after | Longest qualifying HSP, before → after |
+|---|---:|---:|
+| `541b71503abcacf8` | 1315 → 1530 | 1315 → 1530 |
+| `0e3fc52adc6e1e7e` | 987 → 1528 | 987 → 1528 |
+| `815985dbbb929d9a` | 860 → 1240 | 466 → 799 |
+| `c35af5b66b335ecd` | 860 → 1227 | 466 → 786 |
+
+The first two match the reference across the full new sequence. The remaining
+extensions are still candidates, and a reference match to the short spacer does
+not establish the flanking sequence. Reference tracing also found cases where
+the compared reference's next edge was absent from this graph. This does not
+exclude another strain or another reference; it limits what that exact route can
+reconstruct. No reference sequence participates in the production path scoring.
+
+`tests/fixtures/protospacer-srr14017553/` contains observed graph fragments that
+reproduce the premature stopping without distributing the complete graph.
+`bench/trace_protospacer_graph.cpp` is the read-only diagnostic used to inspect
+k-mer availability, neighboring edges and their multiplicities.
 
 ## Build and run on an existing graph
 
@@ -337,13 +382,16 @@ association ambiguity `shared_sequence_of_near_best_predictions`.
 
 ## Coverage model
 
-Each flank has its own frozen local baseline: the median of the first
-`coverage-window` eligible counts, ordinarily sampled at least `k+2` edges apart,
+Each flank has its own local baseline: the median of the most recent
+`coverage-window` accepted eligible counts, ordinarily sampled at least `k+2` edges apart,
 with additional observations at outgoing forks and incoming merges. Counts on
 known array boundaries, the matched spacer, and the prefix before source-context
 divergence are excluded. The robust variance
 estimate is `(1.4826 * MAD)^2`; the overdispersion estimate is
 `alpha = max(0, (variance - median) / median^2)`.
+The first window is also retained unchanged for the separate two-flank comparison.
+An observation is checked against the existing local window before being admitted;
+a rejected jump cannot shift that window. Window storage is bounded.
 
 - `auto`: negative binomial when estimated dispersion is positive, otherwise
   Poisson.
@@ -360,8 +408,9 @@ NB:      x log(x/mu) - (x+r) log((x+r)/(mu+r))
 ```
 
 The zero-count logarithm contributes zero. After collecting the baseline, an
-individual observation above `max-coverage-penalty` stops that branch before the
-incompatible edge. The diagnostic `coverage_score` is minus the mean loss per side, summed
+individual observation above `max-coverage-penalty` rejects that successor before
+the incompatible edge. Other accepted successors continue, without creating a
+terminal copy of their shared prefix. The diagnostic `coverage_score` is minus the mean loss per side, summed
 over the two emitted flanks. Trimmed parts do not contribute. A side with too few
 observations to finish its baseline has score zero and no scored samples; zero
 is **not** a confidence statement. These are ranking heuristics, not calibrated

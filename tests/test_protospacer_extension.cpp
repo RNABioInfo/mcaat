@@ -438,9 +438,19 @@ void test_retained_targets() {
     auto strict=extend_retained_target(branches,seed,ctx,o);
     check(strict.has_extension && strict.selected.right_length==0 && strict.selected.left_length==300,"optional common-prefix trimming affects extension only");
 }
+void test_local_coverage() {
+    Options o;Coverage cov;
+    for(int i=0;i<7;++i)cov.observe(155,o);
+    for(int count=156;count<=230;++count)
+        check(cov.observe(count,o)<o.max_coverage_penalty,"gradual depth drift is not a coverage break");
+    check(cov.mean()==155 && cov.local_mean()>220,"initial and recent coverage windows remain separate");
+    auto local=cov.local_mean();
+    check(cov.observe(1000,o)>o.max_coverage_penalty && cov.local_mean()==local,"abrupt jump is rejected before adaptation");
+    check(cov.observe(1,o)>o.max_coverage_penalty && cov.local_mean()==local,"low-count error branch cannot move the baseline");
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_local_coverage();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});
