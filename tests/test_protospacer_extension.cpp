@@ -257,12 +257,73 @@ void test_adapter_branches() {
     }
     check(!AdapterGuard(o.adapters).contains(adapter+"AAAAAA"),"isolated short core without adapter context is not enough to cut a biological path");
     check(AdapterGuard(o.adapters).contains(observed_tail),"observed adapter variant recognized with exact core and confirming bases");
+    for(const auto& variant:{"AGATCGGAAGAGCCGTCGT", "AGATCGGAAGAGCACCACG", "AGATCGGAAGAGCGTCTGT", "AGATCGGAAGAGCACACT"}) {
+        check(AdapterGuard(o.adapters).contains(variant),"observed adapter indel/short variant recognized");
+        check(AdapterGuard(o.adapters).contains(reverse_complement(variant)),"adapter indel recognition is strand invariant");
+    }
+    Options exact;exact.adapters={{"AGATCGGAAGAGCACACGT"}};
+    check(!AdapterGuard(exact.adapters).contains("AGATCGGAAGAGCACACT"),"user-specified adapters retain exact matching semantics");
     invalid([]{Options bad;bad.adapters={{"ACGT"}};bad.validate();});
     invalid([]{Options bad;bad.adapters={{"AGATCGGAAGANC"}};bad.validate();});
 }
+void test_graph_only_acceptance() {
+    Fixture f;auto seed=f.full();auto all=reconstruct(f.g,seed,f.masked,f.o);
+    auto it=std::find_if(all.begin(),all.end(),[&](const auto& c){return c.sequence==f.left+f.spacer+f.right;});
+    check(it!=all.end(),"acceptance fixture has complete target");
+    Candidate target=*it;target.external_left=target.left_length;target.external_right=target.right_length;
+    auto original=refine_flanks(target,f.g.k(),f.o);
+    check(original.size()==1 && original[0].sequence==target.sequence,"compatible supported flanks retained");
+    auto profile=[&](double count){Coverage c;for(size_t i=0;i<10;++i)c.observe(count,f.o);return c;};
+    target.left.coverage=profile(12);target.right.coverage=profile(100);
+    auto split=refine_flanks(target,f.g.k(),f.o);
+    check(split.size()==2 && split[0].flank_conflict && split[1].flank_conflict,"stable incompatible abundance contexts cannot be joined");
+    check(split[0].sequence==f.left+f.spacer && split[1].sequence==f.spacer+f.right,"both one-sided contexts preserved as alternatives");
+    for(const auto& c:split) {
+        check(c.sequence.size()==c.path.size()+f.g.k()-1,"split flank keeps path-length accounting");
+        check(c.sequence.substr(c.seed_begin,c.seed_end-c.seed_begin)==f.spacer,"split flank keeps seed coordinates");
+        check((c.external_left==0)!=(c.external_right==0),"split candidate has exactly one external side");
+    }
+    Options legacy=f.o;legacy.joint_flank_check=false;
+    check(refine_flanks(target,f.g.k(),legacy).size()==1,"joint compatibility check can be disabled explicitly");
+    target.right.coverage=profile(14);
+    check(refine_flanks(target,f.g.k(),f.o).size()==1,"small multiplicity differences are not a conflict");
+    target.left.coverage={};target.left.coverage.observe(12,f.o);target.right.coverage=profile(100);
+    check(refine_flanks(target,f.g.k(),f.o).size()==1,"too few observations cannot establish incompatible flank depth");
+    Coverage dispersed;for(double count:{2.,20.,60.})dispersed.observe(count,f.o);
+    check(joint_flank_loss(dispersed,profile(40),f.o)<f.o.max_coverage_penalty,"observed overdispersion is respected by joint check");
+    // A short prefix with only seed-overlapping k-mers is not an independently
+    // extended region. It remains unresolved if no other side can be retained.
+    Candidate tiny;auto short_left=dna(f.g.k()),short_right=dna(f.g.k());
+    tiny.sequence=short_left+f.spacer+short_right;tiny.path=f.g.add(tiny.sequence);
+    tiny.seed_begin=short_left.size();tiny.seed_end=tiny.seed_begin+f.spacer.size();
+    tiny.left_length=short_left.size();tiny.right_length=short_right.size();
+    tiny.external_left=tiny.left_length;tiny.external_right=tiny.right_length;
+    auto trimmed=refine_flanks(tiny,f.g.k(),f.o);
+    check(trimmed.size()==1 && trimmed[0].sequence==f.spacer,"tails shorter than one complete external edge are removed");
+    check(trimmed[0].left.context=="incomplete" && trimmed[0].right.context=="incomplete","short tails are unresolved, not a negative biological claim");
+    check(trimmed[0].external_left==0 && trimmed[0].external_right==0 && trimmed[0].seed_begin==0,"short-tail trimming clears evidence and updates coordinates");
+    legacy.min_external_flank=1;
+    check(refine_flanks(tiny,f.g.k(),legacy)[0].sequence==tiny.sequence,"short-tail threshold is user adjustable");
+    Candidate one=target;one.left_length=f.g.k();one.seed_begin=f.g.k();one.seed_end=one.seed_begin+f.spacer.size();
+    one.sequence=short_left+f.spacer+f.right;one.path=f.g.add(one.sequence);one.left.coverage={};one.right.coverage=profile(12);
+    auto kept=refine_flanks(one,f.g.k(),f.o);
+    check(kept.size()==1 && kept[0].sequence==f.spacer+f.right,"weak side does not erase strong opposite flank");
+    Candidate alternative=*it;
+    alternative.sequence=dna(60)+f.left.substr(60)+f.spacer+f.right.substr(0,50)+dna(100);
+    alternative.path=f.g.add(alternative.sequence);
+    auto common=common_flanks(*it,0,alternative,0);
+    check(common.seed_agrees && common.left>=40 && common.right>=50,"common sequence of competing paths is retained around the matched seed");
+    Candidate consensus=*it;retain_flanks(consensus,common.left,common.right,f.g.k());
+    check(f.g.spell(consensus.path)==consensus.sequence && consensus.sequence.substr(consensus.seed_begin,consensus.seed_end-consensus.seed_begin)==f.spacer,"ambiguity trimming preserves graph spelling and seed coordinates");
+    alternative=*it;alternative.seed_begin+=5;alternative.seed_end-=3;
+    common=common_flanks(*it,0,alternative,5);
+    check(common.seed_agrees && common.left==it->seed_begin && common.right==it->right_length,"nested seed intervals compared in common query coordinates");
+    alternative.sequence=dna(alternative.sequence.size());
+    check(!common_flanks(*it,0,alternative,5).seed_agrees,"incompatible tied seed alignments cannot imply a shared locus");
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});

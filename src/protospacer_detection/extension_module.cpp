@@ -58,15 +58,6 @@ static void record(Query& q,const Entry& e,const Candidate& c,const std::string&
                    const std::string& reason,const std::string& replacement="-") {
     q.decisions.push_back({e.id,outcome,reason,c.left.stop,c.right.stop,replacement,e.seed.begin,e.seed.end,c.expanded});
 }
-static void trim_left(Candidate& c) {
-    size_t remove=c.seed_begin;c.path.erase(c.path.begin(),c.path.begin()+remove);
-    c.sequence.erase(0,remove);c.seed_end-=remove;c.seed_begin=0;c.left_length=0;
-    c.left.coverage={};c.external_left=0;
-}
-static void trim_right(Candidate& c,size_t k) {
-    c.sequence.resize(c.seed_end);c.path.resize(c.seed_end-k+1);c.right_length=0;
-    c.right.coverage={};c.external_right=0;
-}
 static void compact_intervals(Query& q) {
     // Equivalent complete paths at the same query alignment can arise from
     // nested seed intervals. Retain maximal intervals for that exact context;
@@ -87,7 +78,36 @@ static void compact_intervals(Query& q) {
     }
     q.entries.erase(std::remove_if(q.entries.begin(),q.entries.end(),[](const auto& e){return e.paths.empty();}),q.entries.end());
 }
-static void select_prediction(Query& q,const Options& options) {
+static void refresh_retained_flanks(ExtensionGraph& graph,const Query& q,const Entry& entry,Candidate& c,const Options& options) {
+    std::set<std::string> repeat_set;
+    for(const auto& source:q.sources)repeat_set.insert(source.reverse?reverse_complement(source.repeat):source.repeat);
+    std::vector<std::string> repeats(repeat_set.begin(),repeat_set.end());
+    auto lc=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,true);
+    auto rc=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,false);
+    auto left=c.sequence.substr(0,c.seed_begin);std::reverse(left.begin(),left.end());
+    auto right=c.sequence.substr(c.seed_end);
+    size_t minimum=options.min_external_flank?options.min_external_flank:graph.k()+1;
+    if(!left.empty() && (left.size()<minimum || context_state(left,lc,options.array_repeat_identity)!=ContextState::external)) {
+        trim_left(c);c.left.context="incomplete";
+    }
+    if(!right.empty() && (right.size()<minimum || context_state(right,rc,options.array_repeat_identity)!=ContextState::external)) {
+        trim_right(c,graph.k());c.right.context="incomplete";
+    }
+    c.external_left=c.external_right=0;
+    for(size_t pos=1;pos<c.path.size();++pos) {
+        if(q.array_edges.count(graph.edge(c.path[pos-1],c.path[pos])))continue;
+        if(pos<=c.seed_begin)++c.external_left;
+        if(pos>c.seed_end-graph.k())++c.external_right;
+    }
+    if(!c.external_left && c.left_length)trim_left(c);
+    if(!c.external_right && c.right_length)trim_right(c,graph.k());
+    Path l(c.path.begin(),c.path.begin()+c.seed_begin+1);std::reverse(l.begin(),l.end());
+    Path r(c.path.begin()+c.seed_end-graph.k(),c.path.end());
+    c.left.coverage=path_coverage(graph,l,l.size()-1,true,c.left.context_clear_at,&q.array_edges,options);
+    c.right.coverage=path_coverage(graph,r,r.size()-1,false,c.right.context_clear_at,&q.array_edges,options);
+    c.score=stability(c.left.coverage,c.right.coverage).score()-(1.-double(entry.seed.end-entry.seed.begin)/q.sequence.size());
+}
+static void select_prediction(Query& q,const Options& options,ExtensionGraph& graph,bool graph_only) {
     if(q.entries.empty())return;
     size_t best_entry=0,best_path=0;std::set<std::string> regions;
     for(size_t i=0;i<q.entries.size();++i) {
@@ -111,7 +131,37 @@ static void select_prediction(Query& q,const Options& options) {
         q.comparable_runner=options.pair_weight==0 || bool(winner.pair_support)==bool(runner->pair_support);
         q.score_tie=q.comparable_runner && std::abs(winner.score-runner->score)<1e-12;
     }
+    size_t keep_left=winner.seed_begin,keep_right=winner.sequence.size()-winner.seed_end;
+    bool seed_agrees=true;
+    if(graph_only && options.resolve_graph_ties) {
+        const auto& chosen_entry=q.entries[best_entry];
+        // More samples make a score less fragile, but one extra observation on
+        // an otherwise identical abundance profile cannot identify a branch.
+        const double winner_evidence=winner.score+stability(winner.left.coverage,winner.right.coverage).support;
+        const unsigned winner_sides=unsigned(winner.external_left>0)+unsigned(winner.external_right>0);
+        for(const auto& e:q.entries)for(const auto& c:e.paths) {
+            double evidence=c.score+stability(c.left.coverage,c.right.coverage).support;
+            unsigned sides=unsigned(c.external_left>0)+unsigned(c.external_right>0);
+            if(canonical(c.sequence)==winner_key || sides!=winner_sides || std::abs(evidence-winner_evidence)>=1e-12)continue;
+            auto span=common_flanks(winner,chosen_entry.seed.begin,c,e.seed.begin);
+            keep_left=std::min(keep_left,span.left);keep_right=std::min(keep_right,span.right);
+            seed_agrees&=span.seed_agrees;
+        }
+    }
     Entry selected=std::move(q.entries[best_entry]);Candidate chosen=std::move(selected.paths[best_path]);
+    if(!seed_agrees || keep_left<chosen.seed_begin || keep_right<chosen.sequence.size()-chosen.seed_end) {
+        bool trim_l=keep_left<chosen.seed_begin,trim_r=keep_right<chosen.sequence.size()-chosen.seed_end;
+        retain_flanks(chosen,keep_left,keep_right,graph.k());chosen.ambiguity_trimmed=true;
+        if(trim_l)chosen.left.stop="ambiguous_graph_extension";
+        if(trim_r)chosen.right.stop="ambiguous_graph_extension";
+        refresh_retained_flanks(graph,q,selected,chosen,options);
+        // This score describes the emitted common sequence. The old runner was
+        // scored on a different length, so no numerical gap is reported.
+        q.comparable_runner=false;
+        bool retained=chosen.external_left || chosen.external_right;
+        record(q,selected,chosen,retained?"trimmed":"unresolved","ambiguous_graph_extension");
+        if(!retained) {q.entries.clear();q.viable_seeds.clear();q.status="unresolved";return;}
+    }
     selected.paths.clear();selected.paths.push_back(std::move(chosen));
     q.entries.clear();q.entries.push_back(std::move(selected));
 }
@@ -256,6 +306,9 @@ int run_extension_module(int argc,char** argv) {
                 "--max-retained-bases 50000000 (abort explicitly before excessive result storage)\n"
                 "--coverage-model auto|poisson|negative-binomial --coverage-window 7\n"
                 "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
+                "--min-external-flank 0 (0 = k+1 bases wholly outside the seed; 1 restores short-tail behavior)\n"
+                "--joint-flank-check true (split incompatible left/right multiplicities before selection)\n"
+                "--resolve-graph-ties true (retain common sequence of indistinguishable graph-only predictions)\n"
                 "Default adapter guard: confirmed Illumina cores and exact Nextera, both strands.\n"
                 "--adapter-sequences SEQ[,SEQ...] (replace defaults with exact motifs; none disables)\n"
                 "--max-coverage-penalty 20\n"
@@ -282,6 +335,15 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--coverage-window")options.coverage_window=integer(flag,value);
         else if(flag=="--coverage-model")options.coverage_model=value;
         else if(flag=="--array-repeat-identity")options.array_repeat_identity=number(flag,value);
+        else if(flag=="--min-external-flank")options.min_external_flank=integer(flag,value,true);
+        else if(flag=="--joint-flank-check") {
+            if(value!="true" && value!="false")throw std::invalid_argument("--joint-flank-check needs true or false");
+            options.joint_flank_check=value=="true";
+        }
+        else if(flag=="--resolve-graph-ties") {
+            if(value!="true" && value!="false")throw std::invalid_argument("--resolve-graph-ties needs true or false");
+            options.resolve_graph_ties=value=="true";
+        }
         else if(flag=="--adapter-sequences") {
             options.adapters.clear();
             if(value!="none") {
@@ -393,6 +455,16 @@ int run_extension_module(int argc,char** argv) {
                     }
                     c.score=stability(c.left.coverage,c.right.coverage).score();
                 }
+                std::vector<Candidate> refined;
+                for(auto& c:entry.paths) {
+                    auto candidates=refine_flanks(std::move(c),graph.k(),options);
+                    for(auto& candidate:candidates) {
+                        if(candidate.short_flank_trimmed)record(q,entry,candidate,"trimmed","insufficient_external_sequence");
+                        if(candidate.flank_conflict)record(q,entry,candidate,"trimmed","flank_multiplicity_conflict");
+                        refined.push_back(std::move(candidate));
+                    }
+                }
+                entry.paths=std::move(refined);
                 // A work-limited or failed-join seed is diagnostic information,
                 // never a detection in the primary FASTA/association outputs.
                 entry.paths.erase(std::remove_if(entry.paths.begin(),entry.paths.end(),[&](const auto& c) {
@@ -410,6 +482,7 @@ int run_extension_module(int argc,char** argv) {
                             ((c.left.context=="incomplete" && c.left.stop!="sequencing_adapter") ||
                              (c.right.context=="incomplete" && c.right.stop!="sequencing_adapter")));
                     }
+                    if(c.short_flank_trimmed){reason="insufficient_external_sequence";unresolved=true;}
                     record(q,entry,c,unresolved?"unresolved":"rejected",reason);return true;
                 }),entry.paths.end());
                 std::set<Path> unique_paths;
@@ -448,7 +521,7 @@ int run_extension_module(int argc,char** argv) {
     // Only suppress a redundant interval once its replacement has survived
     // evidence ranking and output limits.
     for(auto& q:queries)compact_intervals(q);
-    for(auto& q:queries)select_prediction(q,options);
+    for(auto& q:queries)select_prediction(q,options,graph,reads1.empty() && rules.empty());
     fs::create_directories(destination);
     auto staging=destination/(".protospacer-stage-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     fs::create_directory(staging);
@@ -467,7 +540,7 @@ int run_extension_module(int argc,char** argv) {
         auto selection=output(staging/"protospacer_selection.tsv");
         auto adapter_stops=output(staging/"protospacer_adapter_stops.tsv");
         adapter_stops<<"query_id\tseed_id\tside\tmotif\tclean_flank_bp\toverlaps_seed\tclean_endpoint_vertex\tdetected_vertex\n";
-        selection<<"query_id\tseed_id\tregion_id\tcompared_paths\tcompared_regions\ttotal_score\tstability_score\twithin_flank_variance\tadjacent_change\tleft_right_difference\tsample_penalty\tleft_samples\tright_samples\tleft_multiplicity\tright_multiplicity\tquery_coverage\tmultiplicity_evidence\trunner_up_score\tscore_gap\tscore_tie\tsearch_limited\n";
+        selection<<"query_id\tseed_id\tregion_id\tcompared_paths\tcompared_regions\ttotal_score\tstability_score\twithin_flank_variance\tadjacent_change\tleft_right_difference\tsample_penalty\tleft_samples\tright_samples\tleft_multiplicity\tright_multiplicity\tquery_coverage\tmultiplicity_evidence\trunner_up_score\tscore_gap\tscore_tie\tsearch_limited\tshort_flank_trimmed\tflank_multiplicity_conflict\tjoint_flank_loss_before_split\tambiguity_trimmed\n";
         auto regions_out=output(staging/"protospacer_regions.tsv");
         regions_out<<"region_id\tlength\tsequence\tvertices\tedges\tviral_status\n";
         auto fasta=output(staging/"ContiguousPaths.fasta");
@@ -535,7 +608,7 @@ int run_extension_module(int argc,char** argv) {
                         <<(left_enough&&right_enough?"both_flanks":left_enough||right_enough?"one_flank":"insufficient")<<'\t';
                     if(q.has_runner)selection<<q.runner_score;else selection<<"NA";
                     selection<<'\t';if(q.has_runner && q.comparable_runner)selection<<c.score-q.runner_score;else selection<<"NA";
-                    selection<<'\t'<<q.score_tie<<'\t'<<(c.search_limited||q.truncated)<<'\n';
+                    selection<<'\t'<<q.score_tie<<'\t'<<(c.search_limited||q.truncated)<<'\t'<<c.short_flank_trimmed<<'\t'<<c.flank_conflict<<'\t'<<c.joint_flank_loss<<'\t'<<c.ambiguity_trimmed<<'\n';
                     for(const auto& source:q.sources) {
                         ++links;size_t qb=source.reverse?q.sequence.size()-e.seed.end:e.seed.begin;
                         size_t qe=source.reverse?q.sequence.size()-e.seed.begin:e.seed.end;
@@ -547,7 +620,7 @@ int run_extension_module(int argc,char** argv) {
                             <<(l&&r?"two_sided":"one_sided")<<'\t'<<(flip?c.right.stop:c.left.stop)<<'\t'<<(flip?c.left.stop:c.right.stop)<<'\t'
                             <<(flip?c.right.coverage:c.left.coverage).mean()<<'\t'<<(flip?c.left.coverage:c.right.coverage).mean()<<'\t'<<(flip?c.right.coverage:c.left.coverage).dispersion()<<'\t'<<(flip?c.left.coverage:c.right.coverage).dispersion()<<'\t'
                             <<c.left.coverage.scored+c.right.coverage.scored<<'\t'<<c.left.coverage.score()+c.right.coverage.score()<<'\t'<<(c.score-c.pam_bonus+(pam.first=="match"?options.pam_weight:0))<<'\t'<<rank<<'\t'<<(c.search_limited||q.truncated)<<'\t'<<c.expanded<<'\t'
-                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(q.score_tie?"selected_score_tie":q.compared_regions>1?"selected_best_of_alternatives":(c.search_limited||q.truncated)?"search_limited":"single_candidate")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
+                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(c.ambiguity_trimmed?"shared_sequence_of_equal_evidence":q.score_tie?"selected_score_tie":q.compared_regions>1?"selected_best_of_alternatives":(c.search_limited||q.truncated)?"search_limited":"single_candidate")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
                     }
                 }
             }
@@ -557,15 +630,20 @@ int run_extension_module(int argc,char** argv) {
         for(const auto& adapter:options.adapters) {
             if(adapters_json.size()>1)adapters_json+=",";
             adapters_json+="{\"sequence\":"+json_string(adapter.sequence)+",\"exact_begin\":"+std::to_string(adapter.exact_begin)+
-                ",\"exact_end\":"+std::to_string(adapter.exact_end)+",\"max_mismatches\":"+std::to_string(adapter.max_mismatches)+"}";
+                ",\"exact_end\":"+std::to_string(adapter.exact_end)+",\"max_edits\":"+std::to_string(adapter.max_edits)+
+                ",\"allow_indels\":"+(adapter.allow_indels?"true":"false")+"}";
         }adapters_json+="]";
-        parameters<<"{\n  \"schema\": 3,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
+        parameters<<"{\n  \"schema\": 4,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
             <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases
             <<",\n  \"coverage_model\": "<<json_string(options.coverage_model)<<",\n  \"coverage_window\": "<<options.coverage_window<<",\n  \"max_coverage_penalty\": "<<options.max_coverage_penalty
             <<",\n  \"array_repeat_identity\": "<<options.array_repeat_identity
-            <<",\n  \"adapter_patterns\": "<<adapters_json<<",\n  \"adapter_match\": \"anchored_hamming_both_strands\""
+            <<",\n  \"adapter_patterns\": "<<adapters_json<<",\n  \"adapter_match\": \"anchored_edit_both_strands\""
+            <<",\n  \"min_external_flank_bp\": "<<(options.min_external_flank?options.min_external_flank:graph.k()+1)
+            <<",\n  \"joint_flank_check\": "<<(options.joint_flank_check?"true":"false")
+            <<",\n  \"resolve_graph_ties\": "<<(options.resolve_graph_ties?"true":"false")
+            <<",\n  \"graph_tie_resolution_active\": "<<(options.resolve_graph_ties && reads1.empty() && rules.empty()?"true":"false")
             <<",\n  \"adapter_blocked_branches\": "<<adapter_branches<<",\n  \"adapter_diagnostic_rows\": "<<adapter_rows
             <<",\n  \"adapter_contaminated_queries\": "<<adapter_queries
             <<",\n  \"threads\": "<<threads<<",\n  \"reads1\": "<<json_string(reads1.string())<<",\n  \"reads2\": "<<json_string(reads2.string())

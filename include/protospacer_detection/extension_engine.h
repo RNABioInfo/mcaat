@@ -29,18 +29,22 @@ inline double median(std::vector<double> x) {
 }
 struct AdapterPattern {
     std::string sequence;
-    size_t exact_begin=0,exact_end=0,max_mismatches=0;
+    size_t exact_begin=0,exact_end=0,max_edits=0;
+    bool allow_indels=false;
 };
 struct Options {
     size_t max_bp=2500,beam_width=32,max_states=50000,max_paths=16,max_seeds=128,min_match=0;
     size_t coverage_window=7,max_query_states=200000;
+    size_t min_external_flank=0; // 0: k+1, one complete edge outside the seed
+    bool joint_flank_check=true;
+    bool resolve_graph_ties=true;
     double max_coverage_penalty=20,read_weight=1,pair_weight=2,pam_weight=1,array_repeat_identity=.85;
     std::string coverage_model="auto";
-    // Require the exact 13-base Illumina core AND six confirming adapter bases
-    // (at least four must match). The short core alone can occur biologically.
+    // Require the exact 13-base Illumina core AND confirming adapter sequence
+    // (six model bases, <=2 edits). The short core alone can occur biologically.
     // Nextera and user-supplied adapters are exact. Empty explicitly disables.
-    std::vector<AdapterPattern> adapters={{"AGATCGGAAGAGCACACGT",0,13,2},
-                                         {"AGATCGGAAGAGCGTCGTG",0,13,2},
+    std::vector<AdapterPattern> adapters={{"AGATCGGAAGAGCACACGT",0,13,2,true},
+                                         {"AGATCGGAAGAGCGTCGTG",0,13,2,true},
                                          {"CTGTCTCTTATACACATCT"}};
     void validate() const {
         if(!max_bp || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
@@ -58,8 +62,10 @@ struct Options {
             const auto& s=p.sequence;
             if(s.size()<12 || s.size()>256 || s.find_first_not_of("ACGT")!=std::string::npos)
                 throw std::invalid_argument("adapter sequences must contain 12-256 ACGT bases");
-            if(p.exact_begin>p.exact_end || p.exact_end>s.size() || p.max_mismatches>s.size()-(p.exact_end-p.exact_begin))
-                throw std::invalid_argument("invalid adapter anchor or mismatch allowance");
+            if(p.exact_begin>p.exact_end || p.exact_end>s.size() || p.max_edits>s.size()-(p.exact_end-p.exact_begin))
+                throw std::invalid_argument("invalid adapter anchor or edit allowance");
+            if(p.allow_indels && (p.max_edits>4 || p.exact_begin==p.exact_end || (p.exact_begin!=0 && p.exact_end!=s.size())))
+                throw std::invalid_argument("adapter indels require a terminal exact anchor and at most four edits");
         }
     }
 };
@@ -70,9 +76,30 @@ class AdapterGuard {
         size_t errors=0;
         for(size_t i=0;i<p.sequence.size();++i)if(s[start+i]!=p.sequence[i]) {
             if(i>=p.exact_begin && i<p.exact_end)return false;
-            if(++errors>p.max_mismatches)return false;
+            if(++errors>p.max_edits)return false;
         }
         return true;
+    }
+    static size_t edit_distance(const std::string& a,const std::string& b) {
+        std::vector<size_t> row(b.size()+1),next(row.size());
+        for(size_t j=0;j<row.size();++j)row[j]=j;
+        for(size_t i=0;i<a.size();++i) {
+            next[0]=i+1;
+            for(size_t j=1;j<row.size();++j)next[j]=std::min({next[j-1]+1,row[j]+1,row[j-1]+(a[i]!=b[j-1])});
+            row.swap(next);
+        }
+        return row.back();
+    }
+    static bool matches_span(const std::string& s,size_t start,size_t length,const AdapterPattern& p) {
+        if(!p.allow_indels)return length==p.sequence.size() && matches(s,start,p);
+        size_t anchor=p.exact_end-p.exact_begin;
+        if(length<anchor)return false;
+        if(p.exact_begin==0) {
+            if(s.compare(start,anchor,p.sequence,0,anchor))return false;
+            return edit_distance(p.sequence.substr(anchor),s.substr(start+anchor,length-anchor))<=p.max_edits;
+        }
+        if(s.compare(start+length-anchor,anchor,p.sequence,p.exact_begin,anchor))return false;
+        return edit_distance(p.sequence.substr(0,p.exact_begin),s.substr(start,length-anchor))<=p.max_edits;
     }
 public:
     AdapterGuard(const std::vector<AdapterPattern>& sequences,bool backward=false) {
@@ -84,12 +111,16 @@ public:
                 pattern.exact_begin=p.sequence.size()-p.exact_end;
                 pattern.exact_end=p.sequence.size()-p.exact_begin;
             }
-            width_=std::max(width_,pattern.sequence.size());motifs_.push_back(std::move(pattern));
+            width_=std::max(width_,pattern.sequence.size()+(pattern.allow_indels?pattern.max_edits:0));motifs_.push_back(std::move(pattern));
         }
     }
     bool empty() const {return motifs_.empty();}
     bool contains(const std::string& s) const {
-        for(const auto& m:motifs_)for(size_t i=0;i+m.sequence.size()<=s.size();++i)if(matches(s,i,m))return true;
+        for(const auto& m:motifs_) {
+            size_t extra=m.allow_indels?m.max_edits:0;
+            for(size_t n=m.sequence.size()-extra;n<=m.sequence.size()+extra;++n)
+                for(size_t i=0;i+n<=s.size();++i)if(matches_span(s,i,n,m))return true;
+        }
         return false;
     }
     std::string suffix(const std::string& s) const {return s.substr(s.size()>width_?s.size()-width_:0);}
@@ -97,8 +128,11 @@ public:
         if(empty())return {};
         tail+=base;if(tail.size()>width_)tail.erase(0,tail.size()-width_);
         std::string match;
-        for(const auto& m:motifs_)if(m.sequence.size()<=tail.size() && m.sequence.size()>match.size() &&
-            matches(tail,tail.size()-m.sequence.size(),m))match=tail.substr(tail.size()-m.sequence.size());
+        for(const auto& m:motifs_) {
+            size_t extra=m.allow_indels?m.max_edits:0;
+            for(size_t n=m.sequence.size()-extra;n<=m.sequence.size()+extra;++n)
+                if(n<=tail.size() && n>match.size() && matches_span(tail,tail.size()-n,n,m))match=tail.substr(tail.size()-n);
+        }
         return match;
     }
 };
@@ -370,7 +404,72 @@ struct Candidate {
     double score=0,pam_bonus=0;
     std::string sequence;
     size_t junctions=0,supported_junctions=0,read_support=0,pair_support=0,unique_pairs=0;
+    bool short_flank_trimmed=false,flank_conflict=false;
+    bool ambiguity_trimmed=false;
+    double joint_flank_loss=0;
 };
+struct CommonFlanks {size_t left=0,right=0;bool seed_agrees=true;};
+inline CommonFlanks common_flanks(const Candidate& winner,size_t winner_query_begin,
+                                 const Candidate& alternative,size_t alternative_query_begin) {
+    CommonFlanks result;
+    const int64_t aligned=int64_t(alternative.seed_begin)+int64_t(winner_query_begin)-int64_t(alternative_query_begin);
+    size_t seed_length=winner.seed_end-winner.seed_begin;
+    if(aligned<0 || uint64_t(aligned)+seed_length>alternative.sequence.size() ||
+       alternative.sequence.compare(size_t(aligned),seed_length,winner.sequence,winner.seed_begin,seed_length)) {
+        result.seed_agrees=false;return result;
+    }
+    size_t begin=size_t(aligned),end=begin+seed_length;
+    while(result.left<winner.seed_begin && result.left<begin &&
+          winner.sequence[winner.seed_begin-result.left-1]==alternative.sequence[begin-result.left-1])++result.left;
+    while(winner.seed_end+result.right<winner.sequence.size() && end+result.right<alternative.sequence.size() &&
+          winner.sequence[winner.seed_end+result.right]==alternative.sequence[end+result.right])++result.right;
+    return result;
+}
+inline void retain_flanks(Candidate& c,size_t left,size_t right,size_t k) {
+    if(left>c.seed_begin || right>c.sequence.size()-c.seed_end)throw std::runtime_error("invalid retained flank length");
+    size_t begin=c.seed_begin-left,end=c.seed_end+right;
+    c.path=Path(c.path.begin()+begin,c.path.begin()+end-k+1);
+    c.sequence=c.sequence.substr(begin,end-begin);c.seed_begin-=begin;c.seed_end-=begin;
+    c.left_length=left;c.right_length=right;
+}
+inline void trim_left(Candidate& c) {
+    size_t remove=c.seed_begin;c.path.erase(c.path.begin(),c.path.begin()+remove);
+    c.sequence.erase(0,remove);c.seed_end-=remove;c.seed_begin=0;c.left_length=0;
+    c.left.coverage={};c.external_left=0;
+}
+inline void trim_right(Candidate& c,size_t k) {
+    c.sequence.resize(c.seed_end);c.path.resize(c.seed_end-k+1);c.right_length=0;
+    c.right.coverage={};c.external_right=0;
+}
+inline double joint_flank_loss(const Coverage& left,const Coverage& right,const Options& options) {
+    // Insufficient observations cannot establish a conflict. Do not compare
+    // summed spacer depth against flank depth: source and target share the seed.
+    if(left.baseline.size()<3 || right.baseline.size()<3)return 0;
+    double alpha=options.coverage_model=="poisson"?0:std::max(left.dispersion(),right.dispersion());
+    if(options.coverage_model=="negative-binomial")alpha=std::max(alpha,.05);
+    return std::max(Coverage::loss(left.mean(),right.mean(),alpha),Coverage::loss(right.mean(),left.mean(),alpha));
+}
+inline std::vector<Candidate> refine_flanks(Candidate c,size_t k,const Options& options) {
+    size_t minimum=options.min_external_flank?options.min_external_flank:k+1;
+    if(c.left_length && c.left_length<minimum) {
+        trim_left(c);c.left.stop="insufficient_external_sequence";c.left.context="incomplete";c.short_flank_trimmed=true;
+    }
+    if(c.right_length && c.right_length<minimum) {
+        trim_right(c,k);c.right.stop="insufficient_external_sequence";c.right.context="incomplete";c.short_flank_trimmed=true;
+    }
+    c.joint_flank_loss=joint_flank_loss(c.left.coverage,c.right.coverage,options);
+    if(options.joint_flank_check && c.joint_flank_loss>options.max_coverage_penalty) {
+        // Both sides may be real contexts at different abundances. Retain them
+        // as separate candidates; never force them into one reconstructed locus.
+        c.flank_conflict=true;Candidate right=c;
+        trim_right(c,k);c.right.stop="flank_multiplicity_conflict";c.right.context="not_retained";
+        trim_left(right);right.left.stop="flank_multiplicity_conflict";right.left.context="not_retained";
+        c.score=stability(c.left.coverage,c.right.coverage).score();
+        right.score=stability(right.left.coverage,right.right.coverage).score();
+        return {std::move(c),std::move(right)};
+    }
+    c.score=stability(c.left.coverage,c.right.coverage).score();return {std::move(c)};
+}
 inline bool better_prediction(const Candidate& a,size_t a_matched,const Candidate& b,size_t b_matched,const Options& options) {
     if(options.pair_weight>0 && bool(a.pair_support)!=bool(b.pair_support))return bool(a.pair_support);
     if(a.score!=b.score)return a.score>b.score;
