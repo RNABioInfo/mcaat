@@ -178,7 +178,8 @@ void test_interval_compaction() {
     check(index.replacement("AACCGGTT",5,3,6,"overlap").empty(),"overlap without containment retained");
 }
 void test_stability_selection() {
-    Options o;o.max_coverage_penalty=100000;
+    // Exercise the final ranking independently of the earlier junction gate.
+    Options o;o.max_coverage_penalty=100000;o.branch_guard=false;
     auto profile=[&](std::vector<double> values) {Coverage c;for(double v:values)c.observe(v,o);return c;};
     auto flat=profile(std::vector<double>(20,20)),high=profile(std::vector<double>(20,200));
     auto varied=profile({5,40,5,40,5,40,5,40,5,40,5,40,5,40,5,40,5,40,5,40});
@@ -321,9 +322,76 @@ void test_graph_only_acceptance() {
     alternative.sequence=dna(alternative.sequence.size());
     check(!common_flanks(*it,0,alternative,5).seed_agrees,"incompatible tied seed alignments cannot imply a shared locus");
 }
+void test_boundary_correction() {
+    BoundaryOptions o;std::string repeat=dna(24),prefix="GATCGA",suffix="TTTCAAT";
+    std::vector<BoundaryInput> input;
+    for(size_t i=0;i<10;++i) {
+        std::string core=std::string(1,"ACGT"[i%4])+dna(30)+"ACGT"[(i+1)%4];
+        auto spacer=prefix+core+suffix;
+        input.push_back({"forward",repeat,spacer});
+        input.push_back({"reverse",reverse_complement(repeat),reverse_complement(spacer)});
+    }
+    auto result=refine_spacer_boundaries(input,23,o);
+    for(size_t i=0;i<input.size();++i) {
+        check(result[i].spacer.size()==32,"conserved boundaries leave variable core");
+        auto original=input[i].repeat+input[i].spacer;
+        auto rotated=original.substr(original.size()-result[i].right)+original.substr(0,original.size()-result[i].right);
+        check(result[i].repeat+result[i].spacer==rotated,"boundary correction preserves cyclic repeat-spacer sequence");
+        check(input[i].spacer.substr(result[i].left,result[i].spacer.size())==result[i].spacer,"boundary offsets reference original spacer");
+        if(i%2)check(result[i].spacer==reverse_complement(result[i-1].spacer) && result[i].repeat==reverse_complement(result[i-1].repeat),"opposite strands normalize identically");
+    }
+    auto conflict=input;conflict.push_back({"singleton",repeat,input[0].spacer});
+    check(refine_spacer_boundaries(conflict,23,o)[0].status=="conflicting_source_boundaries","conflicting array evidence does not trim a query");
+    auto duplicate=std::vector<BoundaryInput>(100,input[0]);
+    check(refine_spacer_boundaries(duplicate,23,o)[0].left==0,"duplicate observations do not manufacture boundary support");
+    std::vector<BoundaryInput> small;
+    for(size_t i=0;i<10;++i)small.push_back({"short",repeat,std::string(1,"ACGT"[i%4])+dna(17)+suffix});
+    check(refine_spacer_boundaries(small,23,o)[0].status=="corrected_sequence_below_graph_k","correction never shortens a complete search spacer below k");
+    auto tolerant=input;tolerant[0].spacer.back()='G';tolerant.erase(tolerant.begin()+1); // remove its old reverse copy
+    auto corrected=refine_spacer_boundaries(tolerant,23,o);
+    check(corrected[0].right==0 && corrected[2].spacer.size()==32,"terminal outlier retained while supported exact motifs are trimmed");
+    o.support=1;
+    corrected=refine_spacer_boundaries(tolerant,23,o);
+    check(corrected[2].right==0,"boundary conservation is configurable");
+    o.enabled=false;corrected=refine_spacer_boundaries(input,23,o);
+    check(corrected[0].spacer==input[0].spacer && corrected[0].status=="disabled","explicit boundary opt-out preserves input");
+    invalid([]{BoundaryOptions x;x.support=.5;x.validate();});
+}
+void test_junction_checks_and_flank_caps() {
+    Graph g;Options o;o.max_bp=2500;o.coverage_window=3;
+    auto seed_text=dna(32),common=dna(35),a="A"+dna(100),b="C"+dna(100);
+    auto path_a=g.add(seed_text+common+a,12);g.add(seed_text+common+b,13);
+    for(size_t i=1;i<seed_text.size()+common.size()-g.k()+1;++i)g.arcs.at({path_a[i-1],path_a[i]}).count=12;
+    Path seed_path(path_a.begin(),path_a.begin()+seed_text.size()-g.k()+1);
+    auto seed=isolate(g,seed_path,{},o).seeds.front();SearchDiagnostics diag;
+    auto paths=reconstruct(g,seed,{},o,nullptr,nullptr,nullptr,&diag);
+    check(paths.size()==1 && paths[0].sequence==seed_text+common,"near-equal branches stop at the shared prefix");
+    check(paths[0].right.stop=="ambiguous_branch" && diag.branches.size()==2,"near-tie decision records both graph alternatives");
+    for(auto& [edge,arc]:g.arcs)if(arc.count==13)arc.count=24;
+    diag={};paths=reconstruct(g,seed,{},o,nullptr,nullptr,nullptr,&diag);
+    check(paths.size()==1 && paths[0].sequence==seed_text+common+a,"lookahead selects a clearly compatible branch");
+    check(std::any_of(diag.branches.begin(),diag.branches.end(),[](auto& d){return d.chosen && d.decision=="lookahead_winner";}),"lookahead winner is auditable");
+    size_t junction=seed_text.size()+common.size()-g.k();
+    g.arcs.at({path_a[junction],path_a[junction+1]}).count=1000;
+    o.branch_guard=false;
+    auto walk=extend(g,seed,false,200,{},o);
+    check(std::none_of(walk.paths.begin(),walk.paths.end(),[&](auto& s){return std::find(s.nodes.begin(),s.nodes.end(),path_a[junction+1])!=s.nodes.end();}),"junction-only coverage spike is checked immediately");
+    o.junction_check=false;walk=extend(g,seed,false,200,{},o);
+    check(std::any_of(walk.paths.begin(),walk.paths.end(),[&](auto& s){return std::find(s.nodes.begin(),s.nodes.end(),path_a[junction+1])!=s.nodes.end();}),"legacy periodic sampling misses the off-grid junction spike");
+    o.branch_guard=true;o.junction_check=true;o.max_states=2;
+    walk=extend(g,seed,false,200,{},o);
+    check(walk.expanded<=2 && walk.work_limited,"work budget includes junction work");
+    Graph straight;straight.k_=23;Options caps;auto left=dna(900),right=dna(900);
+    auto full=straight.add(left+seed_text+right);
+    Path sp(full.begin()+left.size(),full.begin()+left.size()+seed_text.size()-straight.k()+1);
+    auto ss=isolate(straight,sp,{},caps).seeds.front();paths=reconstruct(straight,ss,{},caps);
+    check(paths.size()==1 && paths[0].left_length==750 && paths[0].right_length==750,"750 bases on each side plus spacer");
+    ss.left.clear();paths=reconstruct(straight,ss,{},caps);
+    check(paths.size()==1 && paths[0].left_length==0 && paths[0].right_length==750,"unused flank budget is not transferred beyond the opposite cap");
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});

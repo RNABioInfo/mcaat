@@ -21,7 +21,9 @@ build/protospacer/mcaat phage-curate \
   --arrays /path/to/array-results \
   --graph /path/to/previous-run/graph/graph \
   --output /path/to/protospacer-results \
-  --threads 24
+  --threads 24 \
+  --max-flank-length 750 \
+  --max-length 1550
 ```
 
 If the branch already exists locally, use `git switch codex/protospacer-extension`
@@ -40,18 +42,20 @@ The array directory can contain either:
 The TSV takes precedence when both formats exist. Sequences must contain ACGT;
 mixed alignment gaps and ambiguous bases fail explicitly. Every source
 observation is retained, including observations whose spacers cannot be mapped.
-Whole spacers must map exactly to the graph before their matching intervals are
+Whole search spacers (after boundary correction) must map exactly to the graph before their matching intervals are
 considered. This version does not search for mismatched or indel-containing
 protospacers.
 
 ## Detection and extension
 
-1. Group identical spacers and their reverse complements for processing, retaining
+1. Correct conserved terminal repeat sequence misassigned to spacers using the
+   source-array observations (details below). Group identical corrected spacers
+   and their reverse complements for processing, retaining
    all source array/observation links and their original strands. Distinct spacers
    sharing the same first k-mer remain separate queries.
 2. Trace the complete spacer. Enumerate exact intervals with external graph
    connections. Internal fragments need external connections at both ends;
-   one-sided intervals must reach the corresponding original spacer end. Longer
+   one-sided intervals must reach the corresponding corrected spacer end. Longer
    intervals are considered first. The default minimum match is the graph's `k`.
 3. Test the local source-array context on each growing flank, on both strands.
    Repeat copies are aligned with substitutions and indels allowed by
@@ -62,8 +66,10 @@ protospacers.
    retained if it establishes an external context. A shared repeat prefix is
    traversable until the path diverges or qualifies as a repeat copy. This is a
    per-path decision, not a global deletion of repeat edges or an entire spacer.
-4. Extend both sides with a bounded, coverage-ranked beam. Walk nonbranching
-   stretches in place; keep alternatives at branches. New flanks cannot revisit
+4. Extend at most 750 bp per side by default. Walk nonbranching stretches in
+   place; at junctions, compare bounded lookahead paths and stop when the evidence
+   does not separate them. Optional read/PAM reranking retains a bounded beam
+   of alternatives instead. New flanks cannot revisit
    seed or flank vertices. Repeated k-mers already present in the input spacer
    are allowed. Joining left and right flanks rejects intersections between them.
    Check sequencing adapters during the walk. Roll back the complete detected
@@ -86,7 +92,7 @@ protospacers.
    extension sequence at the same query alignment. Different paths/alignments
    remain candidates. Then compare candidates across **all seed intervals of
    the spacer** and select at most one prediction. With graph-only evidence,
-   indistinguishable alternatives retain only their common sequence around the
+   near-best alternatives retain only their common sequence around the
    seed; withhold the prediction if no informative external flank remains.
    Write only selected predictions
    to the primary FASTA/TSV outputs. Identical final sequences, including reverse
@@ -96,6 +102,80 @@ Connectivity is evidence for a candidate path, not proof that its complete
 sequence occurs in a single genome. Shared sequences can connect unrelated
 flanks. Selecting the best available prediction does not establish its true
 genomic origin. Comparison counts, score ties and search limits remain visible.
+
+## Spacer boundary correction
+
+By default, each source array must have at least five **distinct** spacer sequences.
+For each end, find the longest exact terminal motif present in at least 85% of
+those sequences; motifs shorter than six bases are ignored. Trim that motif only
+from observations that contain it exactly. Duplicate observations do not inflate
+support. For the same full original spacer, including its reverse complement,
+all source arrays must agree on the proposed canonical boundaries; conflicting
+proposals leave it unchanged. A corrected complete spacer must remain at least
+graph `k` bases long. This does not impose a new length rule on the array detector.
+
+If the reported spacer is `A X B`, move the conserved prefix `A` and suffix `B`
+into the repeat: `repeat + A X B` becomes `(B + repeat + A) + X`. This preserves
+the cyclic sequence and supplies consistent repeat boundaries for the subsequent
+source-array context test. It is a conservation heuristic, not independent proof
+of the biological boundary. Conserved genuine spacer ends can be mistaken for
+repeat sequence; sparse arrays and divergent terminal repeats can remain uncorrected.
+The choice of boundaries does not use reference matches.
+
+Use `--boundary-support`, `--boundary-min-spacers`, and `--boundary-min-bases`
+to adjust the evidence requirements, or `--correct-spacer-boundaries false`
+to disable correction. The original files are never rewritten.
+`protospacer_queries.tsv` preserves `spacer` and `original_repeat`, and adds
+`search_spacer`, `search_repeat`, `trimmed_left_bp`, `trimmed_right_bp` and
+`boundary_status`. Queries are deduplicated **after** correction, so several
+different original observations can now share one search query. Association
+coordinates continue to refer to the original source spacer.
+
+## Short extensions and junction decisions
+
+`--max-flank-length 750` caps each side independently. A complete 35-bp match can
+therefore produce at most `750 + 35 + 750 = 1535` bp. A blocked left flank does
+not allow 1500 bp on the right. `--max-length 1550` is an additional total cap,
+including the seed; larger seeds can reduce the available flank budget. These
+are maximum lengths: dead ends, adapters, ambiguity and other checks can stop
+earlier. For up to 900 bp per side, use `--max-flank-length 900 --max-length 1850`.
+
+Every outgoing fork and incoming merge supplies a coverage observation, even
+between the ordinary spaced samples (`--junction-check true`). At an outgoing
+fork, `--branch-guard true` examines each continuation for at most 75 edges,
+stopping earlier at the next fork, a dead end, a repeat context or an adapter.
+These probes consume the same edge-expansion budget as traversal; they do not
+launch recursive searches. Source-array and adapter branches are rejected.
+When at least three prior baseline observations exist, the probe also rejects
+an edge exceeding the usual Poisson/NB coverage-loss threshold against that
+fixed baseline.
+
+Eligible external counts in a probe are compared using:
+
+```text
+branch_score = mean coverage loss + variance(log2(1 + count))
+             + mean squared adjacent change of log2(1 + count)
+```
+
+Lower is better. Without an established baseline, coverage loss is zero and
+only internal stability is compared. Each competing branch needs at least
+three eligible counts; an unresolved short/context-pending alternative prevents
+claiming a winner. Choose the best only if the runner-up is worse by more than
+`--branch-score-margin 1`. If only one branch survives the context/adapter/coverage
+checks, follow it. Otherwise stop at the shared junction and retain only the
+already supported prefix. Equal stable branches at different depths cannot be
+resolved from internal stability alone. The mean score avoids an automatic
+reward for longer probes, but correlated k-mers do not become independent
+evidence: neither the score nor its margin is a confidence probability.
+
+`protospacer_branch_checks.tsv` records each considered edge, probe length,
+observation count, score, status, choice and decision. A score is usable only
+with `status=scored`; zero on rejected/incomplete probes is not a good score.
+Rows use the canonical search-spacer orientation. At most 4096 rows per query
+are stored, with uncapped counts and stored-row counts in the parameters JSON.
+`--branch-guard false` restores beam traversal at junctions. Supplying optional
+read files or PAM rules also disables this early branch choice, preserving
+alternatives for their existing reranking; `branch_guard_active` records this.
 
 ## Selecting one final prediction
 
@@ -111,7 +191,7 @@ jumps   = (mean_squared_step_left + mean_squared_step_right) / 2
 between = (mean_left - mean_right)^2          # when both sides have observations
 support = 1/(n_left + 1) + 1/(n_right + 1)
 stability_score = -(within + jumps + between + support)
-match_penalty = 1 - matched_bases / input_spacer_length
+match_penalty = 1 - matched_bases / corrected_search_spacer_length
 total_score = stability_score - match_penalty + optional_read_pair_PAM_score
 ```
 
@@ -158,17 +238,18 @@ reference database are required.
   splits the joined candidate into two one-sided alternatives; final selection
   still produces at most one output. Too few observations cannot establish a
   conflict. `--joint-flank-check false` disables this gate.
-- **Indistinguishable paths:** without supplied read or PAM evidence,
+- **Near-best paths:** without supplied read or PAM evidence,
   `--resolve-graph-ties true` compares the winner with alternatives having the
-  same stability-plus-match evidence and the same number of retained sides.
+  stability-plus-match evidence within `--prediction-score-margin 0.1` below
+  the winner (or better), and the same number of retained sides.
   The sample-count reward is excluded from this ambiguity comparison: one extra
   observation cannot identify an otherwise indistinguishable branch. Align
-  candidates by their original spacer coordinates and retain only identical
+  candidates by their corrected search-spacer coordinates and retain only identical
   contiguous sequence outward from the seed. Recheck context, minimum length,
   path coordinates and coverage on that sequence. If no external side remains,
   report `unresolved`. This checks the bounded shortlist, not every path in the
-  graph. It does not convert a small nonzero score difference into calibrated
-  confidence. `--resolve-graph-ties false` restores deterministic winner-only
+  graph. The margin is a heuristic, not calibrated confidence; a value of zero
+  restores exact-evidence ties only. `--resolve-graph-ties false` restores deterministic winner-only
   behavior; existing optional read/PAM reranking also keeps that behavior.
 
 Selection flags `short_flank_trimmed`, `flank_multiplicity_conflict` and
@@ -176,12 +257,13 @@ Selection flags `short_flank_trimmed`, `flank_multiplicity_conflict` and
 `joint_flank_loss_before_split` records the pre-split comparison. Decisions
 also include candidates withheld completely, so the selection table alone is
 not a count of all rejected alternatives. Graph ties that are shortened carry
-association ambiguity `shared_sequence_of_equal_evidence`.
+association ambiguity `shared_sequence_of_near_best_predictions`.
 
 ## Coverage model
 
 Each flank has its own frozen local baseline: the median of the first
-`coverage-window` eligible counts, sampled at least `k+2` edges apart. Counts on
+`coverage-window` eligible counts, ordinarily sampled at least `k+2` edges apart,
+with additional observations at outgoing forks and incoming merges. Counts on
 known array boundaries, the matched spacer, and the prefix before source-context
 divergence are excluded. The robust variance
 estimate is `(1.4826 * MAD)^2`; the overdispersion estimate is
@@ -340,7 +422,9 @@ whether it overlaps the seed, last clean endpoint vertex, and vertex completing
 detection. These are actual graph vertex IDs from the current run. At most 4,096
 diagnostic rows are stored per query; the JSON total `adapter_blocked_branches`
 is not capped, and `adapter_diagnostic_rows` discloses any truncation. Repeated
-interval searches can encounter the same adapter and are counted separately.
+interval searches and speculative junction probes can encounter the same adapter
+and are counted separately. Diagnostic counts are encounters, not unique
+contamination events or emitted paths.
 
 Production regression (including a pre-fix comparison when supplied):
 
@@ -360,9 +444,19 @@ the original metagenomic graph, which was not available in the local audit data.
 
 | Option | Default | Meaning |
 |---|---:|---|
-| `--max-length` | 2500 | Total emitted bp, including the matched seed and both flanks |
+| `--max-length` | 1550 | Total emitted bp, including the matched seed and both flanks |
+| `--max-flank-length` | 750 | Independent maximum bp on each side; unused capacity cannot exceed this cap |
+| `--correct-spacer-boundaries` | true | Reassign conserved spacer ends to the repeat before searching |
+| `--boundary-support` | 0.85 | Required fraction of distinct source-array spacers; allowed range (0.5, 1] |
+| `--boundary-min-spacers` | 5 | Minimum distinct spacers in an array for boundary correction |
+| `--boundary-min-bases` | 6 | Minimum length of a conserved terminal motif |
+| `--junction-check` | true | Observe multiplicity at forks/merges between ordinary samples |
+| `--branch-guard` | true | Stop or choose at forks using local lookahead; inactive with optional read/PAM evidence |
+| `--branch-lookahead` | 75 | Maximum inspected edges per branch probe; range 1–1000 |
+| `--branch-score-margin` | 1 | Required improvement over the next scored branch; lower score is better |
+| `--prediction-score-margin` | 0.1 | Final graph-only alternatives this close to the winner retain common sequence |
 | `--beam-width` | 32 | Retained search frontier and joined alternatives before read scoring |
-| `--max-states` | 50000 | Edge expansions per seed side |
+| `--max-states` | 50000 | Edge expansions per seed side, including lookahead |
 | `--max-query-states` | 200000 | Edge expansions across all intervals of one canonical spacer |
 | `--max-seeds` | 128 | Retained intervals per canonical spacer |
 | `--min-match-bp` | graph k | Minimum exact matched interval; CLI value 0 means graph k |
@@ -389,39 +483,41 @@ output pruning set `search_limited`; they do not claim an exhaustive result.
 |---|---|
 | `protospacer_queries.tsv` | Every source observation, its canonical query ID and mapping status |
 | `protospacer_candidates.tsv`, `Protospacers.fasta` | One selected exact seed interval per matched spacer, with an external flank and graph vertices |
-| `MatchedSpacers.fasta` | One complete input spacer per matched canonical query; partial-only queries are counted separately in JSON |
+| `MatchedSpacers.fasta` | One complete corrected search spacer per matched canonical query; partial-only queries are counted separately in JSON |
 | `protospacer_regions.tsv`, `ContiguousPaths.fasta` | Unique accepted extended/partial region sequences, vertices and edges |
 | `protospacer_associations.tsv` | Source → seed → region links, coordinates, strand, scores, rank, ambiguity, stop reasons and evidence |
 | `protospacer_unresolved.tsv`, `UnresolvedSeeds.fasta` | Unresolved intervals without a retained detection, including unperformed searches and failed joins |
 | `protospacer_decisions.tsv` | Rejected source contexts, unresolved path outcomes, and redundant intervals with their retained replacement seed |
 | `protospacer_selection.tsv` | One row per selected prediction: stability components, comparison counts, runner-up score and ties |
 | `protospacer_adapter_stops.tsv` | Blocked adapter branches and their actual graph endpoint/detection vertices |
+| `protospacer_branch_checks.tsv` | Junction alternatives, local scores, actual vertex/edge IDs, choices and stop decisions |
 | `protospacer_parameters.json` | Effective settings, input paths and result counts |
 
-Output schema 4 adds the graph-only acceptance settings and selection flags and
-uses `max_edits`/`allow_indels` in adapter patterns instead of `max_mismatches`.
+Output schema 5 adds boundary provenance, per-side length caps and junction
+diagnostics/settings. Adapter patterns use `max_edits`/`allow_indels`.
 It declares `selection=one_prediction_per_distinct_spacer` and distinguishes `matched_queries`, `full_length_matched_queries`,
 `partial_only_matched_queries`, `unresolved_queries` and
 `unresolved_seed_intervals`. The matched-query denominator is `unique_queries`,
 with identical spacers and reverse complements processed together. Counting
 `Protospacers.fasta` gives selected intervals; counting `MatchedSpacers.fasta` gives
-distinct input spacers with a selected prediction. Both counts are now equal;
+distinct corrected search spacers with a selected prediction. Both counts are now equal;
 the number of unique sequences in `ContiguousPaths.fasta` cannot exceed that count.
-A full input spacer
+A full corrected search spacer
 in `MatchedSpacers.fasta` is not a claim that its entire length matched: consult
 the seed table's coverage. No `seed_only` rows occur in primary associations.
 
 Coordinates are **zero-based, half-open**. Seed-table query coordinates refer to
-the canonical spacer orientation; association query coordinates refer to the
-original source spacer. Association `seed_begin/end`, left/right evidence and
+the corrected canonical search-spacer orientation; association query coordinates
+refer to the original source spacer (including its trim offset). Decision and
+unresolved-table query coordinates also refer to the corrected canonical spacer. Association `seed_begin/end`, left/right evidence and
 stop reasons refer to the stored region sequence. `strand` tells whether that
 region's seed matches the source directly or as a reverse complement.
-`query_coverage` is a fraction, not a percentage; `identity=1` describes an exact
+`query_coverage` uses corrected search-spacer length and is a fraction, not a percentage; `identity=1` describes an exact
 interval, not full query coverage. Stable IDs are sequence-derived hashes.
 
 Stop reasons distinguish dead ends, cycles, source-array context, `sequencing_adapter`,
 `insufficient_external_sequence`, `flank_multiplicity_conflict`,
-`ambiguous_graph_extension`, coverage breaks,
+`ambiguous_graph_extension`, `ambiguous_branch`, `no_supported_branch`, coverage breaks,
 length limits, work limits and incompatible flanks. `coverage_samples` counts
 scored observations after baseline collection. `expanded_states` is the total
 edge work for that seed search, repeated on its associations, not additive across
@@ -441,7 +537,7 @@ beyond `max-seeds` are disclosed by `eligible_intervals` and `seed_limit_reached
 The decision report's interval-consolidation references describe the internal
 shortlist; a referenced seed need not be the final winner.
 
-Successful reruns replace the module's twelve named files, including empty FASTAs;
+Successful reruns replace the module's fourteen named files, including empty FASTAs;
 they do not append old results. Computation/input failures before publication
 leave previous results intact. Files are staged then individually renamed; this
 is not a filesystem-wide atomic transaction. Array and graph inputs are unchanged.
@@ -473,6 +569,10 @@ python3 bench/validate_protospacer_context.py \
 # Graph-only acceptance: short tails, incompatible depths and tied branches.
 python3 bench/validate_protospacer_graph_filters.py \
   build/protospacer/mcaat build/protospacer-graph-filter-validation
+
+# Conserved spacer ends, junction ambiguity and independent 750-bp flank caps.
+python3 bench/validate_protospacer_boundaries.py \
+  build/protospacer/mcaat build/protospacer-boundary-validation
 ```
 
 Core checks cover overlapping seeds, bidirectional/one-sided reconstruction,
@@ -483,10 +583,11 @@ source/region coordinates, reverse-complement deduplication, deterministic
 threads/reruns, explicit caps and failed/empty rerun behavior.
 
 In the general controlled fixture, five source observations yield two selected
-seed intervals, two regions and three source associations. Without reads, one
-selected region is contained in a known source sequence and one is recombinant.
-The fixture deliberately shares a 23-mer between different spacers: stable
-multiplicity alone cannot resolve every graph ambiguity. With the supplied
+seed intervals, two regions and three source associations. With the new junction guard, both
+selected regions are contained in known source sequences; the previous guard
+version retained one true segment and one recombinant in this fixture.
+The fixture deliberately shares a 23-mer between different spacers. Resolving
+this example does not mean that stability can resolve every graph ambiguity. With the supplied
 pairs, the selected full-spacer target for the two opposite-strand source
 observations is a true target segment. This demonstrates selection and physical
 evidence handling, **not biological sensitivity or precision**. Metagenome-scale
@@ -506,13 +607,34 @@ and verify that absent or short coverage profiles do not get a perfect score.
 
 The graph-only fixture retains the unambiguous 1,000-bp target. It withholds
 10-bp tails, removes the ambiguous part beyond a shared branch, and withholds
-an arbitrary left/right pairing at a shared seed. A separate incompatible-depth
-case exercises splitting into one-sided candidates. With the gates disabled,
-the short tails and arbitrary tied paths return; the depth case was already
-one-sided under the previous ranking, so it is not evidence of a corrected
-previous final false call. These fixtures verify deterministic one/two-thread
-outputs and unchanged graph files. They do not establish sensitivity or
-precision in the original metagenome.
+an arbitrary left/right pairing at a shared seed. The incompatible-depth case
+is split into one-sided candidates and then withheld as ambiguous under current
+defaults. A separate `post_selection_only` run disables the new junction checks
+and near-score margin to exercise the previous splitting/tie gates independently.
+A zero-margin control restores the slightly better one-sided depth candidate
+with a nonzero score gap, verifying that near-score handling is configurable.
+With all gates disabled, the short tails and arbitrary tied paths return; the
+depth case was already one-sided under the previous ranking, so it is not evidence
+of a corrected previous final false call. These fixtures verify deterministic
+one/two-thread outputs and unchanged graph files. They do not establish sensitivity
+or precision in the original metagenome.
+
+The boundary/junction fixture builds a real SDBG with eight target spacers,
+source-array contexts and an indistinguishable alternate target for one spacer.
+Sixteen source observations (both strands) have their conserved seven-base suffix
+reassigned. The seven unambiguous targets are retained and the ambiguous query
+is withheld. Output includes 1,535-bp reconstructions (750 + 35 + 750), original
+source-coordinate checks, unchanged graph/array hashes, both input formats,
+explicit boundary opt-out, and byte-identical non-parameter files with one and
+24 threads. Unit checks additionally exercise off-grid junction coverage jumps,
+near-equal versus clearly different lookahead scores, conflicting boundaries,
+minimum spacer lengths, distinct-spacer support and no transfer beyond the
+opposite 750-bp cap.
+
+Production boundary normalization was also compared with the earlier independent
+sequence audit: all 199 audited original queries have identical corrected bounds
+when loaded from the complete 530-observation source report. This checks boundary
+normalization only, not traversal of the unavailable original metagenomic graph.
 
 The release build also excludes an unused experimental debug translation unit
 with obsolete interfaces and guards Linux-only `malloc.h`/`malloc_trim` calls.
@@ -543,5 +665,14 @@ invariants pass. Lower counts alone are not evidence of improved accuracy.
 Replaying the shared C++ context classifier on the saved failing run recognized
 all 694 previously identified repeat-flanked regions as array context on both
 sides. This checked saved sequences, not a rerun of the original graph search;
-the original graph was not available locally. The core suite passes 225 checks
-in both the release and AddressSanitizer/UndefinedBehaviorSanitizer builds.
+the original graph was not available locally. The current core suite passes
+302 checks in both release and AddressSanitizer/UndefinedBehaviorSanitizer builds.
+
+With boundary correction and the new junction/near-score guards, the same bounded
+genome smoke runs retain 2 predictions / 2 regions for CP058556.1 and 12 predictions /
+11 regions for CP071793.1. No boundary changes qualify in these source reports.
+Source coordinates, path accounting, independent flank caps and work bounds pass.
+The drop from 21/45 predictions is a material sensitivity tradeoff: unresolved
+junctions now stop earlier, and valid extensions can be lost as well as incorrect
+ones. These runs do not measure precision. Test the defaults on the original
+server graph before interpreting a reduced count as an improvement.

@@ -34,7 +34,11 @@ static std::string identifier(const std::string& value,const char* prefix) {
     std::ostringstream s;s<<prefix<<std::hex<<std::setw(16)<<std::setfill('0')<<hash;return s.str();
 }
 static std::string path_text(const Path& p) {std::ostringstream out;for(size_t i=0;i<p.size();++i){if(i)out<<',';out<<p[i];}return out.str().empty()?"-":out.str();}
-struct Source {std::string id,array,observation,repeat,spacer;bool reverse=false;};
+struct Source {
+    std::string id,array,observation,repeat,spacer;bool reverse=false;
+    std::string group,original_repeat,original_spacer,boundary_status;
+    size_t trim_left=0,trim_right=0;
+};
 struct Entry {Seed seed;std::string id;std::vector<Candidate> paths;};
 struct Decision {
     std::string seed,outcome,reason,left_stop,right_stop,replacement;
@@ -53,6 +57,7 @@ struct Query {
     size_t eligible=0;bool truncated=false;
     SearchDiagnostics adapter_diagnostics;
     std::vector<std::string> adapter_seeds;
+    std::vector<std::string> branch_seeds;
 };
 static void record(Query& q,const Entry& e,const Candidate& c,const std::string& outcome,
                    const std::string& reason,const std::string& replacement="-") {
@@ -142,7 +147,7 @@ static void select_prediction(Query& q,const Options& options,ExtensionGraph& gr
         for(const auto& e:q.entries)for(const auto& c:e.paths) {
             double evidence=c.score+stability(c.left.coverage,c.right.coverage).support;
             unsigned sides=unsigned(c.external_left>0)+unsigned(c.external_right>0);
-            if(canonical(c.sequence)==winner_key || sides!=winner_sides || std::abs(evidence-winner_evidence)>=1e-12)continue;
+            if(canonical(c.sequence)==winner_key || sides!=winner_sides || evidence<winner_evidence-options.prediction_margin-1e-12)continue;
             auto span=common_flanks(winner,chosen_entry.seed.begin,c,e.seed.begin);
             keep_left=std::min(keep_left,span.left);keep_right=std::min(keep_right,span.right);
             seed_agrees&=span.seed_agrees;
@@ -165,14 +170,15 @@ static void select_prediction(Query& q,const Options& options,ExtensionGraph& gr
     selected.paths.clear();selected.paths.push_back(std::move(chosen));
     q.entries.clear();q.entries.push_back(std::move(selected));
 }
-static std::vector<Query> load_queries(const fs::path& folder) {
+static std::vector<Query> load_queries(const fs::path& folder,size_t k,const Options& options) {
     std::map<std::string,Query> queries;std::set<std::string> ids;
+    std::vector<Source> sources;
     auto add=[&](Source source) {
         source.repeat=upper(source.repeat);source.spacer=upper(source.spacer);
         if(!is_dna(source.repeat) || !is_dna(source.spacer))throw std::runtime_error("array observation contains non-ACGT sequence: "+source.id);
         if(!ids.insert(source.id).second)throw std::runtime_error("duplicate source observation ID: "+source.id);
-        auto key=canonical(source.spacer);source.reverse=key!=source.spacer;
-        auto& q=queries[key];q.sequence=key;q.sources.push_back(std::move(source));
+        if(source.group.empty())source.group=source.array;
+        sources.push_back(std::move(source));
     };
     if(fs::exists(folder/"CRISPR_graph_paths.tsv")) {
         table(folder/"CRISPR_graph_paths.tsv",[&](const Fields& row) {
@@ -199,12 +205,23 @@ static std::vector<Query> load_queries(const fs::path& folder) {
                 // MCAAT's text format writes an all-dash repeat when the entry
                 // is identical to the consensus printed above it.
                 if(variant.find_first_not_of('-')==std::string::npos)variant=repeat;
-                Source s{file.filename().string()+":"+array+":"+std::to_string(++observation),array,std::to_string(observation),variant,spacer};add(std::move(s));
+                Source s{file.filename().string()+":"+array+":"+std::to_string(++observation),array,std::to_string(observation),variant,spacer};
+                s.group=file.filename().string()+":"+array;add(std::move(s));
             }
             if(in.bad())throw std::runtime_error("array report read failed");
         }
     }
-    if(queries.empty())throw std::runtime_error("no spacer observations found in --arrays");
+    if(sources.empty())throw std::runtime_error("no spacer observations found in --arrays");
+    std::vector<BoundaryInput> inputs;
+    for(const auto& s:sources)inputs.push_back({s.group,s.repeat,s.spacer});
+    auto refined=refine_spacer_boundaries(inputs,k,options.boundaries);
+    for(size_t i=0;i<sources.size();++i) {
+        auto& s=sources[i];const auto& r=refined[i];
+        s.original_repeat=s.repeat;s.original_spacer=s.spacer;
+        s.repeat=r.repeat;s.spacer=r.spacer;s.trim_left=r.left;s.trim_right=r.right;s.boundary_status=r.status;
+        auto key=canonical(s.spacer);s.reverse=key!=s.spacer;
+        auto& q=queries[key];q.sequence=key;q.sources.push_back(std::move(s));
+    }
     std::vector<Query> result;for(auto& [seq,q]:queries)result.push_back(std::move(q));return result;
 }
 static std::vector<PamRule> load_pams(const fs::path& path) {
@@ -300,7 +317,10 @@ int run_extension_module(int argc,char** argv) {
                 "Exact protospacer seeds and bounded bidirectional extension; partial results retained.\n"
                 "Primary outputs require an external flank. Unresolved seeds are reported separately.\n"
                 "Select ONE prediction per distinct spacer across all seed intervals, ranked by multiplicity stability.\n"
-                "--threads 1 --beam-width 32 --max-length 2500 --max-states 50000\n"
+                "--threads 1 --beam-width 32 --max-length 1550 --max-flank-length 750 --max-states 50000\n"
+                "--correct-spacer-boundaries true --boundary-support 0.85 --boundary-min-spacers 5 --boundary-min-bases 6\n"
+                "--junction-check true --branch-guard true --branch-lookahead 75 --branch-score-margin 1\n"
+                "--prediction-score-margin 0.1 (retain common sequence of near-best graph-only predictions)\n"
                 "--max-paths 16 (internal shortlist per seed; final output is one per spacer)\n"
                 "--max-seeds 128 --max-query-states 200000 --min-match-bp 0 (0 = graph k)\n"
                 "--max-retained-bases 50000000 (abort explicitly before excessive result storage)\n"
@@ -326,6 +346,7 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--threads")threads=integer(flag,value);
         else if(flag=="--beam-width")options.beam_width=integer(flag,value);
         else if(flag=="--max-length")options.max_bp=integer(flag,value);
+        else if(flag=="--max-flank-length")options.max_flank_bp=integer(flag,value);
         else if(flag=="--max-states")options.max_states=integer(flag,value);
         else if(flag=="--max-query-states")options.max_query_states=integer(flag,value);
         else if(flag=="--max-retained-bases")max_retained_bases=integer(flag,value);
@@ -335,6 +356,18 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--coverage-window")options.coverage_window=integer(flag,value);
         else if(flag=="--coverage-model")options.coverage_model=value;
         else if(flag=="--array-repeat-identity")options.array_repeat_identity=number(flag,value);
+        else if(flag=="--boundary-support")options.boundaries.support=number(flag,value);
+        else if(flag=="--boundary-min-spacers")options.boundaries.min_spacers=integer(flag,value);
+        else if(flag=="--boundary-min-bases")options.boundaries.min_bases=integer(flag,value);
+        else if(flag=="--branch-lookahead")options.branch_lookahead=integer(flag,value);
+        else if(flag=="--branch-score-margin")options.branch_margin=number(flag,value);
+        else if(flag=="--prediction-score-margin")options.prediction_margin=number(flag,value);
+        else if(flag=="--correct-spacer-boundaries" || flag=="--junction-check" || flag=="--branch-guard") {
+            if(value!="true" && value!="false")throw std::invalid_argument(flag+" needs true or false");
+            if(flag=="--correct-spacer-boundaries")options.boundaries.enabled=value=="true";
+            if(flag=="--junction-check")options.junction_check=value=="true";
+            if(flag=="--branch-guard")options.branch_guard=value=="true";
+        }
         else if(flag=="--min-external-flank")options.min_external_flank=integer(flag,value,true);
         else if(flag=="--joint-flank-check") {
             if(value!="true" && value!="false")throw std::invalid_argument("--joint-flank-check needs true or false");
@@ -374,11 +407,12 @@ int run_extension_module(int argc,char** argv) {
     if(min_insert>max_insert || threads>1024)throw std::invalid_argument("invalid insert range or thread count");
     for(const auto& f:{reads1,reads2,pam_file})if(!f.empty() && !fs::is_regular_file(f))throw std::invalid_argument("missing input: "+f.string());
     if(destination.empty())destination=arrays;
-    auto queries=load_queries(arrays);auto rules=load_pams(pam_file);
-    for(const auto& q:queries)if(q.sequence.size()>options.max_bp)throw std::invalid_argument("--max-length must accommodate every complete input spacer");
+    auto rules=load_pams(pam_file);
     if(fs::is_directory(graph_path))graph_path/="graph";
     if(!fs::is_regular_file(graph_path.string()+".sdbg_info"))throw std::invalid_argument("missing graph metadata: "+graph_path.string());
     SDBG sdbg;std::cout<<"Loading graph...\n";sdbg.LoadFromFile(graph_path.string().c_str());ExtensionGraph graph(sdbg);
+    auto queries=load_queries(arrays,graph.k(),options);
+    for(const auto& q:queries)if(q.sequence.size()>options.max_bp)throw std::invalid_argument("--max-length must accommodate every complete search spacer");
     if(options.max_bp<graph.k())throw std::invalid_argument("--max-length is shorter than graph k");
     std::cout<<"Processing "<<queries.size()<<" distinct spacer sequences with "<<threads<<" threads\n";
     omp_set_num_threads(threads);
@@ -413,8 +447,11 @@ int run_extension_module(int argc,char** argv) {
                     c.left.stop=c.right.stop="query_work_limit";c.search_limited=true;entry.paths.push_back(std::move(c));
                 } else {
                     auto local=options;local.max_states=std::min(options.max_states,(options.max_query_states-used)/2);
+                    // Preserve alternatives for existing optional evidence reranking.
+                    if(!reads1.empty() || !rules.empty())local.branch_guard=false;
                     entry.paths=reconstruct(graph,entry.seed,{},local,&q.array_edges,&left_context,&right_context,&q.adapter_diagnostics);
                     q.adapter_seeds.resize(q.adapter_diagnostics.adapters.size(),entry.id);
+                    q.branch_seeds.resize(q.adapter_diagnostics.branches.size(),entry.id);
                     if(!entry.paths.empty())used+=entry.paths.front().expanded;
                 }
                 // Recheck the EMITTED flanks: the joined length budget may have
@@ -527,7 +564,7 @@ int run_extension_module(int argc,char** argv) {
     fs::create_directory(staging);
     try {
         auto query_out=output(staging/"protospacer_queries.tsv");
-        query_out<<"source_id\tarray_id\tobservation_id\tquery_id\tspacer\tmapping_status\teligible_intervals\tseed_limit_reached\tretained_intervals\tunresolved_intervals\n";
+        query_out<<"source_id\tarray_id\tobservation_id\tquery_id\tspacer\tmapping_status\teligible_intervals\tseed_limit_reached\tretained_intervals\tunresolved_intervals\tsearch_spacer\toriginal_repeat\tsearch_repeat\ttrimmed_left_bp\ttrimmed_right_bp\tboundary_status\n";
         auto seed_out=output(staging/"protospacer_candidates.tsv");
         seed_out<<"seed_id\tquery_id\tquery_begin\tquery_end\tmatched_bases\tquery_coverage\tidentity\tsequence\tsource_count\tseed_vertices\n";
         auto seed_fasta=output(staging/"Protospacers.fasta");
@@ -539,6 +576,8 @@ int run_extension_module(int argc,char** argv) {
         decisions<<"query_id\tseed_id\tquery_begin\tquery_end\toutcome\treason\tleft_stop\tright_stop\texpanded_states\treplacement_seed_id\n";
         auto selection=output(staging/"protospacer_selection.tsv");
         auto adapter_stops=output(staging/"protospacer_adapter_stops.tsv");
+        auto branch_out=output(staging/"protospacer_branch_checks.tsv");
+        branch_out<<"query_id\tseed_id\tside\tvertex\tedge\ttarget\tprobe_steps\tobservations\tscore\tstatus\tchosen\tdecision\n";
         adapter_stops<<"query_id\tseed_id\tside\tmotif\tclean_flank_bp\toverlaps_seed\tclean_endpoint_vertex\tdetected_vertex\n";
         selection<<"query_id\tseed_id\tregion_id\tcompared_paths\tcompared_regions\ttotal_score\tstability_score\twithin_flank_variance\tadjacent_change\tleft_right_difference\tsample_penalty\tleft_samples\tright_samples\tleft_multiplicity\tright_multiplicity\tquery_coverage\tmultiplicity_evidence\trunner_up_score\tscore_gap\tscore_tie\tsearch_limited\tshort_flank_trimmed\tflank_multiplicity_conflict\tjoint_flank_loss_before_split\tambiguity_trimmed\n";
         auto regions_out=output(staging/"protospacer_regions.tsv");
@@ -548,7 +587,7 @@ int run_extension_module(int argc,char** argv) {
         associations<<"source_id\tarray_id\tseed_id\tregion_id\tquery_begin\tquery_end\tseed_begin\tseed_end\tstrand\tstatus\tleft_stop\tright_stop\tleft_coverage\tright_coverage\tleft_dispersion\tright_dispersion\tcoverage_samples\tcoverage_score\ttotal_score\talternative_rank\tsearch_limited\texpanded_states\tread_evidence\tsupported_junctions\tjunctions\tread_support\tpair_support\tunique_pair_support\tpam_status\tsubtype\texternal_left_edges\texternal_right_edges\tambiguity\tleft_context\tright_context\n";
         std::map<std::string,std::pair<std::string,std::string>> regions;size_t seeds=0,links=0,sources=0;
         size_t matched_queries=0,full_matched_queries=0,unresolved_queries=0,unresolved_seeds=0,rejected_context_seeds=0,redundant_paths=0;
-        size_t adapter_branches=0,adapter_rows=0,adapter_queries=0;
+        size_t adapter_branches=0,adapter_rows=0,adapter_queries=0,branch_checks=0,branch_rows=0,boundary_changes=0;
         for(const auto& q:queries) {
             auto query_id=identifier(q.sequence,"query_");
             adapter_branches+=q.adapter_diagnostics.adapter_stops;
@@ -557,6 +596,13 @@ int run_extension_module(int argc,char** argv) {
                 const auto& a=q.adapter_diagnostics.adapters[j];++adapter_rows;
                 adapter_stops<<query_id<<'\t'<<q.adapter_seeds[j]<<'\t'<<(a.backward?"left":"right")<<'\t'<<a.motif<<'\t'
                     <<a.clean_flank_bp<<'\t'<<a.overlaps_seed<<'\t'<<a.clean_endpoint<<'\t'<<a.detected_node<<'\n';
+            }
+            branch_checks+=q.adapter_diagnostics.branch_checks;
+            for(size_t j=0;j<q.adapter_diagnostics.branches.size();++j) {
+                const auto& b=q.adapter_diagnostics.branches[j];++branch_rows;
+                branch_out<<query_id<<'\t'<<q.branch_seeds[j]<<'\t'<<(b.backward?"left":"right")<<'\t'
+                    <<b.vertex<<'\t'<<b.edge<<'\t'<<b.target<<'\t'<<b.steps<<'\t'<<b.observations<<'\t'
+                    <<b.score<<'\t'<<b.status<<'\t'<<b.chosen<<'\t'<<b.decision<<'\n';
             }
             if(!q.entries.empty()) {
                 ++matched_queries;matched_fasta<<'>'<<query_id<<'\n'<<q.sequence<<'\n';
@@ -583,7 +629,8 @@ int run_extension_module(int argc,char** argv) {
                 unresolved_out<<seed<<'\t'<<query_id<<'\t'<<first.begin<<'\t'<<first.end<<'\t'<<seq<<'\t'<<joined<<'\n';
             }
             for(const auto& source:q.sources) {
-                ++sources;query_out<<source.id<<'\t'<<source.array<<'\t'<<source.observation<<'\t'<<query_id<<'\t'<<source.spacer<<'\t'<<q.status<<'\t'<<q.eligible<<'\t'<<q.truncated<<'\t'<<q.entries.size()<<'\t'<<pending.size()<<'\n';
+                ++sources;query_out<<source.id<<'\t'<<source.array<<'\t'<<source.observation<<'\t'<<query_id<<'\t'<<source.original_spacer<<'\t'<<q.status<<'\t'<<q.eligible<<'\t'<<q.truncated<<'\t'<<q.entries.size()<<'\t'<<pending.size()<<'\t'<<source.spacer<<'\t'<<source.original_repeat<<'\t'<<source.repeat<<'\t'<<source.trim_left<<'\t'<<source.trim_right<<'\t'<<source.boundary_status<<'\n';
+                boundary_changes+=source.trim_left>0 || source.trim_right>0;
             }
             for(const auto& e:q.entries) {
                 ++seeds;auto seq=q.sequence.substr(e.seed.begin,e.seed.end-e.seed.begin);
@@ -612,6 +659,7 @@ int run_extension_module(int argc,char** argv) {
                     for(const auto& source:q.sources) {
                         ++links;size_t qb=source.reverse?q.sequence.size()-e.seed.end:e.seed.begin;
                         size_t qe=source.reverse?q.sequence.size()-e.seed.begin:e.seed.end;
+                        qb+=source.trim_left;qe+=source.trim_left;
                         size_t sb=flip?c.sequence.size()-c.seed_end:c.seed_begin;
                         size_t se=flip?c.sequence.size()-c.seed_begin:c.seed_end;
                         auto pam=pam_status(q,e,c,source,rules);
@@ -620,7 +668,7 @@ int run_extension_module(int argc,char** argv) {
                             <<(l&&r?"two_sided":"one_sided")<<'\t'<<(flip?c.right.stop:c.left.stop)<<'\t'<<(flip?c.left.stop:c.right.stop)<<'\t'
                             <<(flip?c.right.coverage:c.left.coverage).mean()<<'\t'<<(flip?c.left.coverage:c.right.coverage).mean()<<'\t'<<(flip?c.right.coverage:c.left.coverage).dispersion()<<'\t'<<(flip?c.left.coverage:c.right.coverage).dispersion()<<'\t'
                             <<c.left.coverage.scored+c.right.coverage.scored<<'\t'<<c.left.coverage.score()+c.right.coverage.score()<<'\t'<<(c.score-c.pam_bonus+(pam.first=="match"?options.pam_weight:0))<<'\t'<<rank<<'\t'<<(c.search_limited||q.truncated)<<'\t'<<c.expanded<<'\t'
-                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(c.ambiguity_trimmed?"shared_sequence_of_equal_evidence":q.score_tie?"selected_score_tie":q.compared_regions>1?"selected_best_of_alternatives":(c.search_limited||q.truncated)?"search_limited":"single_candidate")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
+                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(c.ambiguity_trimmed?"shared_sequence_of_near_best_predictions":q.score_tie?"selected_score_tie":q.compared_regions>1?"selected_best_of_alternatives":(c.search_limited||q.truncated)?"search_limited":"single_candidate")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
                     }
                 }
             }
@@ -633,7 +681,7 @@ int run_extension_module(int argc,char** argv) {
                 ",\"exact_end\":"+std::to_string(adapter.exact_end)+",\"max_edits\":"+std::to_string(adapter.max_edits)+
                 ",\"allow_indels\":"+(adapter.allow_indels?"true":"false")+"}";
         }adapters_json+="]";
-        parameters<<"{\n  \"schema\": 4,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
+        parameters<<"{\n  \"schema\": 5,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
             <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases
@@ -646,6 +694,17 @@ int run_extension_module(int argc,char** argv) {
             <<",\n  \"graph_tie_resolution_active\": "<<(options.resolve_graph_ties && reads1.empty() && rules.empty()?"true":"false")
             <<",\n  \"adapter_blocked_branches\": "<<adapter_branches<<",\n  \"adapter_diagnostic_rows\": "<<adapter_rows
             <<",\n  \"adapter_contaminated_queries\": "<<adapter_queries
+            <<",\n  \"max_flank_length\": "<<options.max_flank_bp
+            <<",\n  \"correct_spacer_boundaries\": "<<(options.boundaries.enabled?"true":"false")
+            <<",\n  \"boundary_support\": "<<options.boundaries.support
+            <<",\n  \"boundary_min_spacers\": "<<options.boundaries.min_spacers<<",\n  \"boundary_min_bases\": "<<options.boundaries.min_bases
+            <<",\n  \"boundary_corrected_source_observations\": "<<boundary_changes
+            <<",\n  \"junction_check\": "<<(options.junction_check?"true":"false")
+            <<",\n  \"branch_guard\": "<<(options.branch_guard?"true":"false")
+            <<",\n  \"branch_guard_active\": "<<(options.branch_guard && reads1.empty() && rules.empty()?"true":"false")
+            <<",\n  \"branch_lookahead\": "<<options.branch_lookahead<<",\n  \"branch_score_margin\": "<<options.branch_margin
+            <<",\n  \"prediction_score_margin\": "<<options.prediction_margin
+            <<",\n  \"branch_checks\": "<<branch_checks<<",\n  \"branch_diagnostic_rows\": "<<branch_rows
             <<",\n  \"threads\": "<<threads<<",\n  \"reads1\": "<<json_string(reads1.string())<<",\n  \"reads2\": "<<json_string(reads2.string())
             <<",\n  \"min_insert\": "<<min_insert<<",\n  \"max_insert\": "<<max_insert<<",\n  \"max_read_index\": "<<max_index<<",\n  \"max_read_work\": "<<max_read_work
             <<",\n  \"read_weight\": "<<options.read_weight<<",\n  \"pair_weight\": "<<options.pair_weight<<",\n  \"pam_rules\": "<<json_string(pam_file.string())<<",\n  \"pam_weight\": "<<options.pam_weight
@@ -654,7 +713,7 @@ int run_extension_module(int argc,char** argv) {
             <<",\n  \"rejected_context_seed_intervals\": "<<rejected_context_seeds<<",\n  \"redundant_interval_paths\": "<<redundant_paths
             <<",\n  \"seed_candidates\": "<<seeds<<",\n  \"regions\": "<<regions.size()<<",\n  \"associations\": "<<links<<"\n}\n";
         query_out.close();seed_out.close();seed_fasta.close();regions_out.close();fasta.close();associations.close();parameters.close();
-        matched_fasta.close();unresolved_fasta.close();unresolved_out.close();decisions.close();selection.close();adapter_stops.close();
+        matched_fasta.close();unresolved_fasta.close();unresolved_out.close();decisions.close();selection.close();adapter_stops.close();branch_out.close();
         for(const auto& item:fs::directory_iterator(staging))fs::rename(item.path(),destination/item.path().filename());
         fs::remove(staging);
         std::cout<<"Matched "<<matched_queries<<" / "<<queries.size()<<" distinct spacers ("<<full_matched_queries<<" with full-length matches; "<<matched_queries-full_matched_queries<<" partial-only)\n"

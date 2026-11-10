@@ -12,6 +12,7 @@
 #include <vector>
 #include <tuple>
 #include "protospacer_detection/array_context.h"
+#include "protospacer_detection/spacer_boundaries.h"
 
 namespace mcaat::proto {
 using Node=uint64_t;
@@ -33,11 +34,15 @@ struct AdapterPattern {
     bool allow_indels=false;
 };
 struct Options {
-    size_t max_bp=2500,beam_width=32,max_states=50000,max_paths=16,max_seeds=128,min_match=0;
+    size_t max_bp=1550,max_flank_bp=750,beam_width=32,max_states=50000,max_paths=16,max_seeds=128,min_match=0;
     size_t coverage_window=7,max_query_states=200000;
     size_t min_external_flank=0; // 0: k+1, one complete edge outside the seed
     bool joint_flank_check=true;
     bool resolve_graph_ties=true;
+    bool junction_check=true,branch_guard=true;
+    size_t branch_lookahead=75;
+    double branch_margin=1.,prediction_margin=.1;
+    BoundaryOptions boundaries;
     double max_coverage_penalty=20,read_weight=1,pair_weight=2,pam_weight=1,array_repeat_identity=.85;
     std::string coverage_model="auto";
     // Require the exact 13-base Illumina core AND confirming adapter sequence
@@ -47,11 +52,12 @@ struct Options {
                                          {"AGATCGGAAGAGCGTCGTG",0,13,2,true},
                                          {"CTGTCTCTTATACACATCT"}};
     void validate() const {
-        if(!max_bp || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
+        boundaries.validate();
+        if(!max_bp || !max_flank_bp || !branch_lookahead || branch_lookahead>1000 || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
             throw std::invalid_argument("extension sizes must be positive; coverage-window must be >=3");
         if(beam_width>1024 || max_paths>1024 || max_seeds>65536)
             throw std::invalid_argument("beam-width/max-paths must be <=1024; max-seeds <=65536");
-        for(double d:{max_coverage_penalty,read_weight,pair_weight,pam_weight})
+        for(double d:{max_coverage_penalty,read_weight,pair_weight,pam_weight,branch_margin,prediction_margin})
             if(!std::isfinite(d) || d<0)throw std::invalid_argument("extension score settings must be finite and nonnegative");
         if(coverage_model!="auto" && coverage_model!="poisson" && coverage_model!="negative-binomial")
             throw std::invalid_argument("coverage-model must be auto, poisson or negative-binomial");
@@ -245,11 +251,21 @@ struct AdapterStop {
     size_t clean_flank_bp=0;
     Node clean_endpoint=missing,detected_node=missing;
 };
+struct BranchCheck {
+    bool backward=false,chosen=false;
+    Node vertex=missing,edge=missing,target=missing;
+    size_t observations=0,steps=0;
+    double score=0;
+    std::string status,decision;
+};
 struct SearchDiagnostics {
     size_t adapter_stops=0;
     std::vector<AdapterStop> adapters;
+    size_t branch_checks=0;
+    std::vector<BranchCheck> branches;
     // Bound diagnostics independently of search work. Counts remain complete.
     void record(AdapterStop stop) {++adapter_stops;if(adapters.size()<4096)adapters.push_back(std::move(stop));}
+    void record_branch(BranchCheck check) {++branch_checks;if(branches.size()<4096)branches.push_back(std::move(check));}
 };
 template<class Graph>
 Coverage path_coverage(Graph& graph,const Path& nodes,size_t length,bool backwards,size_t clear_at,
@@ -261,7 +277,9 @@ Coverage path_coverage(Graph& graph,const Path& nodes,size_t length,bool backwar
         for(auto a:graph.neighbors(nodes[i-1],backwards))if(a.to==nodes[i]){chosen=a;break;}
         if(chosen.to==missing)throw std::runtime_error("missing coverage path edge");
         if(shared_context && shared_context->count(chosen.edge)){++since;continue;}
-        if(!cov.baseline.empty() && since<graph.k()+1){++since;continue;}
+        bool junction=options.junction_check &&
+            (graph.neighbors(nodes[i-1],backwards).size()>1 || graph.neighbors(nodes[i],!backwards).size()>1);
+        if(!junction && !cov.baseline.empty() && since<graph.k()+1){++since;continue;}
         cov.observe(chosen.count,options);since=0;
     }
     return cov;
@@ -273,6 +291,67 @@ inline bool better_side(const Side& a,const Side& b) {
     if(a.coverage.profile.loss()!=b.coverage.profile.loss())return a.coverage.profile.loss()<b.coverage.profile.loss();
     if(a.nodes.size()!=b.nodes.size())return a.nodes.size()>b.nodes.size();
     return a.nodes<b.nodes;
+}
+
+struct BranchProbe {
+    bool viable=true,limited=false;
+    size_t observations=0,steps=0;
+    double score=0;
+    std::string status="insufficient_evidence";
+};
+template<class Graph>
+BranchProbe probe_branch(Graph& graph,const Side& current,Arc first,bool backward,
+                         const std::unordered_set<Node>& visited,const std::set<Node>& masked,
+                         const std::set<Node>* shared_context,const std::vector<FlankContext>* contexts,
+                         const AdapterGuard& guard,size_t budget,size_t& expanded,
+                         const Options& options,SearchDiagnostics* diagnostics) {
+    BranchProbe result;auto seen=visited;Path path=current.nodes;
+    std::string prefix=current.context_prefix,context=current.context,tail=current.adapter_tail;
+    MultiplicityProfile local;double loss=0;
+    const bool baseline=current.coverage.baseline.size()>=3;
+    double alpha=options.coverage_model=="poisson"?0:current.coverage.dispersion();
+    if(options.coverage_model=="negative-binomial")alpha=std::max(alpha,.05);
+    Arc arc=first;
+    for(size_t step=0;step<std::min(budget,options.branch_lookahead);++step) {
+        if(expanded>=options.max_states){result.limited=true;result.status="work_limit";return result;}
+        ++expanded;++result.steps;
+        if(seen.count(arc.to) || masked.count(arc.edge)){result.status="cycle_or_masked";break;}
+        char base=graph.extension_base(arc,backward);
+        auto adapter=guard.append(tail,base);
+        if(!adapter.empty()) {
+            size_t extended=path.size(),keep=extended>adapter.size()?extended-adapter.size():0;
+            if(backward)std::reverse(adapter.begin(),adapter.end());
+            if(diagnostics)diagnostics->record({backward,adapter.size()>extended,adapter,keep,path[keep],arc.to});
+            result.viable=false;result.status="sequencing_adapter";return result;
+        }
+        if(context=="pending") {
+            prefix+=base;auto state=context_state(prefix,*contexts,options.array_repeat_identity);
+            if(state==ContextState::array){result.viable=false;result.status="source_array_context";return result;}
+            if(state==ContextState::external)context="external";
+        }
+        if(context!="pending" && (!shared_context || !shared_context->count(arc.edge))) {
+            double penalty=baseline?Coverage::loss(arc.count,current.coverage.mean(),alpha):0;
+            if(baseline && penalty>options.max_coverage_penalty) {
+                result.viable=false;result.status="coverage_break";return result;
+            }
+            loss+=penalty;local.observe(arc.count);++result.observations;
+        }
+        path.push_back(arc.to);seen.insert(arc.to);
+        auto next=graph.neighbors(arc.to,backward);
+        bool reaches_mask=std::any_of(next.begin(),next.end(),[&](const auto& a){return masked.count(a.edge);});
+        next.erase(std::remove_if(next.begin(),next.end(),[&](const auto& a){return seen.count(a.to)||masked.count(a.edge);}),next.end());
+        if(next.empty() && reaches_mask){result.viable=false;result.status="source_array_context";return result;}
+        if(next.size()!=1)break;
+        arc=next.front();
+    }
+    if(context=="pending")result.status="incomplete_context";
+    else if(result.observations>=3) {
+        // A mean loss, not summed support: more correlated k-mers must not
+        // manufacture confidence or reward a longer branch.
+        result.score=loss/result.observations+local.variance()+local.roughness();
+        result.status="scored";
+    }
+    return result;
 }
 
 template<class Graph>
@@ -334,6 +413,36 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
             if(usable.empty()){finish(std::move(current),cycle?"cycle":masked?"array_context":"dead_end");break;}
             bool branch=usable.size()>1;
             if(branch)++current.branches;
+            if(branch && options.branch_guard) {
+                std::vector<BranchProbe> probes;std::vector<size_t> viable;
+                bool limited=false;
+                for(size_t j=0;j<usable.size();++j) {
+                    probes.push_back(probe_branch(graph,current,usable[j],backward,visited,array_edges,shared_context,
+                        contexts,adapter_guard,budget-(current.nodes.size()-1),result.expanded,options,diagnostics));
+                    limited|=probes.back().limited;
+                    if(probes.back().viable)viable.push_back(j);
+                }
+                size_t chosen=usable.size();std::string decision="ambiguous_branch";
+                if(limited){result.work_limited=true;decision="work_limit";}
+                else if(viable.empty())decision=std::all_of(probes.begin(),probes.end(),[](const auto& p){
+                    return p.status=="source_array_context";
+                })?"array_context":"no_supported_branch";
+                else if(viable.size()==1) {chosen=viable.front();decision="only_supported_branch";}
+                else {
+                    bool scored=std::all_of(viable.begin(),viable.end(),[&](auto j){return probes[j].status=="scored";});
+                    std::sort(viable.begin(),viable.end(),[&](auto a,auto b){
+                        return probes[a].score!=probes[b].score?probes[a].score<probes[b].score:usable[a].to<usable[b].to;
+                    });
+                    if(scored && probes[viable[1]].score-probes[viable[0]].score>options.branch_margin) {
+                        chosen=viable[0];decision="lookahead_winner";
+                    }
+                }
+                if(diagnostics)for(size_t j=0;j<usable.size();++j)
+                    diagnostics->record_branch({backward,j==chosen,current.nodes.back(),usable[j].edge,usable[j].to,
+                        probes[j].observations,probes[j].steps,probes[j].score,probes[j].status,decision});
+                if(chosen==usable.size()) {finish(std::move(current),decision);break;}
+                usable={usable[chosen]};
+            }
             std::vector<Side> children;
             for(const auto& a:usable) {
                 if(result.expanded>=options.max_states){result.work_limited=true;break;}
@@ -369,9 +478,10 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                         next.context="external";next.context_clear_at=next.nodes.size();
                     }
                 }
+                bool junction=options.junction_check && (arcs.size()>1 || graph.neighbors(a.to,!backward).size()>1);
                 bool sample=(!shared_context || !shared_context->count(a.edge)) &&
                     next.context!="pending" &&
-                    (next.coverage.baseline.empty() || next.since_sample>=graph.k()+1);
+                    (junction || next.coverage.baseline.empty() || next.since_sample>=graph.k()+1);
                 auto before=next.coverage;
                 double penalty=sample?next.coverage.observe(a.count,options):0;
                 if(sample)next.since_sample=0;else ++next.since_sample;
@@ -504,8 +614,9 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         Candidate c;c.path=seed.path;c.sequence=graph.spell(seed.path);c.seed_end=seed_bp;
         c.left.stop=c.right.stop="adapter_in_seed";return {c};
     }
-    auto left=extend(graph,seed,true,budget,array_edges,options,shared_context,left_context,diagnostics);
-    auto right=extend(graph,seed,false,budget,array_edges,options,shared_context,right_context,diagnostics);
+    auto side_budget=std::min(budget,options.max_flank_bp);
+    auto left=extend(graph,seed,true,side_budget,array_edges,options,shared_context,left_context,diagnostics);
+    auto right=extend(graph,seed,false,side_budget,array_edges,options,shared_context,right_context,diagnostics);
     std::vector<Candidate> results;std::set<std::tuple<Path,std::string,std::string>> seen;size_t combinations=0;
     bool combination_limit=left.paths.size()*right.paths.size()>options.beam_width*4;
     for(size_t diagonal=0;diagonal<left.paths.size()+right.paths.size();++diagonal)

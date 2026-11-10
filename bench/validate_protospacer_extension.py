@@ -58,7 +58,7 @@ assert params['matched_queries']==len({r['query_id'] for r in seeds})
 assert len(seeds)==params['matched_queries'] and len(regions)<=len(seeds),'more than one final prediction per spacer'
 selection=table(out/'protospacer_selection.tsv')
 assert len(selection)==len(seeds) and len({r['query_id'] for r in selection})==len(selection)
-assert any(int(r['compared_regions'])>1 for r in selection),'no alternative paths compared'
+assert any(int(r['compared_regions'])>1 for r in selection) or table(out/'protospacer_branch_checks.tsv'), 'no alternatives inspected during traversal or final selection'
 assert all(sum(r['source_id']==q['source_id'] for r in links)<=1 for q in queries),'multiple predictions for a source spacer'
 assert (out/'MatchedSpacers.fasta').read_text().count('>')==params['matched_queries']
 for r in regions:
@@ -80,10 +80,10 @@ for source in [s1,s2]:assert any(r['spacer']==source and r['mapping_status']=='c
 assert any(r['status']=='one_sided' and by_source[r['source_id']]['spacer']==s2 for r in links)
 truth_sequences=[s for s in truth.values()]+[rc(s) for s in truth.values()]
 exact_regions=sum(any(r['sequence'] in truth for truth in truth_sequences) for r in regions)
+assert exact_regions==len(regions), 'junction ambiguity produced a recombinant in this fixture'
 # This deliberately ambiguous graph shares a 23-mer between different spacers.
-# Multiplicity-only selection can prefer a recombinant; record its truth status
-# instead of claiming that a heuristic single winner proves genomic origin.
-# The independent target control and read-pair test below require correct truth.
+# Both retained regions must now match a known source in this fixture. This is
+# a regression check, not a claim that graph-only scoring proves genomic origin.
 assert all(len(r['sequence'])>len(by_seed[next(x['seed_id'] for x in links if x['region_id']==r['region_id'])]['sequence']) for r in regions)
 # Deterministic output, no append duplicates, no edits to array inputs.
 snapshot={f.name:f.read_bytes() for f in out.iterdir()}
@@ -124,12 +124,19 @@ assert not (limited/'Protospacers.fasta').read_text() and (limited/'UnresolvedSe
 assert any(r['mapping_status']=='unresolved' for r in table(limited/'protospacer_queries.tsv'))
 short=a.output/'short';run('short',[*common,'--output',short,'--max-length','36'])
 short_pending=table(short/'protospacer_unresolved.tsv')
-assert all(any(r['sequence'] in (s,rc(s)) and 'length_limit' in r['reasons'] for r in short_pending) for s in (s1,s2,s3)), 'complete-spacer seeds lack enough flank context at this length'
+assert all(any(r['sequence'] in (s,rc(s)) for r in short_pending) for s in (s1,s2,s3)), 'complete-spacer seeds lack enough flank context at this length'
+short_decisions=table(short/'protospacer_decisions.tsv')
+for row in short_pending:
+    assert any(d['seed_id']==row['seed_id'] and
+               {'length_limit','ambiguous_branch'} & {d['left_stop'],d['right_stop']}
+               for d in short_decisions), 'short-context failure lacks length or early-ambiguity stop'
 assert json.loads((short/'protospacer_parameters.json').read_text())['full_length_matched_queries']==0
 # A shorter seed can still have enough bases to establish a genuinely different
 # flank within 36 bp. Do not turn that positive partial match into a negative.
 assert all(r['status'] in ('one_sided','two_sided') for r in table(short/'protospacer_associations.tsv'))
-for i,flags in enumerate([['--beam-width','0'],['--coverage-model','garbage'],['--max-coverage-penalty','nan'],['--reads2',r2],['--threads','-1'],['--max-length','10'],['--array-repeat-identity','1.1']]):
+for i,flags in enumerate([['--beam-width','0'],['--coverage-model','garbage'],['--max-coverage-penalty','nan'],['--reads2',r2],['--threads','-1'],['--max-length','10'],['--array-repeat-identity','1.1'],
+                          ['--max-flank-length','0'],['--branch-lookahead','1001'],['--branch-score-margin','nan'],['--prediction-score-margin','-1'],
+                          ['--boundary-support','.5'],['--boundary-min-spacers','1'],['--correct-spacer-boundaries','yes']]):
     run(f'invalid-{i}',[*common,'--output',a.output/f'invalid-{i}',*flags],False)
 bad=a.output/'bad_R2.fq';bad.write_text('@wrong/2\nACGT\n+\nIIII\n')
 run('bad-mates',[*common,'--output',supported,'--reads1',r1,'--reads2',bad],False)

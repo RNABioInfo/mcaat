@@ -66,14 +66,16 @@ graph = graph_run / 'graph/graph'
 graph_hash = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in graph.parent.glob('graph.*')}
 common = ['phage-curate', '--arrays', arrays, '--graph', graph, '--max-length', '1000']
 results = {}
-for name, flags in [('default', []), ('legacy_gates', ['--min-external-flank', '1', '--joint-flank-check', 'false', '--resolve-graph-ties', 'false'])]:
+legacy_walk = ['--branch-guard', 'false', '--junction-check', 'false', '--prediction-score-margin', '0', '--max-flank-length', '2500']
+for name, flags in [('default', []), ('exact_prediction_ties', ['--prediction-score-margin', '0']), ('post_selection_only', legacy_walk),
+                    ('legacy_gates', [*legacy_walk, '--min-external-flank', '1', '--joint-flank-check', 'false', '--resolve-graph-ties', 'false'])]:
     result = out / name
     run(name, [*common, '--output', result, *flags])
     regions = {r['region_id']: r['sequence'] for r in table(result / 'protospacer_regions.tsv')}
     links = table(result / 'protospacer_associations.tsv')
     queries = {q['array_id']: q for q in table(result / 'protospacer_queries.tsv')}
     parameters = json.loads((result / 'protospacer_parameters.json').read_text())
-    assert parameters['schema'] == 4 and parameters['reads1'] == ''
+    assert parameters['schema'] == 5 and parameters['reads1'] == ''
     for row in table(result / 'protospacer_regions.tsv'):
         assert len(row['sequence']) == int(row['length']) == len(row['vertices'].split(',')) + 22
         assert len(row['edges'].split(',')) + 1 == len(row['vertices'].split(','))
@@ -86,19 +88,29 @@ for name, flags in [('default', []), ('legacy_gates', ['--min-external-flank', '
     assert all(len(predicted(case)) <= 1 for case in spacers), 'multiple predictions per input spacer'
     assert predicted('true') and all(inside(s, truth) for s in predicted('true')), 'unambiguous true target lost'
     assert all(len(s) >= 500 for s in predicted('true')), 'true target unnecessarily reduced'
-    if name == 'default':
+    if name != 'legacy_gates':
         assert not predicted('short') and queries['Array_short']['mapping_status'] == 'unresolved', 'short tails treated as independent extension'
         assert all(inside(s, depth_left + spacers['depth_conflict']) or inside(s, spacers['depth_conflict'] + depth_right)
                    for s in predicted('depth_conflict')), 'incompatible-depth halves still joined'
         decisions = table(result / 'protospacer_decisions.tsv')
         assert any(d['reason'] == 'flank_multiplicity_conflict' for d in decisions)
+        if name == 'default':
+            assert not predicted('depth_conflict'), 'near-best incompatible choices forced into a prediction'
+        if name == 'exact_prediction_ties':
+            assert predicted('depth_conflict'), 'zero margin did not restore the slightly better one-sided candidate'
+            qid=queries['Array_depth_conflict']['query_id']
+            choice=next(s for s in table(result / 'protospacer_selection.tsv') if s['query_id']==qid)
+            assert choice['score_tie']=='0' and 0<float(choice['score_gap'])<.1, 'fixture must exercise a nonzero near-score gap'
         assert predicted('branch_tie') and all(inside(s, tie_left + spacers['branch_tie'] + tie_common) for s in predicted('branch_tie')), 'arbitrary tied branch retained'
         assert not predicted('seed_tie') and queries['Array_seed_tie']['mapping_status'] == 'unresolved', 'indistinguishable seed flank combinations forced into a locus'
-        assert any(s['ambiguity_trimmed'] == '1' for s in table(result / 'protospacer_selection.tsv'))
-        run('threads', [*common, '--output', out / 'threads', '--threads', '2'])
+        if name == 'post_selection_only':
+            assert any(s['ambiguity_trimmed'] == '1' for s in table(result / 'protospacer_selection.tsv'))
+        else:
+            assert any(s['decision'] == 'ambiguous_branch' for s in table(result / 'protospacer_branch_checks.tsv'))
+        run('threads_'+name, [*common, '--output', out / ('threads_'+name), '--threads', '2', *flags])
         for f in result.iterdir():
             if f.name != 'protospacer_parameters.json':
-                assert f.read_bytes() == (out / 'threads' / f.name).read_bytes(), f'thread-dependent output: {f.name}'
+                assert f.read_bytes() == (out / ('threads_'+name) / f.name).read_bytes(), f'thread-dependent output: {f.name}'
     else:
         assert predicted('short'), 'short-tail control did not reproduce previous acceptance'
         # The old stability ranking can already prefer a one-sided path here.
