@@ -6,6 +6,79 @@ implementation; `protospacer-curate` is an alias. It does not incorporate the
 separate array-filter branch. The old experimental classes remain in the
 repository for reference, but the release subcommand uses the new module.
 
+## Extend previously accepted protospacers without redetecting them
+
+Use `--protospacers FILE` to freeze an existing FASTA as input to extension:
+
+```bash
+build/protospacer/mcaat phage-curate \
+  --arrays /path/to/array-results \
+  --graph /path/to/previous-run/graph/graph \
+  --protospacers /path/to/accepted/Protospacers.fasta \
+  --output /path/to/separate-extension-results \
+  --threads 24 --max-flank-length 750 --max-length 1550
+```
+
+Every supplied ID and sequence is retained in `Protospacers.fasta`, including
+unmapped seeds, short seeds and failed extensions. Sequence letters are normalized
+to uppercase; IDs and input order remain unchanged. Supplied sequences are already
+the desired protospacers: boundary correction applies to source-array context,
+**not** to the supplied FASTA. This mode does not rediscover, reference-filter,
+shorten, deduplicate or replace its inputs. It is graph-only; read/PAM options
+are rejected explicitly. Use a new output directory or one from the same mode;
+it cannot overwrite the input FASTA or mix with a discovery run.
+
+Source-array observations identify the complete spacer and repeat around each
+supplied interval, including reverse orientation and original source coordinates.
+The interval itself maps exactly to the graph; the complete source spacer need
+not map as an external target. Fewer than k bases cannot identify a whole graph
+vertex, so such inputs are retained with `shorter_than_graph_k`, without an invented
+extension. Missing source context, missing graph mapping, adapter-containing
+seeds and work limits likewise receive separate reasons.
+
+At branches the default bounded beam keeps alternatives, scores the completed
+retained flanks for multiplicity stability and selects at most one extension per
+supplied record. Similar scores mark `extended_ambiguous`; they do not delete the
+protospacer or automatically clip the best path. The adapter, repeat-context,
+coverage, cycle, incompatible-flank and work-budget checks remain active.
+Optional `--branch-guard true` and `--resolve-graph-ties true` restore the strict
+stopping/clipping policies for explicit comparisons. They still cannot remove a
+supplied protospacer. A selected path remains a candidate, not proof of its origin.
+
+| Output | Meaning in supplied-protospacer mode |
+|---|---|
+| `Protospacers.fasta`, `protospacer_candidates.tsv` | All supplied IDs/sequences with `retained_input` provenance |
+| `ContiguousPaths.fasta`, `protospacer_regions.tsv` | Only selected actual extensions; no seed-only placeholders |
+| `protospacer_extensions.tsv` | One row per input, independent extension status/reason, chosen region, lengths, stops, scores, ambiguity and work |
+| `protospacer_associations.tsv` | Seed-to-region coordinates and strand for successful extensions |
+| `protospacer_sources.tsv` | Matching source-array observations and zero-based, half-open coordinates in their original spacers |
+| `protospacer_branch_checks.tsv`, `protospacer_adapter_stops.tsv` | Traversal diagnostics; branch probes are present only if enabled |
+| `protospacer_parameters.json` | Mode, all effective algorithm settings, input/retained/extended counts |
+| `retained_protospacer_mode.txt` | Marker allowing safe reruns in this output directory |
+
+`extension_status` is `extended`, `extended_ambiguous`, or `not_extended`.
+`retained_input` records provenance, not a claim that this run validated a target.
+Duplicate sequences with distinct supplied IDs keep their records; identical
+extension regions can share a FASTA record. No target is silently substituted by
+a shorter interval. The repeat and adapter checks do not establish viral origin.
+
+The saved 81-match baseline is in `bench/fixtures/protospacer-baseline-81/`.
+Its original reference matches are preserved by keeping exactly those sequences,
+not by claiming to rediscover them on an unavailable graph. Five intervals are
+shorter than k=23. The corresponding manifest records thresholds and the FASTA
+hash. No reference sequence is used to choose extension paths.
+
+Verify a finished run independently (nonzero exit on lost/changed sequences,
+wrong coordinates, duplicate associations, seed-only extensions or cap violations):
+
+```bash
+python3 bench/check_retained_protospacers.py \
+  /path/to/accepted/Protospacers.fasta /path/to/separate-extension-results
+```
+
+This checker verifies retention and output consistency. It does not assess
+reference-match quality of the extended flanks.
+
 ## Build and run on an existing graph
 
 With the repository's normal build dependencies installed:
@@ -67,9 +140,9 @@ protospacers.
    traversable until the path diverges or qualifies as a repeat copy. This is a
    per-path decision, not a global deletion of repeat edges or an entire spacer.
 4. Extend at most 750 bp per side by default. Walk nonbranching stretches in
-   place; at junctions, compare bounded lookahead paths and stop when the evidence
-   does not separate them. Optional read/PAM reranking retains a bounded beam
-   of alternatives instead. New flanks cannot revisit
+   place; keep a bounded beam of alternatives at junctions, then compare the
+   multiplicity stability of their retained flanks. Strict local lookahead is
+   available explicitly with `--branch-guard true`. New flanks cannot revisit
    seed or flank vertices. Repeated k-mers already present in the input spacer
    are allowed. Joining left and right flanks rejects intersections between them.
    Check sequencing adapters during the walk. Roll back the complete detected
@@ -91,9 +164,10 @@ protospacers.
 7. Consolidate nested intervals only when they produced the identical retained
    extension sequence at the same query alignment. Different paths/alignments
    remain candidates. Then compare candidates across **all seed intervals of
-   the spacer** and select at most one prediction. With graph-only evidence,
-   near-best alternatives retain only their common sequence around the
-   seed; withhold the prediction if no informative external flank remains.
+   the spacer** and select at most one prediction. Save its detected protospacer
+   independently of extension selection. If the optional strict ambiguity rule
+   withholds the extension, the already detected interval remains in the
+   protospacer FASTA and receives a separate `not_extended` status.
    Write only selected predictions
    to the primary FASTA/TSV outputs. Identical final sequences, including reverse
    complements, share a region without losing their source associations.
@@ -142,7 +216,7 @@ earlier. For up to 900 bp per side, use `--max-flank-length 900 --max-length 185
 
 Every outgoing fork and incoming merge supplies a coverage observation, even
 between the ordinary spaced samples (`--junction-check true`). At an outgoing
-fork, `--branch-guard true` examines each continuation for at most 75 edges,
+fork, the optional `--branch-guard true` examines each continuation for at most 75 edges,
 stopping earlier at the next fork, a dead end, a repeat context or an adapter.
 These probes consume the same edge-expansion budget as traversal; they do not
 launch recursive searches. Source-array and adapter branches are rejected.
@@ -173,7 +247,7 @@ observation count, score, status, choice and decision. A score is usable only
 with `status=scored`; zero on rejected/incomplete probes is not a good score.
 Rows use the canonical search-spacer orientation. At most 4096 rows per query
 are stored, with uncapped counts and stored-row counts in the parameters JSON.
-`--branch-guard false` restores beam traversal at junctions. Supplying optional
+`--branch-guard false` is the default and uses beam traversal at junctions. Supplying optional
 read files or PAM rules also disables this early branch choice, preserving
 alternatives for their existing reranking; `branch_guard_active` records this.
 
@@ -221,8 +295,9 @@ labelled `insufficient`, rather than presented as demonstrated stability.
 
 ## Graph-only acceptance checks
 
-These checks are active in ordinary existing-graph runs; no read files or
-reference database are required.
+External-sequence and incompatible-flank checks are active in ordinary runs.
+The strict ambiguity trimming below is opt-in. No read files or reference
+database are required.
 
 - **External sequence:** default `--min-external-flank 0` means `k+1` bases
   wholly outside the matched seed. At `k=23`, the minimum is 24 bp. This is a
@@ -238,7 +313,7 @@ reference database are required.
   splits the joined candidate into two one-sided alternatives; final selection
   still produces at most one output. Too few observations cannot establish a
   conflict. `--joint-flank-check false` disables this gate.
-- **Near-best paths:** without supplied read or PAM evidence,
+- **Optional near-best trimming:** without supplied read or PAM evidence,
   `--resolve-graph-ties true` compares the winner with alternatives having the
   stability-plus-match evidence within `--prediction-score-margin 0.1` below
   the winner (or better), and the same number of retained sides.
@@ -247,7 +322,8 @@ reference database are required.
   candidates by their corrected search-spacer coordinates and retain only identical
   contiguous sequence outward from the seed. Recheck context, minimum length,
   path coordinates and coverage on that sequence. If no external side remains,
-  report `unresolved`. This checks the bounded shortlist, not every path in the
+  report the extension as unresolved while keeping the detected protospacer.
+  This checks the bounded shortlist, not every path in the
   graph. The margin is a heuristic, not calibrated confidence; a value of zero
   restores exact-evidence ties only. `--resolve-graph-ties false` restores deterministic winner-only
   behavior; existing optional read/PAM reranking also keeps that behavior.
@@ -451,7 +527,7 @@ the original metagenomic graph, which was not available in the local audit data.
 | `--boundary-min-spacers` | 5 | Minimum distinct spacers in an array for boundary correction |
 | `--boundary-min-bases` | 6 | Minimum length of a conserved terminal motif |
 | `--junction-check` | true | Observe multiplicity at forks/merges between ordinary samples |
-| `--branch-guard` | true | Stop or choose at forks using local lookahead; inactive with optional read/PAM evidence |
+| `--branch-guard` | false | Stop or choose at forks using local lookahead; inactive with optional read/PAM evidence |
 | `--branch-lookahead` | 75 | Maximum inspected edges per branch probe; range 1–1000 |
 | `--branch-score-margin` | 1 | Required improvement over the next scored branch; lower score is better |
 | `--prediction-score-margin` | 0.1 | Final graph-only alternatives this close to the winner retain common sequence |
@@ -462,7 +538,7 @@ the original metagenomic graph, which was not available in the local audit data.
 | `--min-match-bp` | graph k | Minimum exact matched interval; CLI value 0 means graph k |
 | `--min-external-flank` | 0 (= graph k+1) | Minimum retained bases wholly outside the matched seed |
 | `--joint-flank-check` | true | Split incompatible left/right multiplicity contexts |
-| `--resolve-graph-ties` | true | Retain common sequence for indistinguishable graph-only alternatives |
+| `--resolve-graph-ties` | false | Retain common sequence for indistinguishable graph-only alternatives |
 | `--max-paths` | 16 | Internal shortlist per seed; final output remains one prediction per spacer |
 | `--coverage-window` | 7 | Baseline count observations per flank; minimum 3 |
 | `--array-repeat-identity` | 0.85 | Source-repeat edit similarity threshold, allowed range 0.5–1 |
@@ -481,8 +557,8 @@ output pruning set `search_limited`; they do not claim an exhaustive result.
 
 | Output | Contents |
 |---|---|
-| `protospacer_queries.tsv` | Every source observation, its canonical query ID and mapping status |
-| `protospacer_candidates.tsv`, `Protospacers.fasta` | One selected exact seed interval per matched spacer, with an external flank and graph vertices |
+| `protospacer_queries.tsv` | Every source observation, canonical query ID, boundary provenance and separate detection/extension status |
+| `protospacer_candidates.tsv`, `Protospacers.fasta` | One detected exact interval per matched spacer, retained even if subsequent extension selection is unresolved |
 | `MatchedSpacers.fasta` | One complete corrected search spacer per matched canonical query; partial-only queries are counted separately in JSON |
 | `protospacer_regions.tsv`, `ContiguousPaths.fasta` | Unique accepted extended/partial region sequences, vertices and edges |
 | `protospacer_associations.tsv` | Source → seed → region links, coordinates, strand, scores, rank, ambiguity, stop reasons and evidence |
@@ -490,11 +566,16 @@ output pruning set `search_limited`; they do not claim an exhaustive result.
 | `protospacer_decisions.tsv` | Rejected source contexts, unresolved path outcomes, and redundant intervals with their retained replacement seed |
 | `protospacer_selection.tsv` | One row per selected prediction: stability components, comparison counts, runner-up score and ties |
 | `protospacer_adapter_stops.tsv` | Blocked adapter branches and their actual graph endpoint/detection vertices |
+| `protospacer_extensions.tsv` | Independent extension outcome for every retained detected interval |
 | `protospacer_branch_checks.tsv` | Junction alternatives, local scores, actual vertex/edge IDs, choices and stop decisions |
 | `protospacer_parameters.json` | Effective settings, input paths and result counts |
 
-Output schema 5 adds boundary provenance, per-side length caps and junction
-diagnostics/settings. Adapter patterns use `max_edits`/`allow_indels`.
+Output schema 6 separates detection retention from extension outcome.
+In discovery mode, `extended_queries` and `detected_without_extension` split
+`matched_queries`; the protospacer count can exceed the extension count.
+`mapping_status` is the legacy combined status; use the explicit `detection_status`
+and `extension_status` fields for the independent outcomes. Adapter patterns
+use `max_edits`/`allow_indels`.
 It declares `selection=one_prediction_per_distinct_spacer` and distinguishes `matched_queries`, `full_length_matched_queries`,
 `partial_only_matched_queries`, `unresolved_queries` and
 `unresolved_seed_intervals`. The matched-query denominator is `unique_queries`,
@@ -537,7 +618,7 @@ beyond `max-seeds` are disclosed by `eligible_intervals` and `seed_limit_reached
 The decision report's interval-consolidation references describe the internal
 shortlist; a referenced seed need not be the final winner.
 
-Successful reruns replace the module's fourteen named files, including empty FASTAs;
+Successful reruns replace the discovery mode's fifteen named files, including empty FASTAs;
 they do not append old results. Computation/input failures before publication
 leave previous results intact. Files are staged then individually renamed; this
 is not a filesystem-wide atomic transaction. Array and graph inputs are unchanged.
@@ -570,9 +651,13 @@ python3 bench/validate_protospacer_context.py \
 python3 bench/validate_protospacer_graph_filters.py \
   build/protospacer/mcaat build/protospacer-graph-filter-validation
 
-# Conserved spacer ends, junction ambiguity and independent 750-bp flank caps.
+# Explicit strict policy: conserved ends, junction ambiguity and 750-bp caps.
 python3 bench/validate_protospacer_boundaries.py \
   build/protospacer/mcaat build/protospacer-boundary-validation
+
+# Current defaults: frozen detections, longer branch comparison and failure retention.
+python3 bench/validate_retained_protospacers.py \
+  build/protospacer/mcaat build/retained-protospacer-validation
 ```
 
 Core checks cover overlapping seeds, bidirectional/one-sided reconstruction,
@@ -583,7 +668,7 @@ source/region coordinates, reverse-complement deduplication, deterministic
 threads/reruns, explicit caps and failed/empty rerun behavior.
 
 In the general controlled fixture, five source observations yield two selected
-seed intervals, two regions and three source associations. With the new junction guard, both
+seed intervals, two regions and three source associations. With the explicitly enabled strict junction guard, both
 selected regions are contained in known source sequences; the previous guard
 version retained one true segment and one recombinant in this fixture.
 The fixture deliberately shares a 23-mer between different spacers. Resolving
@@ -608,8 +693,7 @@ and verify that absent or short coverage profiles do not get a perfect score.
 The graph-only fixture retains the unambiguous 1,000-bp target. It withholds
 10-bp tails, removes the ambiguous part beyond a shared branch, and withholds
 an arbitrary left/right pairing at a shared seed. The incompatible-depth case
-is split into one-sided candidates and then withheld as ambiguous under current
-defaults. A separate `post_selection_only` run disables the new junction checks
+is split into one-sided candidates and then withheld as ambiguous under the explicitly enabled strict policy. A separate `post_selection_only` run disables the new junction checks
 and near-score margin to exercise the previous splitting/tie gates independently.
 A zero-margin control restores the slightly better one-sided depth candidate
 with a nonzero score gap, verifying that near-score handling is configurable.
@@ -619,7 +703,7 @@ of a corrected previous final false call. These fixtures verify deterministic
 one/two-thread outputs and unchanged graph files. They do not establish sensitivity
 or precision in the original metagenome.
 
-The boundary/junction fixture builds a real SDBG with eight target spacers,
+The explicit strict-policy boundary/junction fixture builds a real SDBG with eight target spacers,
 source-array contexts and an indistinguishable alternate target for one spacer.
 Sixteen source observations (both strands) have their conserved seven-base suffix
 reassigned. The seven unambiguous targets are retained and the ambiguous query
@@ -666,7 +750,7 @@ Replaying the shared C++ context classifier on the saved failing run recognized
 all 694 previously identified repeat-flanked regions as array context on both
 sides. This checked saved sequences, not a rerun of the original graph search;
 the original graph was not available locally. The current core suite passes
-302 checks in both release and AddressSanitizer/UndefinedBehaviorSanitizer builds.
+321 checks in both release and AddressSanitizer/UndefinedBehaviorSanitizer builds.
 
 With boundary correction and the new junction/near-score guards, the same bounded
 genome smoke runs retain 2 predictions / 2 regions for CP058556.1 and 12 predictions /
@@ -676,3 +760,29 @@ The drop from 21/45 predictions is a material sensitivity tradeoff: unresolved
 junctions now stop earlier, and valid extensions can be lost as well as incorrect
 ones. These runs do not measure precision. Test the defaults on the original
 server graph before interpreting a reduced count as an improvement.
+
+
+## Retention regression and current policy
+
+The 719632c strict defaults caused a large drop in retained predictions. Current
+defaults restore bounded beam traversal and one-best-path selection. Strict
+local stopping and common-sequence clipping are available only when requested.
+The historical smoke counts above describe the strict version, not the current
+supplied-protospacer workflow.
+
+The production retention fixture keeps all nine supplied records, including
+unmapped, short, source-context-missing, reverse and duplicate-sequence records.
+The straight target extends to 1,535 bp. A target with successive nearby forks
+also extends to its known correct 1,535-bp sequence; the old strict options yield
+785 bp for that target. Confirmed adapter continuation is excluded while a
+766-bp clean fragment remains. One- and 24-thread outputs match, tiny-budget
+reruns clear stale extensions but keep all supplied seeds, and invalid reruns
+leave previous output intact. The fixed 81-record baseline is also preserved
+byte for byte when extension on an unrelated synthetic graph cannot succeed.
+That proves retention under failure, not original-metagenome extension accuracy.
+
+A separate local check supplies the original source-array report for the 81
+records: all 81 source contexts are recovered. The unrelated graph returns
+76 `seed_not_mapped` and five `shorter_than_graph_k` outcomes. All 81 input
+sequences remain unchanged. Testing reconstructed flanks against Shah references
+on the original pooled graph still requires the server run.

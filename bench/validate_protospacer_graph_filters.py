@@ -67,7 +67,7 @@ graph_hash = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in graph.
 common = ['phage-curate', '--arrays', arrays, '--graph', graph, '--max-length', '1000']
 results = {}
 legacy_walk = ['--branch-guard', 'false', '--junction-check', 'false', '--prediction-score-margin', '0', '--max-flank-length', '2500']
-for name, flags in [('default', []), ('exact_prediction_ties', ['--prediction-score-margin', '0']), ('post_selection_only', legacy_walk),
+for name, flags in [('strict', ['--branch-guard', 'true', '--resolve-graph-ties', 'true']), ('exact_prediction_ties', ['--branch-guard', 'true', '--resolve-graph-ties', 'true', '--prediction-score-margin', '0']), ('post_selection_only', [*legacy_walk, '--resolve-graph-ties', 'true']),
                     ('legacy_gates', [*legacy_walk, '--min-external-flank', '1', '--joint-flank-check', 'false', '--resolve-graph-ties', 'false'])]:
     result = out / name
     run(name, [*common, '--output', result, *flags])
@@ -75,7 +75,7 @@ for name, flags in [('default', []), ('exact_prediction_ties', ['--prediction-sc
     links = table(result / 'protospacer_associations.tsv')
     queries = {q['array_id']: q for q in table(result / 'protospacer_queries.tsv')}
     parameters = json.loads((result / 'protospacer_parameters.json').read_text())
-    assert parameters['schema'] == 5 and parameters['reads1'] == ''
+    assert parameters['schema'] == 6 and parameters['reads1'] == ''
     for row in table(result / 'protospacer_regions.tsv'):
         assert len(row['sequence']) == int(row['length']) == len(row['vertices'].split(',')) + 22
         assert len(row['edges'].split(',')) + 1 == len(row['vertices'].split(','))
@@ -94,7 +94,7 @@ for name, flags in [('default', []), ('exact_prediction_ties', ['--prediction-sc
                    for s in predicted('depth_conflict')), 'incompatible-depth halves still joined'
         decisions = table(result / 'protospacer_decisions.tsv')
         assert any(d['reason'] == 'flank_multiplicity_conflict' for d in decisions)
-        if name == 'default':
+        if name == 'strict':
             assert not predicted('depth_conflict'), 'near-best incompatible choices forced into a prediction'
         if name == 'exact_prediction_ties':
             assert predicted('depth_conflict'), 'zero margin did not restore the slightly better one-sided candidate'
@@ -104,6 +104,10 @@ for name, flags in [('default', []), ('exact_prediction_ties', ['--prediction-sc
         assert predicted('branch_tie') and all(inside(s, tie_left + spacers['branch_tie'] + tie_common) for s in predicted('branch_tie')), 'arbitrary tied branch retained'
         assert not predicted('seed_tie') and queries['Array_seed_tie']['mapping_status'] == 'unresolved', 'indistinguishable seed flank combinations forced into a locus'
         if name == 'post_selection_only':
+            target_id=queries['Array_seed_tie']['query_id']
+            kept=next(r for r in table(result / 'protospacer_extensions.tsv') if r['query_id']==target_id)
+            assert kept['detection_status']=='detected' and kept['extension_status']=='not_extended'
+            assert any(r['seed_id']==kept['seed_id'] for r in table(result / 'protospacer_candidates.tsv'))
             assert any(s['ambiguity_trimmed'] == '1' for s in table(result / 'protospacer_selection.tsv'))
         else:
             assert any(s['decision'] == 'ambiguous_branch' for s in table(result / 'protospacer_branch_checks.tsv'))

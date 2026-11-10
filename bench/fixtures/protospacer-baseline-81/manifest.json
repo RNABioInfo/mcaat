@@ -1,0 +1,10 @@
+{
+  "records": 81,
+  "source": "SRR14017553; previously exported protospacer intervals after source-array boundary correction",
+  "reference": "local Shah curated reference used in the 2026-11-10 audit",
+  "minimum_identity_percent": 90,
+  "minimum_single_alignment_query_coverage_percent": 85,
+  "also_evalue_at_most_0_01": 71,
+  "fasta_sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+  "role": "Frozen input fixture and retention regression; not a list of confirmed phages, and not ground truth for extended flanks."
+}

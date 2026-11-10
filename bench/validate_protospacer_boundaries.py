@@ -34,12 +34,12 @@ report=arrays/'CRISPR_Arrays_1.txt';report.write_text(text);array_hash=hashlib.s
 graph_run=out/'graph_build'
 run('build',['--input-files',reads,'--output-folder',graph_run,'--threads','2','--ram','2G','--threshold-multiplicity','1000000','--autoclean','false'])
 graph=graph_run/'graph/graph';before=hashes(graph)
-common=['phage-curate','--arrays',arrays,'--graph',graph]
+common=['phage-curate','--arrays',arrays,'--graph',graph,'--branch-guard','true','--resolve-graph-ties','true']
 run('default',[*common,'--output',out/'default'])
 result=out/'default';queries=rows(result/'protospacer_queries.tsv');regions=rows(result/'protospacer_regions.tsv')
 links=rows(result/'protospacer_associations.tsv');by_source={q['source_id']:q for q in queries};by_region={r['region_id']:r for r in regions}
 params=json.loads((result/'protospacer_parameters.json').read_text())
-assert params['schema']==5 and params['branch_guard_active'] and params['boundary_corrected_source_observations']==16
+assert params['schema']==6 and params['branch_guard_active'] and params['boundary_corrected_source_observations']==16
 assert params['max_flank_length']==750 and params['boundary_support']==.85
 for q in queries:
     assert q['boundary_status']=='conserved_terminal_reassigned'
@@ -77,7 +77,7 @@ tsv=out/'tsv_arrays';tsv.mkdir()
 with (tsv/'CRISPR_graph_paths.tsv').open('w') as f:
     w=csv.writer(f,delimiter='\t');w.writerow(['array_id','observation_id','repeat','spacer'])
     for i,s in enumerate(spacers):w.writerow(['Array_forward',i,repeat,s])
-run('tsv',[*common[:1],'--arrays',tsv,'--graph',graph,'--output',out/'tsv'])
+run('tsv',[*common[:1],'--arrays',tsv,'--graph',graph,'--output',out/'tsv','--branch-guard','true','--resolve-graph-ties','true'])
 assert {r['sequence'] for r in rows(out/'tsv/protospacer_regions.tsv')}=={r['sequence'] for r in regions}
 assert hashes(graph)==before and hashlib.sha256(report.read_bytes()).hexdigest()==array_hash
 summary=dict(corrected_observations=16,true_targets_retained=7,ambiguous_query_withheld=1,

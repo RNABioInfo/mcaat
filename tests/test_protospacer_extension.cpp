@@ -1,5 +1,6 @@
 #include "protospacer_detection/extension_engine.h"
 #include "protospacer_detection/extension_evidence.h"
+#include "protospacer_detection/retained_target.h"
 #include <iostream>
 #include <random>
 using namespace mcaat::proto;
@@ -358,7 +359,7 @@ void test_boundary_correction() {
     invalid([]{BoundaryOptions x;x.support=.5;x.validate();});
 }
 void test_junction_checks_and_flank_caps() {
-    Graph g;Options o;o.max_bp=2500;o.coverage_window=3;
+    Graph g;Options o;o.max_bp=2500;o.coverage_window=3;o.branch_guard=true;
     auto seed_text=dna(32),common=dna(35),a="A"+dna(100),b="C"+dna(100);
     auto path_a=g.add(seed_text+common+a,12);g.add(seed_text+common+b,13);
     for(size_t i=1;i<seed_text.size()+common.size()-g.k()+1;++i)g.arcs.at({path_a[i-1],path_a[i]}).count=12;
@@ -389,9 +390,57 @@ void test_junction_checks_and_flank_caps() {
     ss.left.clear();paths=reconstruct(straight,ss,{},caps);
     check(paths.size()==1 && paths[0].left_length==0 && paths[0].right_length==750,"unused flank budget is not transferred beyond the opposite cap");
 }
+struct TargetGraph:Graph {
+    TargetGraph(){k_=23;}
+    Path trace(const std::string& sequence)const {
+        Path p;if(sequence.size()<k())return p;
+        for(size_t i=0;i+k()<=sequence.size();++i) {
+            auto it=ids.find(sequence.substr(i,k()));if(it==ids.end())return {};
+            if(!p.empty() && !arcs.count({p.back(),it->second}))return {};
+            p.push_back(it->second);
+        }
+        return p;
+    }
+    Node edge(Node a,Node b)const{return arcs.at({a,b}).edge;}
+    std::pair<std::set<Node>,std::set<Node>> array_context(const std::string& repeat,const std::string& spacer)const {
+        std::set<Node> shared;auto seq=repeat+spacer+repeat;
+        for(size_t i=0;i+k()<seq.size();++i) {
+            if(i>=repeat.size() && i+k()+1<=repeat.size()+spacer.size())continue;
+            auto p=trace(seq.substr(i,k()+1));if(!p.empty())shared.insert(edge(p[0],p[1]));
+        }
+        return {shared,{}};
+    }
+};
+void test_retained_targets() {
+    TargetGraph g;Options o;auto seed=dna(35),repeat=dna(27),left=dna(300),right=dna(310);
+    auto truth=left+seed+right;g.add(truth);
+    std::vector<TargetContext> ctx{{seed,repeat,0,seed.size()}};
+    auto result=extend_retained_target(g,seed,ctx,o);
+    check(result.has_extension && result.selected.sequence==truth,"retained seed gets complete supported extension");
+    check(result.selected.sequence.substr(result.selected.seed_begin,seed.size())==seed,"extension preserves supplied seed exactly");
+    check(extend_retained_target(g,seed.substr(0,17),{},o).reason=="shorter_than_graph_k","short supplied seed gets explicit extension failure");
+    check(extend_retained_target(g,seed,{},o).reason=="source_context_missing","missing source context is distinct from missing graph mapping");
+    auto missing_seed=dna(35);
+    check(extend_retained_target(g,missing_seed,{{missing_seed,repeat,0,35}},o).reason=="seed_not_mapped","unmapped supplied sequence is not silently substituted");
+    auto limited=o;limited.max_query_states=2;
+    result=extend_retained_target(g,seed,ctx,limited);
+    check(!result.has_extension && result.search_limited && result.expanded<=2,"retained-target work budget is enforced without emitting a seed-only path");
+    auto bad=ctx;bad[0].end=34;
+    invalid([&]{extend_retained_target(g,seed,bad,o);});
+    TargetGraph host;host.add(dna(50)+repeat+seed+repeat+dna(50));
+    check(!extend_retained_target(host,seed,ctx,o).has_extension,"retained input does not authorize extending along the source array");
+    TargetGraph branches;auto a="A"+dna(299),b="C"+dna(299);
+    branches.add(left+seed+a);branches.add(left+seed+b);
+    for(auto& [pair,arc]:branches.arcs)arc.count=12;
+    result=extend_retained_target(branches,seed,ctx,o);
+    check(result.has_extension && result.ambiguous && result.selected.right_length==300,"default keeps one full ambiguous candidate and labels its uncertainty");
+    o.resolve_graph_ties=true;
+    auto strict=extend_retained_target(branches,seed,ctx,o);
+    check(strict.has_extension && strict.selected.right_length==0 && strict.selected.left_length==300,"optional common-prefix trimming affects extension only");
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});

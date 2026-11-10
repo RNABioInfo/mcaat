@@ -38,8 +38,8 @@ struct Options {
     size_t coverage_window=7,max_query_states=200000;
     size_t min_external_flank=0; // 0: k+1, one complete edge outside the seed
     bool joint_flank_check=true;
-    bool resolve_graph_ties=true;
-    bool junction_check=true,branch_guard=true;
+    bool resolve_graph_ties=false;
+    bool junction_check=true,branch_guard=false;
     size_t branch_lookahead=75;
     double branch_margin=1.,prediction_margin=.1;
     BoundaryOptions boundaries;

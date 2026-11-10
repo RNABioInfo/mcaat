@@ -44,7 +44,7 @@ with (a.output/'graph_build.log').open('w') as log:
     subprocess.run([str(builder),'--input-files',str(reads),'--output-folder',str(graph_run),'--threads','2','--ram','2G','--threshold-multiplicity','1000000','--autoclean','false'],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=180)
 graph=graph_run/'graph/graph'
 if not graph.with_suffix('.sdbg_info').exists():raise AssertionError('graph not built')
-common=['phage-curate','--arrays',arrays,'--graph',graph,'--max-length','500','--coverage-window','3']
+common=['phage-curate','--arrays',arrays,'--graph',graph,'--max-length','500','--coverage-window','3','--branch-guard','true','--resolve-graph-ties','true']
 out=a.output/'default';runtime=run('default',[*common,'--output',out])
 queries=table(out/'protospacer_queries.tsv');seeds=table(out/'protospacer_candidates.tsv');regions=table(out/'protospacer_regions.tsv');links=table(out/'protospacer_associations.tsv')
 assert len(queries)==5 and len({r['source_id'] for r in queries})==5
@@ -115,7 +115,7 @@ for source in sources_s1:
 # Both current graph reports and original text reports use the production command.
 tsv=a.output/'tsv_arrays';tsv.mkdir()
 (tsv/'CRISPR_graph_paths.tsv').write_text('array_id\tobservation_id\trepeat\tspacer\n'+''.join(f"{q['array_id']}\t{q['observation_id']}\t{rc(repeat) if q['array_id']=='Array_2' else repeat}\t{q['spacer']}\n" for q in queries))
-run('tsv',['protospacer-curate','--arrays',tsv,'--graph',graph,'--output',a.output/'tsv','--max-length','500','--coverage-window','3'])
+run('tsv',['protospacer-curate','--arrays',tsv,'--graph',graph,'--output',a.output/'tsv','--max-length','500','--coverage-window','3','--branch-guard','true','--resolve-graph-ties','true'])
 assert (a.output/'tsv/ContiguousPaths.fasta').read_bytes()==(out/'ContiguousPaths.fasta').read_bytes(),'input formats give different regions'
 limited=a.output/'limited';run('limited',[*common,'--output',limited,'--max-query-states','2'])
 assert table(limited/'protospacer_unresolved.tsv'),'cap not disclosed separately'

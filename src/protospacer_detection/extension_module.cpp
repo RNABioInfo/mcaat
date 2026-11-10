@@ -1,5 +1,6 @@
 #include "protospacer_detection/sdbg_extension_graph.h"
 #include "protospacer_detection/extension_evidence.h"
+#include "protospacer_detection/retained_target.h"
 #include <kseq++/seqio.hpp>
 #include <filesystem>
 #include <fstream>
@@ -49,6 +50,7 @@ struct Query {
     std::vector<Source> sources;
     std::set<Node> array_edges;
     std::vector<Entry> entries;
+    Entry detected;bool has_detection=false;
     std::vector<Decision> decisions;
     std::set<std::string> viable_seeds;
     size_t compared_paths=0,compared_regions=0;
@@ -124,6 +126,9 @@ static void select_prediction(Query& q,const Options& options,ExtensionGraph& gr
         }
     }
     q.compared_regions=regions.size();
+    // Detection was established before extension selection. Later uncertainty
+    // may withhold an extension, but must not erase this protospacer interval.
+    q.detected.seed=q.entries[best_entry].seed;q.detected.id=q.entries[best_entry].id;q.has_detection=true;
     const auto& winner=q.entries[best_entry].paths[best_path];auto winner_key=canonical(winner.sequence);
     const Candidate* runner=nullptr;size_t runner_matched=0;
     for(const auto& e:q.entries)for(const auto& c:e.paths) {
@@ -299,6 +304,16 @@ static std::ofstream output(const fs::path& path) {
 static std::string json_string(const std::string& value) {
     std::string out="\"";for(unsigned char c:value){if(c=='"' || c=='\\'){out+='\\';out+=c;}else if(c<32){std::ostringstream hex;hex<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<int(c);out+=hex.str();}else out+=c;}return out+'"';
 }
+static std::string adapter_json(const Options& options) {
+    std::string result="[";
+    for(const auto& adapter:options.adapters) {
+        if(result.size()>1)result+=",";
+        result+="{\"sequence\":"+json_string(adapter.sequence)+",\"exact_begin\":"+std::to_string(adapter.exact_begin)+
+        ",\"exact_end\":"+std::to_string(adapter.exact_end)+",\"max_edits\":"+std::to_string(adapter.max_edits)+
+        ",\"allow_indels\":"+(adapter.allow_indels?"true":"false")+"}";
+    }result+="]";
+    return result;
+}
 static size_t integer(const std::string& flag,const std::string& value,bool zero=false) {
     if(value.empty() || value.find_first_not_of("0123456789")!=std::string::npos)throw std::invalid_argument(flag+" needs an integer");
     size_t n=std::stoull(value);if((!zero && !n) || n>1000000000)throw std::invalid_argument(flag+" out of range");return n;
@@ -307,19 +322,23 @@ static double number(const std::string& flag,const std::string& value) {
     size_t used=0;double n=std::stod(value,&used);if(used!=value.size() || !std::isfinite(n) || n<0)throw std::invalid_argument(flag+" needs a finite nonnegative number");return n;
 }
 
+#include "retained_targets_io.h"
+
 int run_extension_module(int argc,char** argv) {
-    Options options;fs::path arrays,graph_path,destination,reads1,reads2,pam_file;
+    Options options;fs::path arrays,graph_path,destination,reads1,reads2,pam_file,supplied_targets;
     size_t threads=1,min_insert=0,max_insert=1000,max_index=5000000,max_read_work=1000000,max_retained_bases=50000000;
     for(int i=1;i<argc;++i) {
         std::string flag=argv[i];
         if(flag=="--help" || flag=="-h") {
             std::cout<<"mcaat phage-curate --arrays DIR --graph PREFIX [--output DIR]\n"
                 "Exact protospacer seeds and bounded bidirectional extension; partial results retained.\n"
+                "--protospacers FILE: extend an existing FASTA; retain EVERY supplied ID/sequence regardless of extension outcome.\n"
+                "This mode requires a separate --output directory; extension status is reported independently.\n"
                 "Primary outputs require an external flank. Unresolved seeds are reported separately.\n"
                 "Select ONE prediction per distinct spacer across all seed intervals, ranked by multiplicity stability.\n"
                 "--threads 1 --beam-width 32 --max-length 1550 --max-flank-length 750 --max-states 50000\n"
                 "--correct-spacer-boundaries true --boundary-support 0.85 --boundary-min-spacers 5 --boundary-min-bases 6\n"
-                "--junction-check true --branch-guard true --branch-lookahead 75 --branch-score-margin 1\n"
+                "--junction-check true --branch-guard false --branch-lookahead 75 --branch-score-margin 1\n"
                 "--prediction-score-margin 0.1 (retain common sequence of near-best graph-only predictions)\n"
                 "--max-paths 16 (internal shortlist per seed; final output is one per spacer)\n"
                 "--max-seeds 128 --max-query-states 200000 --min-match-bp 0 (0 = graph k)\n"
@@ -328,7 +347,7 @@ int run_extension_module(int argc,char** argv) {
                 "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
                 "--min-external-flank 0 (0 = k+1 bases wholly outside the seed; 1 restores short-tail behavior)\n"
                 "--joint-flank-check true (split incompatible left/right multiplicities before selection)\n"
-                "--resolve-graph-ties true (retain common sequence of indistinguishable graph-only predictions)\n"
+                "--resolve-graph-ties false (keep one best path; true opts into common-sequence trimming)\n"
                 "Default adapter guard: confirmed Illumina cores and exact Nextera, both strands.\n"
                 "--adapter-sequences SEQ[,SEQ...] (replace defaults with exact motifs; none disables)\n"
                 "--max-coverage-penalty 20\n"
@@ -341,6 +360,7 @@ int run_extension_module(int argc,char** argv) {
         }
         if(++i>=argc)throw std::invalid_argument("missing value for "+flag);std::string value=argv[i];
         if(flag=="--arrays" || flag=="-a")arrays=value;
+        else if(flag=="--protospacers")supplied_targets=value;
         else if(flag=="--graph" || flag=="-g")graph_path=value;
         else if(flag=="--output" || flag=="--output-folder")destination=value;
         else if(flag=="--threads")threads=integer(flag,value);
@@ -406,12 +426,18 @@ int run_extension_module(int argc,char** argv) {
     if(!reads2.empty() && reads1.empty())throw std::invalid_argument("--reads2 requires --reads1");
     if(min_insert>max_insert || threads>1024)throw std::invalid_argument("invalid insert range or thread count");
     for(const auto& f:{reads1,reads2,pam_file})if(!f.empty() && !fs::is_regular_file(f))throw std::invalid_argument("missing input: "+f.string());
+    if(!supplied_targets.empty()) {
+        if(destination.empty())throw std::invalid_argument("--protospacers requires a separate --output directory");
+        if(!fs::is_regular_file(supplied_targets))throw std::invalid_argument("missing protospacer FASTA: "+supplied_targets.string());
+        if(!reads1.empty() || !pam_file.empty())throw std::invalid_argument("--protospacers currently supports graph-only extension; omit read/PAM options");
+    }
     if(destination.empty())destination=arrays;
     auto rules=load_pams(pam_file);
     if(fs::is_directory(graph_path))graph_path/="graph";
     if(!fs::is_regular_file(graph_path.string()+".sdbg_info"))throw std::invalid_argument("missing graph metadata: "+graph_path.string());
     SDBG sdbg;std::cout<<"Loading graph...\n";sdbg.LoadFromFile(graph_path.string().c_str());ExtensionGraph graph(sdbg);
     auto queries=load_queries(arrays,graph.k(),options);
+    if(!supplied_targets.empty())return run_retained_targets(graph,queries,supplied_targets,arrays,graph_path,destination,threads,max_retained_bases,options);
     for(const auto& q:queries)if(q.sequence.size()>options.max_bp)throw std::invalid_argument("--max-length must accommodate every complete search spacer");
     if(options.max_bp<graph.k())throw std::invalid_argument("--max-length is shorter than graph k");
     std::cout<<"Processing "<<queries.size()<<" distinct spacer sequences with "<<threads<<" threads\n";
@@ -564,10 +590,12 @@ int run_extension_module(int argc,char** argv) {
     fs::create_directory(staging);
     try {
         auto query_out=output(staging/"protospacer_queries.tsv");
-        query_out<<"source_id\tarray_id\tobservation_id\tquery_id\tspacer\tmapping_status\teligible_intervals\tseed_limit_reached\tretained_intervals\tunresolved_intervals\tsearch_spacer\toriginal_repeat\tsearch_repeat\ttrimmed_left_bp\ttrimmed_right_bp\tboundary_status\n";
+        query_out<<"source_id\tarray_id\tobservation_id\tquery_id\tspacer\tmapping_status\teligible_intervals\tseed_limit_reached\tretained_intervals\tunresolved_intervals\tsearch_spacer\toriginal_repeat\tsearch_repeat\ttrimmed_left_bp\ttrimmed_right_bp\tboundary_status\tdetection_status\textension_status\n";
         auto seed_out=output(staging/"protospacer_candidates.tsv");
         seed_out<<"seed_id\tquery_id\tquery_begin\tquery_end\tmatched_bases\tquery_coverage\tidentity\tsequence\tsource_count\tseed_vertices\n";
         auto seed_fasta=output(staging/"Protospacers.fasta");
+        auto extension_out=output(staging/"protospacer_extensions.tsv");
+        extension_out<<"seed_id\tquery_id\tdetection_status\textension_status\n";
         auto matched_fasta=output(staging/"MatchedSpacers.fasta");
         auto unresolved_fasta=output(staging/"UnresolvedSeeds.fasta");
         auto unresolved_out=output(staging/"protospacer_unresolved.tsv");
@@ -586,7 +614,7 @@ int run_extension_module(int argc,char** argv) {
         auto associations=output(staging/"protospacer_associations.tsv");
         associations<<"source_id\tarray_id\tseed_id\tregion_id\tquery_begin\tquery_end\tseed_begin\tseed_end\tstrand\tstatus\tleft_stop\tright_stop\tleft_coverage\tright_coverage\tleft_dispersion\tright_dispersion\tcoverage_samples\tcoverage_score\ttotal_score\talternative_rank\tsearch_limited\texpanded_states\tread_evidence\tsupported_junctions\tjunctions\tread_support\tpair_support\tunique_pair_support\tpam_status\tsubtype\texternal_left_edges\texternal_right_edges\tambiguity\tleft_context\tright_context\n";
         std::map<std::string,std::pair<std::string,std::string>> regions;size_t seeds=0,links=0,sources=0;
-        size_t matched_queries=0,full_matched_queries=0,unresolved_queries=0,unresolved_seeds=0,rejected_context_seeds=0,redundant_paths=0;
+        size_t matched_queries=0,extended_queries=0,full_matched_queries=0,unresolved_queries=0,unresolved_seeds=0,rejected_context_seeds=0,redundant_paths=0;
         size_t adapter_branches=0,adapter_rows=0,adapter_queries=0,branch_checks=0,branch_rows=0,boundary_changes=0;
         for(const auto& q:queries) {
             auto query_id=identifier(q.sequence,"query_");
@@ -604,10 +632,11 @@ int run_extension_module(int argc,char** argv) {
                     <<b.vertex<<'\t'<<b.edge<<'\t'<<b.target<<'\t'<<b.steps<<'\t'<<b.observations<<'\t'
                     <<b.score<<'\t'<<b.status<<'\t'<<b.chosen<<'\t'<<b.decision<<'\n';
             }
-            if(!q.entries.empty()) {
+            if(q.has_detection) {
                 ++matched_queries;matched_fasta<<'>'<<query_id<<'\n'<<q.sequence<<'\n';
-                full_matched_queries+=std::any_of(q.entries.begin(),q.entries.end(),[&](const auto& e){return e.seed.begin==0 && e.seed.end==q.sequence.size();});
+                full_matched_queries+=q.detected.seed.begin==0 && q.detected.seed.end==q.sequence.size();
             }
+            extended_queries+=!q.entries.empty();
             unresolved_queries+=q.status=="unresolved";
             std::set<std::string> context_rejected;
             std::map<std::string,std::vector<const Decision*>> pending;
@@ -629,13 +658,18 @@ int run_extension_module(int argc,char** argv) {
                 unresolved_out<<seed<<'\t'<<query_id<<'\t'<<first.begin<<'\t'<<first.end<<'\t'<<seq<<'\t'<<joined<<'\n';
             }
             for(const auto& source:q.sources) {
-                ++sources;query_out<<source.id<<'\t'<<source.array<<'\t'<<source.observation<<'\t'<<query_id<<'\t'<<source.original_spacer<<'\t'<<q.status<<'\t'<<q.eligible<<'\t'<<q.truncated<<'\t'<<q.entries.size()<<'\t'<<pending.size()<<'\t'<<source.spacer<<'\t'<<source.original_repeat<<'\t'<<source.repeat<<'\t'<<source.trim_left<<'\t'<<source.trim_right<<'\t'<<source.boundary_status<<'\n';
+                ++sources;query_out<<source.id<<'\t'<<source.array<<'\t'<<source.observation<<'\t'<<query_id<<'\t'<<source.original_spacer<<'\t'<<q.status<<'\t'<<q.eligible<<'\t'<<q.truncated<<'\t'<<q.has_detection<<'\t'<<pending.size()<<'\t'<<source.spacer<<'\t'<<source.original_repeat<<'\t'<<source.repeat<<'\t'<<source.trim_left<<'\t'<<source.trim_right<<'\t'<<source.boundary_status<<'\t'<<(q.has_detection?"detected":"not_detected")<<'\t'<<(q.entries.empty()?"not_extended":"extended")<<'\n';
                 boundary_changes+=source.trim_left>0 || source.trim_right>0;
             }
-            for(const auto& e:q.entries) {
+            if(q.has_detection) {
+                const auto& e=q.detected;
                 ++seeds;auto seq=q.sequence.substr(e.seed.begin,e.seed.end-e.seed.begin);
                 seed_out<<e.id<<'\t'<<identifier(q.sequence,"query_")<<'\t'<<e.seed.begin<<'\t'<<e.seed.end<<'\t'<<seq.size()<<'\t'<<double(seq.size())/q.sequence.size()<<"\t1\t"<<seq<<'\t'<<q.sources.size()<<'\t'<<path_text(e.seed.path)<<'\n';
-                seed_fasta<<'>'<<e.id<<'\n'<<seq<<'\n';size_t rank=0;
+                seed_fasta<<'>'<<e.id<<'\n'<<seq<<'\n';
+                extension_out<<e.id<<'\t'<<query_id<<"\tdetected\t"<<(q.entries.empty()?"not_extended":"extended")<<'\n';
+            }
+            for(const auto& e:q.entries) {
+                size_t rank=0;
                 for(const auto& c:e.paths) {
                     ++rank;auto key=canonical(c.sequence);auto id=identifier(key,"region_");
                     auto [it,inserted]=regions.emplace(id,std::make_pair(key,c.sequence));
@@ -674,14 +708,8 @@ int run_extension_module(int argc,char** argv) {
             }
         }
         auto parameters=output(staging/"protospacer_parameters.json");
-        std::string adapters_json="[";
-        for(const auto& adapter:options.adapters) {
-            if(adapters_json.size()>1)adapters_json+=",";
-            adapters_json+="{\"sequence\":"+json_string(adapter.sequence)+",\"exact_begin\":"+std::to_string(adapter.exact_begin)+
-                ",\"exact_end\":"+std::to_string(adapter.exact_end)+",\"max_edits\":"+std::to_string(adapter.max_edits)+
-                ",\"allow_indels\":"+(adapter.allow_indels?"true":"false")+"}";
-        }adapters_json+="]";
-        parameters<<"{\n  \"schema\": 5,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
+        auto adapters_json=adapter_json(options);
+        parameters<<"{\n  \"schema\": 6,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
             <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases
@@ -709,11 +737,12 @@ int run_extension_module(int argc,char** argv) {
             <<",\n  \"min_insert\": "<<min_insert<<",\n  \"max_insert\": "<<max_insert<<",\n  \"max_read_index\": "<<max_index<<",\n  \"max_read_work\": "<<max_read_work
             <<",\n  \"read_weight\": "<<options.read_weight<<",\n  \"pair_weight\": "<<options.pair_weight<<",\n  \"pam_rules\": "<<json_string(pam_file.string())<<",\n  \"pam_weight\": "<<options.pam_weight
             <<",\n  \"source_observations\": "<<sources<<",\n  \"unique_queries\": "<<queries.size()<<",\n  \"matched_queries\": "<<matched_queries<<",\n  \"full_length_matched_queries\": "<<full_matched_queries
+            <<",\n  \"extended_queries\": "<<extended_queries<<",\n  \"detected_without_extension\": "<<matched_queries-extended_queries
             <<",\n  \"partial_only_matched_queries\": "<<matched_queries-full_matched_queries<<",\n  \"unresolved_queries\": "<<unresolved_queries<<",\n  \"unresolved_seed_intervals\": "<<unresolved_seeds
             <<",\n  \"rejected_context_seed_intervals\": "<<rejected_context_seeds<<",\n  \"redundant_interval_paths\": "<<redundant_paths
             <<",\n  \"seed_candidates\": "<<seeds<<",\n  \"regions\": "<<regions.size()<<",\n  \"associations\": "<<links<<"\n}\n";
         query_out.close();seed_out.close();seed_fasta.close();regions_out.close();fasta.close();associations.close();parameters.close();
-        matched_fasta.close();unresolved_fasta.close();unresolved_out.close();decisions.close();selection.close();adapter_stops.close();branch_out.close();
+        matched_fasta.close();unresolved_fasta.close();unresolved_out.close();decisions.close();selection.close();adapter_stops.close();branch_out.close();extension_out.close();
         for(const auto& item:fs::directory_iterator(staging))fs::rename(item.path(),destination/item.path().filename());
         fs::remove(staging);
         std::cout<<"Matched "<<matched_queries<<" / "<<queries.size()<<" distinct spacers ("<<full_matched_queries<<" with full-length matches; "<<matched_queries-full_matched_queries<<" partial-only)\n"
