@@ -1,0 +1,811 @@
+seed_id	case_id	side	reference_bp	graph_bp	status	witness_source_context	max_visits_in_flank	loss_at_graph_bp	vertex	expected_edge	target	multiplicity	local_median	gate_penalty	beam_loss	eligible_rank	candidate_score	selected_flank_bp	selected_prefix_cost
+seed_541b71503abcacf8	hit_0000	left	24	24	selected_reference_consistent_prefix	external	1									27	-1.6680716194378395	750	0
+seed_541b71503abcacf8	hit_0000	left	100	100	selected_reference_consistent_prefix	external	1									27	-1.6680716194378395	750	0
+seed_541b71503abcacf8	hit_0000	left	250	250	selected_reference_consistent_prefix	external	1									27	-1.6680716194378395	750	0
+seed_541b71503abcacf8	hit_0000	left	500	500	selected_reference_consistent_prefix	external	1									27	-1.6680716194378395	750	0
+seed_541b71503abcacf8	hit_0000	left	750	750	selected_reference_consistent_prefix	external	1									27	-1.6680716194378395	750	0
+seed_541b71503abcacf8	hit_0000	right	24	24	selected_reference_consistent_prefix	external	1	181	764859066	-	-	-	1	0	9.1120654361044746	27	-1.6680716194378395	750	0
+seed_541b71503abcacf8	hit_0000	right	100	100	selected_reference_consistent_prefix	external	1									23	-1.4451361378193173	750	0
+seed_541b71503abcacf8	hit_0000	right	250	250	selected_reference_consistent_prefix	external	1									23	-1.4451361378193173	750	0
+seed_541b71503abcacf8	hit_0000	right	500	500	selected_reference_consistent_prefix	external	1									23	-1.4451361378193173	750	0
+seed_541b71503abcacf8	hit_0000	right	750	750	selected_reference_consistent_prefix	external	1									23	-1.4451361378193173	750	0
+seed_815985dbbb929d9a	hit_0004	left	24	24	selected_reference_consistent_prefix	pending	2											750	20
+seed_815985dbbb929d9a	hit_0004	left	100	100	reject:source_array_context	array	6	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	405
+seed_815985dbbb929d9a	hit_0004	left	250	250	reject:source_array_context	array	6	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	800
+seed_815985dbbb929d9a	hit_0004	left	500	500	reject:source_array_context	array	6	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	880
+seed_815985dbbb929d9a	hit_0004	left	750	752	reject:source_array_context	array	6	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	979
+seed_815985dbbb929d9a	hit_0004	right	24	24	selected_reference_consistent_prefix	pending	1											750	9
+seed_815985dbbb929d9a	hit_0004	right	73	73	reject:source_array_context	array	4	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	264
+seed_815985dbbb929d9a	hit_0005	left	24	24	selected_reference_consistent_prefix	pending	2											750	20
+seed_815985dbbb929d9a	hit_0005	left	100	100	reject:source_array_context	array	3	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	160
+seed_815985dbbb929d9a	hit_0005	left	250	249	selected_reference_consistent_prefix	array	3	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	240
+seed_815985dbbb929d9a	hit_0005	left	500	500	selected_reference_consistent_prefix	array	3	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	290
+seed_815985dbbb929d9a	hit_0005	left	750	752	selected_reference_consistent_prefix	array	3	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	379
+seed_815985dbbb929d9a	hit_0005	right	24	24	witness_ends_before_source_context_resolved	pending	1											750	29
+seed_815985dbbb929d9a	hit_0005	right	100	100	reject:source_array_context	array	3	25	370366155	370366155	565216818	6	0	0	3.6074070886528817			750	437
+seed_815985dbbb929d9a	hit_0005	right	133	133	reject:source_array_context	array	5	25	370366155	370366155	565216818	6	0	0	3.6074070886528817			750	592
+seed_815985dbbb929d9a	hit_0006	left	24	24	selected_reference_consistent_prefix	pending	2											750	20
+seed_815985dbbb929d9a	hit_0006	left	100	100	reject:source_array_context	array	5	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	376
+seed_815985dbbb929d9a	hit_0006	left	135	135	reject:source_array_context	array	6	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	544
+seed_815985dbbb929d9a	hit_0006	right	24	24	candidate_ranked_below_selected	external	1	258	258127080	-	-	-	1	0	3.0252773227499872	31	-0.14312961171040062	750	97
+seed_815985dbbb929d9a	hit_0006	right	100	100	candidate_ranked_below_selected	external	1	334	65721270	-	-	-	1	0	2.1879229584643971	31	-0.14312961171040062	750	135
+seed_815985dbbb929d9a	hit_0006	right	250	250	selected_reference_consistent_prefix	external	1	334	65721270	-	-	-	1	0	2.1879229584643971	31	-0.14312961171040062	750	185
+seed_815985dbbb929d9a	hit_0006	right	500	500	selected_reference_consistent_prefix	external	1	750	507855646	-	-	-	15	0	1.0967410373249709	31	-0.14312961171040062	750	205
+seed_815985dbbb929d9a	hit_0006	right	750	750	selected_reference_consistent_prefix	external	1									31	-0.14312961171040062	750	404
+seed_815985dbbb929d9a	hit_0007	right	24	24	selected_reference_consistent_prefix	pending	1											750	9
+seed_815985dbbb929d9a	hit_0007	right	100	100	reject:source_array_context	array	3	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	406
+seed_815985dbbb929d9a	hit_0007	right	250	250	reject:source_array_context	array	4	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	1119
+seed_815985dbbb929d9a	hit_0007	right	500	500	reject:source_array_context	array	4	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	1260
+seed_815985dbbb929d9a	hit_0007	right	750	750	reject:source_array_context	array	4	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	1280
+seed_815985dbbb929d9a	hit_0008	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	60
+seed_815985dbbb929d9a	hit_0008	left	100	100	reject:source_array_context	array	4	26	759715395	202331594	202331594	108	0	0	0.32547616297729548			750	454
+seed_815985dbbb929d9a	hit_0008	left	250	250	reject:source_array_context	array	7	26	759715395	202331594	202331594	108	0	0	0.32547616297729548			750	1143
+seed_815985dbbb929d9a	hit_0008	left	500	500	reject:source_array_context	array	7	26	759715395	202331594	202331594	108	0	0	0.32547616297729548			750	1600
+seed_815985dbbb929d9a	hit_0008	left	750	752	reject:source_array_context	array	7	26	759715395	202331594	202331594	108	0	0	0.32547616297729548			750	1709
+seed_815985dbbb929d9a	hit_0009	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	40
+seed_815985dbbb929d9a	hit_0009	left	100	100	reject:source_array_context	array	5	26	723625006	76289134	76289134	62	0	0	0.25972454239462633			750	397
+seed_815985dbbb929d9a	hit_0009	left	250	250	reject:source_array_context	array	5	26	723625006	76289134	76289134	62	0	0	0.25972454239462633			750	650
+seed_815985dbbb929d9a	hit_0009	left	500	500	reject:source_array_context	array	5	26	723625006	76289134	76289134	62	0	0	0.25972454239462633			750	730
+seed_815985dbbb929d9a	hit_0009	left	750	752	reject:source_array_context	array	5	26	723625006	76289134	76289134	62	0	0	0.25972454239462633			750	829
+seed_815985dbbb929d9a	hit_0009	right	24	24	witness_ends_before_source_context_resolved	pending	1											750	29
+seed_815985dbbb929d9a	hit_0009	right	88	88	reject:source_array_context	array	5	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	368
+seed_815985dbbb929d9a	hit_0010	left	24	24	selected_reference_consistent_prefix	pending	2	169	689624853	-	-	-	27	0	5.24266939026991	30	-0.14135411514110802	750	10
+seed_815985dbbb929d9a	hit_0010	left	100	100	selected_reference_consistent_prefix	external	2	190	92521138	-	-	-	29	0	3.7868886462748983	30	-0.14135411514110802	750	30
+seed_815985dbbb929d9a	hit_0010	left	250	250	selected_reference_consistent_prefix	external	2	750	15844031	-	-	-	32	0	1.1867784999713764	30	-0.14135411514110802	750	100
+seed_815985dbbb929d9a	hit_0010	left	500	500	selected_reference_consistent_prefix	external	2									30	-0.14135411514110802	750	150
+seed_815985dbbb929d9a	hit_0010	left	750	752	selected_reference_consistent_prefix	external	2	750	590622653	-	-	-	32	0	0.39126609017936376			750	249
+seed_815985dbbb929d9a	hit_0010	right	24	24	witness_ends_before_source_context_resolved	pending	1											750	29
+seed_815985dbbb929d9a	hit_0010	right	100	100	reject:source_array_context	array	3	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	426
+seed_815985dbbb929d9a	hit_0010	right	148	148	reject:source_array_context	array	6	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	660
+seed_815985dbbb929d9a	hit_0011	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	40
+seed_815985dbbb929d9a	hit_0011	left	100	100	reject:source_array_context	array	4	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	397
+seed_815985dbbb929d9a	hit_0011	left	120	120	reject:source_array_context	array	5	29	861044798	610056258	610056258	166	0	0	0.26730004967250531			750	497
+seed_815985dbbb929d9a	hit_0011	right	24	24	selected_reference_consistent_prefix	pending	1	94	893626590	-	-	-	1	0	7.2130419532318779	29	-0.13591201376886833	750	20
+seed_815985dbbb929d9a	hit_0011	right	100	100	selected_reference_consistent_prefix	external	1	348	207507091	-	-	-	1	0	2.2350923228165858	29	-0.13591201376886833	750	20
+seed_815985dbbb929d9a	hit_0011	right	250	250	selected_reference_consistent_prefix	external	1	348	207507091	-	-	-	1	0	2.2350923228165858	29	-0.13591201376886833	750	60
+seed_815985dbbb929d9a	hit_0011	right	500	500	selected_reference_consistent_prefix	external	1	750	716522216	-	-	-	14	0	1.1447699795958364	29	-0.13591201376886833	750	90
+seed_815985dbbb929d9a	hit_0011	right	750	750	selected_reference_consistent_prefix	external	1									29	-0.13591201376886833	750	139
+seed_815985dbbb929d9a	hit_0012	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	50
+seed_815985dbbb929d9a	hit_0012	left	90	90	reject:source_array_context	array	3	29	861044798	610056258	610056258	166	0	0	2.9009554449964572			750	377
+seed_815985dbbb929d9a	hit_0012	right	24	24	beam_pruned:32	pending	1	77	223193683	-	-	-	1	0	8.7657052657532226			750	49
+seed_815985dbbb929d9a	hit_0012	right	100	100	reject:source_array_context	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	300
+seed_815985dbbb929d9a	hit_0012	right	250	250	reject:source_array_context	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	330
+seed_815985dbbb929d9a	hit_0012	right	500	500	selected_reference_consistent_prefix	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	370
+seed_815985dbbb929d9a	hit_0012	right	750	750	selected_reference_consistent_prefix	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	419
+seed_815985dbbb929d9a	hit_0013	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	60
+seed_815985dbbb929d9a	hit_0013	left	60	60	reject:source_array_context	array	3	26	759715395	202331594	202331594	108	0	0	0.32547616297729548			750	237
+seed_815985dbbb929d9a	hit_0013	right	24	24	beam_pruned:32	pending	1	77	223193683	-	-	-	1	0	8.7657052657532226			750	39
+seed_815985dbbb929d9a	hit_0013	right	100	100	reject:source_array_context	array	3	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	413
+seed_815985dbbb929d9a	hit_0013	right	250	250	reject:source_array_context	array	3	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	630
+seed_815985dbbb929d9a	hit_0013	right	500	500	reject:source_array_context	array	3	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	670
+seed_815985dbbb929d9a	hit_0013	right	750	750	selected_reference_consistent_prefix	array	3	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	709
+seed_815985dbbb929d9a	hit_0014	left	24	24	beam_pruned:36	pending	1	61	565199223	-	-	-	31	0	7.7274512574035201			750	60
+seed_815985dbbb929d9a	hit_0014	left	100	100	reject:source_array_context	array	4	29	861044798	610056258	610056258	166	0	0	0.32637763319949853			750	407
+seed_815985dbbb929d9a	hit_0014	left	250	250	reject:source_array_context	array	4	29	861044798	610056258	610056258	166	0	0	0.32637763319949853			750	510
+seed_815985dbbb929d9a	hit_0014	left	500	500	reject:source_array_context	array	4	29	861044798	610056258	610056258	166	0	0	0.32637763319949853			750	580
+seed_815985dbbb929d9a	hit_0014	left	750	752	selected_reference_consistent_prefix	array	4	29	861044798	610056258	610056258	166	0	0	0.32637763319949853			750	679
+seed_815985dbbb929d9a	hit_0014	right	24	24	beam_pruned:32	pending	1	77	223193683	-	-	-	1	0	8.7657052657532226			750	59
+seed_815985dbbb929d9a	hit_0014	right	100	100	reject:source_array_context	array	5	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	470
+seed_815985dbbb929d9a	hit_0014	right	103	103	reject:source_array_context	array	5	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	490
+seed_815985dbbb929d9a	hit_0015	left	24	24	candidate_ranked_below_selected	external	1	184	137913713	-	-	-	31	0	4.4461301390240067	31	-0.14312961171040062	750	118
+seed_815985dbbb929d9a	hit_0015	left	100	99	candidate_ranked_below_selected	external	1	205	789002628	-	-	-	1	0	2.7453444190335339	31	-0.14312961171040062	750	165
+seed_815985dbbb929d9a	hit_0015	left	250	250	selected_reference_consistent_prefix	external	1	554	709927075	-	-	-	1	0	1.195937182799498	31	-0.14312961171040062	750	225
+seed_815985dbbb929d9a	hit_0015	left	500	502	selected_reference_consistent_prefix	external	1											750	314
+seed_815985dbbb929d9a	hit_0015	left	750	752	selected_reference_consistent_prefix	external	1	750	28711161	-	-	-	39	0	0.34460707829726522			750	514
+seed_815985dbbb929d9a	hit_0015	right	24	24	beam_pruned:32	pending	1	77	223193683	-	-	-	1	0	8.7657052657532226			750	59
+seed_815985dbbb929d9a	hit_0015	right	100	100	reject:source_array_context	array	3	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	458
+seed_815985dbbb929d9a	hit_0015	right	163	163	reject:source_array_context	array	6	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	744
+seed_815985dbbb929d9a	hit_0016	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	30
+seed_815985dbbb929d9a	hit_0016	left	100	100	reject:source_array_context	array	3	27	76289133	244348363	244348363	24	0	0	0.8112673756180292			750	396
+seed_815985dbbb929d9a	hit_0016	left	105	105	reject:source_array_context	array	4	27	76289133	244348363	244348363	24	0	0	0.8112673756180292			750	426
+seed_815985dbbb929d9a	hit_0016	right	24	24	beam_pruned:32	pending	1	77	223193683	-	-	-	1	0	8.7657052657532226			750	59
+seed_815985dbbb929d9a	hit_0016	right	100	100	reject:source_array_context	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	160
+seed_815985dbbb929d9a	hit_0016	right	250	250	selected_reference_consistent_prefix	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	190
+seed_815985dbbb929d9a	hit_0016	right	500	500	selected_reference_consistent_prefix	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	230
+seed_815985dbbb929d9a	hit_0016	right	750	750	selected_reference_consistent_prefix	array	2	27	610056258	610056258	861044798	166	0	0	0.36875772753337649			750	279
+seed_815985dbbb929d9a	hit_0017	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	30
+seed_815985dbbb929d9a	hit_0017	left	75	75	reject:source_array_context	array	3	26	723625006	76289134	76289134	62	0	0	0.25972454239462633			750	289
+seed_815985dbbb929d9a	hit_0017	right	100	100	reject:source_array_context	array	2	25	370366155	370366155	565216818	6	0	0	3.6074070886528817			750	428
+seed_815985dbbb929d9a	hit_0017	right	250	250	reject:source_array_context	array	2	25	370366155	370366155	565216818	6	0	0	3.6074070886528817			750	480
+seed_815985dbbb929d9a	hit_0017	right	500	500	reject:source_array_context	array	2	25	370366155	370366155	565216818	6	0	0	3.6074070886528817			750	520
+seed_815985dbbb929d9a	hit_0017	right	750	750	selected_reference_consistent_prefix	array	2	25	370366155	370366155	565216818	6	0	0	3.6074070886528817			750	559
+seed_815985dbbb929d9a	hit_0018	left	24	24	selected_reference_consistent_prefix	pending	2	169	689624853	-	-	-	27	0	5.24266939026991	30	-0.14135411514110802	750	0
+seed_815985dbbb929d9a	hit_0018	left	100	100	selected_reference_consistent_prefix	external	2	190	92521138	-	-	-	29	0	3.7868886462748983	30	-0.14135411514110802	750	0
+seed_815985dbbb929d9a	hit_0018	left	250	250	selected_reference_consistent_prefix	external	2	750	15844031	-	-	-	32	0	1.1867784999713764	30	-0.14135411514110802	750	0
+seed_815985dbbb929d9a	hit_0018	left	500	500	selected_reference_consistent_prefix	external	2									30	-0.14135411514110802	750	0
+seed_815985dbbb929d9a	hit_0018	left	750	750	selected_reference_consistent_prefix	external	2									30	-0.14135411514110802	750	0
+seed_815985dbbb929d9a	hit_0018	right	18	18	selected_reference_consistent_prefix	pending	1	94	893626590	-	-	-	1	0	7.2130419532318779	29	-0.13591201376886833	750	0
+seed_815985dbbb929d9a	hit_0019	left	24	24	candidate_ranked_below_selected	external	1	184	137913713	-	-	-	31	0	4.4461301390240067	31	-0.14312961171040062	750	118
+seed_815985dbbb929d9a	hit_0019	left	100	100	candidate_ranked_below_selected	external	1	205	789002628	-	-	-	1	0	2.7453444190335339	31	-0.14312961171040062	750	135
+seed_815985dbbb929d9a	hit_0019	left	250	250	selected_reference_consistent_prefix	external	1	554	709927075	-	-	-	1	0	1.195937182799498	31	-0.14312961171040062	750	135
+seed_815985dbbb929d9a	hit_0019	left	500	500	selected_reference_consistent_prefix	external	1									31	-0.14312961171040062	750	135
+seed_815985dbbb929d9a	hit_0019	left	750	750	selected_reference_consistent_prefix	external	1									31	-0.14312961171040062	750	285
+seed_815985dbbb929d9a	hit_0019	right	24	24	witness_ends_before_source_context_resolved	pending	1											750	29
+seed_815985dbbb929d9a	hit_0019	right	33	33	reject:source_array_context	array	2	24	500958507	500958507	370366317	80	0	0	0.16849457945355667			750	87
+seed_815985dbbb929d9a	hit_0020	right	24	24	candidate_ranked_below_selected	external	1	258	258127080	-	-	-	1	0	3.0252773227499872	31	-0.14312961171040062	750	97
+seed_815985dbbb929d9a	hit_0020	right	100	100	candidate_ranked_below_selected	external	1	334	65721270	-	-	-	1	0	2.1879229584643971	31	-0.14312961171040062	750	135
+seed_815985dbbb929d9a	hit_0020	right	250	250	selected_reference_consistent_prefix	external	1	334	65721270	-	-	-	1	0	2.1879229584643971	31	-0.14312961171040062	750	135
+seed_815985dbbb929d9a	hit_0020	right	500	500	selected_reference_consistent_prefix	external	1	750	507855646	-	-	-	15	0	1.0967410373249709	31	-0.14312961171040062	750	135
+seed_815985dbbb929d9a	hit_0020	right	750	750	selected_reference_consistent_prefix	external	1									31	-0.14312961171040062	750	285
+seed_815985dbbb929d9a	hit_0021	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	79
+seed_815985dbbb929d9a	hit_0021	left	100	100	reject:source_array_context	array	3	26	759715395	202331594	202331594	108	0	0	0.32547616297729548			750	454
+seed_815985dbbb929d9a	hit_0022	right	24	24	selected_reference_consistent_prefix	pending	1											750	19
+seed_815985dbbb929d9a	hit_0023	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	79
+seed_0e3fc52adc6e1e7e	hit_0407	left	24	24	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	left	100	100	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	left	250	250	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	left	500	500	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	left	750	750	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	right	24	24	selected_reference_consistent_prefix	external	1									16	-1.010244424665264	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	right	100	100	selected_reference_consistent_prefix	external	1									16	-1.010244424665264	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	right	250	250	selected_reference_consistent_prefix	external	1									16	-1.010244424665264	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	right	500	500	selected_reference_consistent_prefix	external	1									16	-1.010244424665264	750	0
+seed_0e3fc52adc6e1e7e	hit_0407	right	750	750	selected_reference_consistent_prefix	external	1									16	-1.010244424665264	750	0
+seed_0e3fc52adc6e1e7e	hit_0408	left	24	24	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	0
+seed_0e3fc52adc6e1e7e	hit_0408	left	100	100	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	0
+seed_0e3fc52adc6e1e7e	hit_0408	left	250	250	selected_reference_consistent_prefix	external	1									29	-1.3138894212372279	750	10
+seed_0e3fc52adc6e1e7e	hit_0408	left	500	500	selected_reference_consistent_prefix	external	1	393	297364678	174476697	174476697	2	190	178.89224621679892	0.18855966097341109			750	128
+seed_0e3fc52adc6e1e7e	hit_0408	left	750	750	selected_reference_consistent_prefix	external	1	393	297364678	174476697	174476697	2	190	178.89224621679892	0.18855966097341109			750	168
+seed_0e3fc52adc6e1e7e	hit_0408	right	100	100	selected_reference_consistent_prefix	external	1									16	-1.010244424665264	750	30
+seed_f00881e5a59e1c4e	hit_0669	right	24	24	selected_reference_consistent_prefix	external	1	168	34916438	-	-	-	1	0	5.8182921848275697	15	-1.2535938957946697	750	0
+seed_f00881e5a59e1c4e	hit_0670	right	24	24	selected_reference_consistent_prefix	external	1	168	34916438	-	-	-	1	0	5.8182921848275697	15	-1.2535938957946697	750	0
+seed_f00881e5a59e1c4e	hit_0671	right	24	24	selected_reference_consistent_prefix	external	1	168	34916438	-	-	-	1	0	5.8182921848275697	15	-1.2535938957946697	750	0
+seed_f00881e5a59e1c4e	hit_0672	right	24	24	selected_reference_consistent_prefix	external	1	168	34916438	-	-	-	1	0	5.8182921848275697	15	-1.2535938957946697	750	0
+seed_f00881e5a59e1c4e	hit_0672	right	100	100	selected_reference_consistent_prefix	external	1	222	917760071	-	-	-	1	0	5.0423114734622532	15	-1.2535938957946697	750	10
+seed_f00881e5a59e1c4e	hit_0672	right	250	250	selected_reference_consistent_prefix	external	1	155	474438534	474438533	364571258	13	57	24.784675165150823	0.50108283502024609			750	30
+seed_f00881e5a59e1c4e	hit_0673	right	24	24	selected_reference_consistent_prefix	external	1	168	34916438	-	-	-	1	0	5.8182921848275697	15	-1.2535938957946697	750	0
+seed_bdf0cbd0c80d2f18	hit_0720	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	hit_0720	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	0
+seed_bdf0cbd0c80d2f18	hit_0720	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	30
+seed_bdf0cbd0c80d2f18	hit_0721	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	20
+seed_c35af5b66b335ecd	hit_0755	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	39
+seed_c35af5b66b335ecd	hit_0755	left	73	73	reject:source_array_context	array	3	24	723625006	76289134	76289134	62	0	0	3.4020416745827111			750	289
+seed_c35af5b66b335ecd	hit_0755	right	24	24	selected_reference_consistent_prefix	pending	1											750	20
+seed_c35af5b66b335ecd	hit_0755	right	100	100	reject:source_array_context	array	3	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	390
+seed_c35af5b66b335ecd	hit_0755	right	250	250	reject:source_array_context	array	3	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	480
+seed_c35af5b66b335ecd	hit_0755	right	500	500	reject:source_array_context	array	3	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	520
+seed_c35af5b66b335ecd	hit_0755	right	750	750	selected_reference_consistent_prefix	array	3	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	559
+seed_c35af5b66b335ecd	hit_0756	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	39
+seed_c35af5b66b335ecd	hit_0756	left	100	100	reject:source_array_context	array	5	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	425
+seed_c35af5b66b335ecd	hit_0756	left	250	250	reject:source_array_context	array	6	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	940
+seed_c35af5b66b335ecd	hit_0756	left	500	500	reject:source_array_context	array	6	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	1030
+seed_c35af5b66b335ecd	hit_0756	left	750	752	reject:source_array_context	array	6	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	1129
+seed_c35af5b66b335ecd	hit_0756	right	24	24	candidate_ranked_below_selected	pending	2	94	151634210	-	-	-	1	0	6.4928362967937012	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0756	right	60	60	reject:source_array_context	array	3	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	225
+seed_c35af5b66b335ecd	hit_0757	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	39
+seed_c35af5b66b335ecd	hit_0757	left	100	100	reject:source_array_context	array	3	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	310
+seed_c35af5b66b335ecd	hit_0757	left	250	250	reject:source_array_context	array	3	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	380
+seed_c35af5b66b335ecd	hit_0757	left	500	500	selected_reference_consistent_prefix	array	3	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	440
+seed_c35af5b66b335ecd	hit_0757	left	750	752	selected_reference_consistent_prefix	array	3	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	529
+seed_c35af5b66b335ecd	hit_0757	right	24	24	beam_pruned:36	pending	1	60	180600682	-	-	-	71	0	7.836940827465404			750	40
+seed_c35af5b66b335ecd	hit_0757	right	100	100	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	439
+seed_c35af5b66b335ecd	hit_0757	right	120	120	reject:source_array_context	array	4	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	549
+seed_c35af5b66b335ecd	hit_0758	left	250	265	selected_reference_consistent_prefix	external	1	750	149908983	-	-	-	33	0	1.2082396751253341	31	-0.19831251166276659	750	225
+seed_c35af5b66b335ecd	hit_0758	left	500	516	selected_reference_consistent_prefix	external	1									31	-0.19831251166276659	750	324
+seed_c35af5b66b335ecd	hit_0758	left	750	767	selected_reference_consistent_prefix	external	1	750	15844031	-	-	-	32	0	0.42612234835090579			750	514
+seed_c35af5b66b335ecd	hit_0758	right	24	24	beam_pruned:36	pending	1	60	180600682	-	-	-	71	0	7.836940827465404			750	30
+seed_c35af5b66b335ecd	hit_0758	right	100	100	reject:source_array_context	array	4	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	420
+seed_c35af5b66b335ecd	hit_0758	right	165	165	reject:source_array_context	array	5	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	724
+seed_c35af5b66b335ecd	hit_0759	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	39
+seed_c35af5b66b335ecd	hit_0759	left	100	100	reject:source_array_context	array	3	25	76289133	244348363	244348363	24	0	0	3.0516917689466574			750	406
+seed_c35af5b66b335ecd	hit_0759	left	103	103	reject:source_array_context	array	3	25	76289133	244348363	244348363	24	0	0	3.0516917689466574			750	426
+seed_c35af5b66b335ecd	hit_0759	right	24	24	beam_pruned:36	pending	1	60	180600682	-	-	-	71	0	7.836940827465404			750	30
+seed_c35af5b66b335ecd	hit_0759	right	100	100	reject:source_array_context	array	2	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	150
+seed_c35af5b66b335ecd	hit_0759	right	250	250	selected_reference_consistent_prefix	array	2	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	180
+seed_c35af5b66b335ecd	hit_0759	right	500	500	selected_reference_consistent_prefix	array	2	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	220
+seed_c35af5b66b335ecd	hit_0759	right	750	750	selected_reference_consistent_prefix	array	2	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	269
+seed_c35af5b66b335ecd	hit_0760	left	13	13	selected_reference_consistent_prefix	pending	1	62	85608364	-	-	-	55	0	7.9562040163837873	31	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0760	right	24	24	candidate_ranked_below_selected	pending	2	94	151634210	-	-	-	1	0	6.4928362967937012	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0760	right	100	100	reject:source_array_context	array	3	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	427
+seed_c35af5b66b335ecd	hit_0760	right	250	250	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	1050
+seed_c35af5b66b335ecd	hit_0760	right	500	500	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	1110
+seed_c35af5b66b335ecd	hit_0760	right	750	750	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	1130
+seed_c35af5b66b335ecd	hit_0761	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0761	left	100	100	reject:source_array_context	array	3	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	445
+seed_c35af5b66b335ecd	hit_0761	left	250	250	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1132
+seed_c35af5b66b335ecd	hit_0761	left	500	500	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1460
+seed_c35af5b66b335ecd	hit_0761	left	750	752	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1569
+seed_c35af5b66b335ecd	hit_0761	right	15	15	selected_reference_consistent_prefix	pending	1	60	180600682	-	-	-	71	0	7.836940827465404	30	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0762	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0762	left	100	100	reject:source_array_context	array	3	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	436
+seed_c35af5b66b335ecd	hit_0762	left	250	250	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1124
+seed_c35af5b66b335ecd	hit_0762	left	500	501	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1319
+seed_c35af5b66b335ecd	hit_0762	left	750	752	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1419
+seed_c35af5b66b335ecd	hit_0762	right	24	24	beam_pruned:32	pending	1	60	180600682	-	-	-	71	0	7.6068423849512925			750	60
+seed_c35af5b66b335ecd	hit_0762	right	30	30	reject:source_array_context	array	1	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	98
+seed_c35af5b66b335ecd	hit_0763	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0763	left	100	100	reject:source_array_context	array	5	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	436
+seed_c35af5b66b335ecd	hit_0763	left	250	250	reject:source_array_context	array	7	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	1080
+seed_c35af5b66b335ecd	hit_0763	left	500	500	reject:source_array_context	array	7	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	1180
+seed_c35af5b66b335ecd	hit_0763	left	750	752	reject:source_array_context	array	7	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	1279
+seed_c35af5b66b335ecd	hit_0763	right	24	24	candidate_ranked_below_selected	pending	2	94	151634210	-	-	-	1	0	6.4928362967937012	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0763	right	45	45	reject:source_array_context	array	2	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	154
+seed_c35af5b66b335ecd	hit_0764	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0764	left	100	100	reject:source_array_context	array	4	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	406
+seed_c35af5b66b335ecd	hit_0764	left	250	250	reject:source_array_context	array	4	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	510
+seed_c35af5b66b335ecd	hit_0764	left	500	500	reject:source_array_context	array	4	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	580
+seed_c35af5b66b335ecd	hit_0764	left	750	752	selected_reference_consistent_prefix	array	4	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	679
+seed_c35af5b66b335ecd	hit_0764	right	24	24	beam_pruned:36	pending	1	60	180600682	-	-	-	71	0	7.836940827465404			750	30
+seed_c35af5b66b335ecd	hit_0764	right	100	100	reject:source_array_context	array	4	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	438
+seed_c35af5b66b335ecd	hit_0764	right	105	105	reject:source_array_context	array	4	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	470
+seed_c35af5b66b335ecd	hit_0765	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0765	left	43	43	reject:source_array_context	array	1	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	148
+seed_c35af5b66b335ecd	hit_0765	right	24	24	selected_reference_consistent_prefix	pending	1											750	10
+seed_c35af5b66b335ecd	hit_0765	right	100	100	reject:source_array_context	array	4	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	398
+seed_c35af5b66b335ecd	hit_0765	right	250	250	reject:source_array_context	array	4	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	750
+seed_c35af5b66b335ecd	hit_0765	right	500	500	reject:source_array_context	array	4	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	820
+seed_c35af5b66b335ecd	hit_0765	right	750	749	reject:source_array_context	array	4	27	370366154	370366154	565216817	39	0	0	3.0833742869119107			750	850
+seed_c35af5b66b335ecd	hit_0766	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0766	left	28	28	reject:source_array_context	array	2	25	202331541	682336616	682336616	1	0	0	5.3468431363796594			750	78
+seed_c35af5b66b335ecd	hit_0766	right	24	24	beam_pruned:32	pending	1	60	180600682	-	-	-	71	0	7.6068423849512925			750	60
+seed_c35af5b66b335ecd	hit_0766	right	100	100	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	447
+seed_c35af5b66b335ecd	hit_0766	right	250	250	reject:source_array_context	array	4	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	900
+seed_c35af5b66b335ecd	hit_0766	right	500	500	reject:source_array_context	array	4	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	960
+seed_c35af5b66b335ecd	hit_0766	right	750	750	reject:source_array_context	array	4	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	980
+seed_c35af5b66b335ecd	hit_0767	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	29
+seed_c35af5b66b335ecd	hit_0767	left	100	100	reject:source_array_context	array	5	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	415
+seed_c35af5b66b335ecd	hit_0767	left	250	250	reject:source_array_context	array	5	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	800
+seed_c35af5b66b335ecd	hit_0767	left	500	500	reject:source_array_context	array	5	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	880
+seed_c35af5b66b335ecd	hit_0767	left	750	752	reject:source_array_context	array	5	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	979
+seed_c35af5b66b335ecd	hit_0767	right	24	24	candidate_ranked_below_selected	pending	2	94	151634210	-	-	-	1	0	6.4928362967937012	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0767	right	75	75	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	294
+seed_c35af5b66b335ecd	hit_0768	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	49
+seed_c35af5b66b335ecd	hit_0768	left	100	100	reject:source_array_context	array	3	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	407
+seed_c35af5b66b335ecd	hit_0768	left	250	250	reject:source_array_context	array	3	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	650
+seed_c35af5b66b335ecd	hit_0768	left	500	500	reject:source_array_context	array	3	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	730
+seed_c35af5b66b335ecd	hit_0768	left	750	752	reject:source_array_context	array	3	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	829
+seed_c35af5b66b335ecd	hit_0768	right	24	24	selected_reference_consistent_prefix	pending	1	94	151634210	-	-	-	1	0	6.3850618954030463	30	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0768	right	90	90	reject:source_array_context	array	4	26	500958504	500958504	370366315	83	0	0	0.96231574638971817			750	348
+seed_c35af5b66b335ecd	hit_0769	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	29
+seed_c35af5b66b335ecd	hit_0769	left	100	100	reject:source_array_context	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	160
+seed_c35af5b66b335ecd	hit_0769	left	250	250	selected_reference_consistent_prefix	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	240
+seed_c35af5b66b335ecd	hit_0769	left	500	500	selected_reference_consistent_prefix	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	290
+seed_c35af5b66b335ecd	hit_0769	left	750	752	selected_reference_consistent_prefix	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	379
+seed_c35af5b66b335ecd	hit_0769	right	24	24	witness_ends_before_source_context_resolved	pending	1											750	50
+seed_c35af5b66b335ecd	hit_0769	right	100	100	reject:source_array_context	array	3	27	370366155	370366155	565216818	6	0	0	2.7874562318870097			750	448
+seed_c35af5b66b335ecd	hit_0769	right	135	135	reject:source_array_context	array	5	27	370366155	370366155	565216818	6	0	0	2.7874562318870097			750	622
+seed_c35af5b66b335ecd	hit_0770	left	24	24	selected_reference_consistent_prefix	external	1	146	496048225	-	-	-	1	0	4.7906823730064625	31	-0.19831251166276659	750	10
+seed_c35af5b66b335ecd	hit_0770	left	100	100	selected_reference_consistent_prefix	external	1	215	932403241	-	-	-	29	0	3.4280017819463726	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0770	left	250	250	selected_reference_consistent_prefix	external	1	750	149908983	-	-	-	33	0	1.2082396751253341	31	-0.19831251166276659	750	100
+seed_c35af5b66b335ecd	hit_0770	left	500	500	selected_reference_consistent_prefix	external	1									31	-0.19831251166276659	750	150
+seed_c35af5b66b335ecd	hit_0770	left	750	752	selected_reference_consistent_prefix	external	1	750	15844031	-	-	-	32	0	0.42612234835090579			750	249
+seed_c35af5b66b335ecd	hit_0770	right	24	24	selected_reference_consistent_prefix	pending	1	94	151634210	-	-	-	1	0	6.3850618954030463	30	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0770	right	100	100	reject:source_array_context	array	3	26	500958504	500958504	370366315	83	0	0	0.96231574638971817			750	388
+seed_c35af5b66b335ecd	hit_0770	right	150	150	reject:source_array_context	array	5	26	500958504	500958504	370366315	83	0	0	0.96231574638971817			750	640
+seed_c35af5b66b335ecd	hit_0771	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	29
+seed_c35af5b66b335ecd	hit_0771	left	100	100	reject:source_array_context	array	4	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	384
+seed_c35af5b66b335ecd	hit_0771	left	133	133	reject:source_array_context	array	5	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	544
+seed_c35af5b66b335ecd	hit_0771	right	24	24	candidate_ranked_below_selected	external	1	113	61377250	-	-	-	1	0	4.9822896723564467	29	-0.19399177840126383	750	127
+seed_c35af5b66b335ecd	hit_0771	right	100	100	candidate_ranked_below_selected	external	1	347	151480244	-	-	-	29	0	2.2200506658858581	29	-0.19399177840126383	750	135
+seed_c35af5b66b335ecd	hit_0771	right	250	250	selected_reference_consistent_prefix	external	1	347	151480244	-	-	-	29	0	2.2200506658858581	29	-0.19399177840126383	750	185
+seed_c35af5b66b335ecd	hit_0771	right	500	500	selected_reference_consistent_prefix	external	1	750	366833320	-	-	-	15	0	1.0522284125067387	26	-0.19149686986000286	750	205
+seed_c35af5b66b335ecd	hit_0771	right	750	750	selected_reference_consistent_prefix	external	1									23	-0.14079632922073229	750	404
+seed_c35af5b66b335ecd	hit_0772	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	49
+seed_c35af5b66b335ecd	hit_0772	left	100	100	reject:source_array_context	array	3	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	405
+seed_c35af5b66b335ecd	hit_0772	left	118	118	reject:source_array_context	array	4	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	497
+seed_c35af5b66b335ecd	hit_0772	right	24	24	selected_reference_consistent_prefix	pending	1	94	151634210	-	-	-	1	0	6.3850618954030463	30	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0772	right	100	100	selected_reference_consistent_prefix	external	1	352	497027118	-	-	-	1	0	2.2268483630588154	30	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0772	right	250	250	selected_reference_consistent_prefix	external	1	352	497027118	-	-	-	1	0	2.2268483630588154	30	-0.19831251166276659	750	40
+seed_c35af5b66b335ecd	hit_0772	right	500	500	selected_reference_consistent_prefix	external	1	750	151594779	-	-	-	14	0	1.1253347885427738	24	-0.19149686986000286	750	70
+seed_c35af5b66b335ecd	hit_0772	right	750	750	selected_reference_consistent_prefix	external	1									16	-0.1093923891234759	750	119
+seed_c35af5b66b335ecd	hit_0773	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0773	left	100	100	reject:source_array_context	array	3	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	455
+seed_c35af5b66b335ecd	hit_0773	left	250	250	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1145
+seed_c35af5b66b335ecd	hit_0773	left	500	500	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1600
+seed_c35af5b66b335ecd	hit_0773	left	750	752	reject:source_array_context	array	6	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	1709
+seed_c35af5b66b335ecd	hit_0774	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	49
+seed_c35af5b66b335ecd	hit_0774	left	88	88	reject:source_array_context	array	3	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	367
+seed_c35af5b66b335ecd	hit_0774	right	24	24	beam_pruned:36	pending	1	60	180600682	-	-	-	71	0	7.836940827465404			750	40
+seed_c35af5b66b335ecd	hit_0774	right	100	100	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	300
+seed_c35af5b66b335ecd	hit_0774	right	250	250	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	330
+seed_c35af5b66b335ecd	hit_0774	right	500	500	selected_reference_consistent_prefix	array	3	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	370
+seed_c35af5b66b335ecd	hit_0774	right	750	750	selected_reference_consistent_prefix	array	3	29	610056258	610056258	861044798	166	0	0	0.90422186765407109			750	419
+seed_c35af5b66b335ecd	hit_0775	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	59
+seed_c35af5b66b335ecd	hit_0775	left	58	58	reject:source_array_context	array	2	24	759715395	202331594	202331594	108	0	0	0.47941873689802261			750	227
+seed_c35af5b66b335ecd	hit_0775	right	24	24	beam_pruned:32	pending	1	60	180600682	-	-	-	71	0	7.6068423849512925			750	50
+seed_c35af5b66b335ecd	hit_0775	right	100	100	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	431
+seed_c35af5b66b335ecd	hit_0775	right	250	250	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	630
+seed_c35af5b66b335ecd	hit_0775	right	500	500	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	670
+seed_c35af5b66b335ecd	hit_0775	right	750	750	selected_reference_consistent_prefix	array	3	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	709
+seed_c35af5b66b335ecd	hit_0776	right	24	24	candidate_ranked_below_selected	pending	2	94	151634210	-	-	-	1	0	6.4928362967937012	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0776	right	100	100	reject:source_array_context	array	3	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	417
+seed_c35af5b66b335ecd	hit_0776	right	250	250	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	1140
+seed_c35af5b66b335ecd	hit_0776	right	500	500	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	1260
+seed_c35af5b66b335ecd	hit_0776	right	750	750	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	1280
+seed_c35af5b66b335ecd	hit_0777	right	24	24	candidate_ranked_below_selected	external	1	113	61377250	-	-	-	1	0	4.9822896723564467	29	-0.19399177840126383	750	127
+seed_c35af5b66b335ecd	hit_0777	right	100	100	candidate_ranked_below_selected	external	1	347	151480244	-	-	-	29	0	2.2200506658858581	29	-0.19399177840126383	750	135
+seed_c35af5b66b335ecd	hit_0777	right	250	250	selected_reference_consistent_prefix	external	1	347	151480244	-	-	-	29	0	2.2200506658858581	29	-0.19399177840126383	750	135
+seed_c35af5b66b335ecd	hit_0777	right	500	500	selected_reference_consistent_prefix	external	1	750	366833320	-	-	-	15	0	1.0522284125067387	26	-0.19149686986000286	750	135
+seed_c35af5b66b335ecd	hit_0777	right	750	750	selected_reference_consistent_prefix	external	1									23	-0.14079632922073229	750	285
+seed_c35af5b66b335ecd	hit_0778	left	24	24	witness_ends_before_source_context_resolved	pending	2											750	39
+seed_c35af5b66b335ecd	hit_0778	left	100	100	reject:source_array_context	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	150
+seed_c35af5b66b335ecd	hit_0778	left	250	250	selected_reference_consistent_prefix	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	150
+seed_c35af5b66b335ecd	hit_0778	left	500	500	selected_reference_consistent_prefix	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	150
+seed_c35af5b66b335ecd	hit_0778	left	750	750	selected_reference_consistent_prefix	array	2	27	861044798	610056258	610056258	166	0	0	3.549126693324582			750	150
+seed_c35af5b66b335ecd	hit_0778	right	5	5	candidate_ranked_below_selected	pending	1	60	180600682	-	-	-	71	0	7.6068423849512925	31	-0.19831251166276659	750	20
+seed_c35af5b66b335ecd	hit_0779	left	24	24	selected_reference_consistent_prefix	external	1	146	496048225	-	-	-	1	0	4.7906823730064625	31	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0779	left	100	100	selected_reference_consistent_prefix	external	1	215	932403241	-	-	-	29	0	3.4280017819463726	31	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0779	left	250	250	selected_reference_consistent_prefix	external	1	750	149908983	-	-	-	33	0	1.2082396751253341	31	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0779	left	500	500	selected_reference_consistent_prefix	external	1									31	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0779	left	750	750	selected_reference_consistent_prefix	external	1									23	-0.14079632922073229	750	0
+seed_c35af5b66b335ecd	hit_0779	right	20	20	candidate_ranked_below_selected	pending	1	94	151634210	-	-	-	1	0	6.4928362967937012	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0780	left	250	265	selected_reference_consistent_prefix	external	1	750	149908983	-	-	-	33	0	1.2082396751253341	31	-0.19831251166276659	750	135
+seed_c35af5b66b335ecd	hit_0780	left	500	515	selected_reference_consistent_prefix	external	1									23	-0.14079632922073229	750	135
+seed_c35af5b66b335ecd	hit_0780	left	750	765	selected_reference_consistent_prefix	external	1	750	149908983	-	-	-	33	0	0.20741877611110712			750	285
+seed_c35af5b66b335ecd	hit_0780	right	24	24	selected_reference_consistent_prefix	pending	1	94	151634210	-	-	-	1	0	6.3850618954030463	30	-0.19831251166276659	750	0
+seed_c35af5b66b335ecd	hit_0780	right	35	35	reject:source_array_context	array	1	26	500958504	500958504	370366315	83	0	0	0.96231574638971817			750	67
+seed_c35af5b66b335ecd	hit_0783	left	24	24	witness_ends_before_source_context_resolved	pending	1											750	78
+seed_c35af5b66b335ecd	hit_0783	right	24	24	beam_pruned:32	pending	1	60	180600682	-	-	-	71	0	7.6068423849512925			750	70
+seed_c35af5b66b335ecd	hit_0783	right	100	100	reject:source_array_context	array	3	29	610056258	610056258	861044798	166	0	0	1.0704494784676606			750	462
+seed_c35af5b66b335ecd	hit_0784	right	24	24	selected_reference_consistent_prefix	pending	1											750	20
+seed_c35af5b66b335ecd	hit_0785	right	24	24	beam_pruned:32	pending	1	60	180600682	-	-	-	71	0	7.6068423849512925			750	70
+seed_c35af5b66b335ecd	hit_0787	right	24	24	candidate_ranked_below_selected	pending	2	94	151634210	-	-	-	1	0	6.4928362967937012	31	-0.19831251166276659	750	30
+seed_c35af5b66b335ecd	hit_0787	right	100	100	reject:source_array_context	array	4	26	500958507	500958507	370366317	80	0	0	1.2219182413579401			750	430
+seed_c35af5b66b335ecd	hit_0788	right	24	24	witness_ends_before_source_context_resolved	pending	1											750	50
+seed_c35af5b66b335ecd	hit_0788	right	100	100	reject:source_array_context	array	3	27	370366155	370366155	565216818	6	0	0	2.7874562318870097			750	442
+seed_0eb07015d23769af	hit_0856	left	24	24	selected_reference_consistent_prefix	external	1	162	85847327	-	-	-	1	0	5.9375581586843831	31	-2.374216924601205	176	0
+seed_0eb07015d23769af	hit_0856	right	24	24	selected_reference_consistent_prefix	external	1	532	286702150	-	-	-	1	0	1.1449020221144277	31	-2.374216924601205	213	0
+seed_0eb07015d23769af	hit_0856	right	100	100	selected_reference_consistent_prefix	external	1	532	286702150	-	-	-	1	0	1.1449020221144277	31	-2.374216924601205	213	0
+seed_0eb07015d23769af	hit_0856	right	250	250	candidate_ranked_below_selected	external	1	577	606716386	-	-	-	2	0	1.0749706675320692	31	-2.374216924601205	213	380
+seed_0eb07015d23769af	hit_0857	left	24	24	selected_reference_consistent_prefix	external	1	162	85847327	-	-	-	1	0	5.9375581586843831	31	-2.374216924601205	176	0
+seed_0eb07015d23769af	hit_0857	left	100	100	selected_reference_consistent_prefix	external	1	216	543118943	-	-	-	1	0	5.1713053789353003	31	-2.374216924601205	176	20
+seed_0eb07015d23769af	hit_0857	left	250	250	reject:coverage_break	external	1	149	202480052	682831037	682831037	13	57	24.784675165150823	0.50819361635466131			176	859
+seed_0eb07015d23769af	hit_0857	right	24	24	selected_reference_consistent_prefix	external	1	532	286702150	-	-	-	1	0	1.1449020221144277	31	-2.374216924601205	213	0
+seed_0eb07015d23769af	hit_0858	left	24	24	selected_reference_consistent_prefix	external	1	162	85847327	-	-	-	1	0	5.9375581586843831	31	-2.374216924601205	176	0
+seed_0eb07015d23769af	hit_0858	right	24	24	beam_pruned:32	external	1	192	141415881	-	-	-	8	0	1.9555250862215021			213	80
+seed_0eb07015d23769af	hit_0859	left	24	24	selected_reference_consistent_prefix	external	1	162	85847327	-	-	-	1	0	5.9375581586843831	31	-2.374216924601205	176	0
+seed_0eb07015d23769af	hit_0859	right	24	24	selected_reference_consistent_prefix	external	1	532	286702150	-	-	-	1	0	1.1449020221144277	31	-2.374216924601205	213	0
+seed_0eb07015d23769af	hit_0859	right	100	100	selected_reference_consistent_prefix	external	1	532	286702150	-	-	-	1	0	1.1449020221144277	31	-2.374216924601205	213	0
+seed_0eb07015d23769af	hit_0860	left	24	24	selected_reference_consistent_prefix	external	1	162	85847327	-	-	-	1	0	5.9375581586843831	31	-2.374216924601205	176	0
+seed_0eb07015d23769af	hit_0860	right	24	24	beam_pruned:32	external	1	192	141415881	-	-	-	8	0	1.9555250862215021			213	80
+seed_0eb07015d23769af	hit_0860	right	100	100	selected_reference_consistent_prefix	external	1	532	286702150	-	-	-	1	0	1.1449020221144277	31	-2.374216924601205	213	90
+seed_5f99a193e6244b29	hit_0923	left	24	24	terminal_pruned:dead_end	external	1	31	501767595	-	-	-	1	0	7.1383876377078455			750	30
+seed_5f99a193e6244b29	hit_0923	left	100	100	reject:coverage_break	external	2	39	857796960	596851170	596851170	60	21	23.98932746992066	1.189256206716008			750	169
+seed_5f99a193e6244b29	hit_0923	right	70	70	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	700
+seed_5f99a193e6244b29	hit_0924	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0924	right	145	145	reject:source_array_context	array	3	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1450
+seed_5f99a193e6244b29	hit_0925	left	20	20	witness_ends_before_source_context_resolved	pending	1											750	49
+seed_5f99a193e6244b29	hit_0925	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0926	left	5	5	selected_reference_consistent_prefix	pending	1	37	473615375	-	-	-	1	0	6.0376427956756435	31	-1.2050485523797669	750	0
+seed_5f99a193e6244b29	hit_0926	right	55	55	reject:source_array_context	array	1	27	133524939	133524939	513967230	12	0	0	3.1181463014692876			0	550
+seed_5f99a193e6244b29	hit_0927	left	24	24	selected_reference_consistent_prefix	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	10
+seed_5f99a193e6244b29	hit_0927	left	100	100	reject:coverage_break	external	1	49	122298196	404965441	404965442	78	13	20.358846535002485	1.0152935649730161			750	189
+seed_5f99a193e6244b29	hit_0927	left	250	250	reject:coverage_break	external	4	49	122298196	404965441	404965442	78	13	20.358846535002485	1.0152935649730161			750	387
+seed_5f99a193e6244b29	hit_0927	left	500	500	selected_reference_consistent_prefix	external	4	49	122298196	404965441	404965442	78	13	20.358846535002485	1.0152935649730161			750	397
+seed_5f99a193e6244b29	hit_0927	right	80	80	reject:source_array_context	array	1	27	133524939	133524939	513967230	12	0	0	3.1181463014692876			0	800
+seed_5f99a193e6244b29	hit_0928	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	0
+seed_5f99a193e6244b29	hit_0928	left	100	100	selected_reference_consistent_prefix	external	2	54	857796960	596851170	596851170	60	21	23.98932746992066	0.5758147207463048			750	69
+seed_5f99a193e6244b29	hit_0928	left	250	250	reject:coverage_break	external	5	54	857796960	596851170	596851170	60	21	23.98932746992066	0.5758147207463048			750	477
+seed_5f99a193e6244b29	hit_0928	left	500	500	reject:coverage_break	external	5	54	857796960	596851170	596851170	60	21	23.98932746992066	0.5758147207463048			750	940
+seed_5f99a193e6244b29	hit_0928	right	5	5	joined_shortlist_loss	pending	1											0	50
+seed_5f99a193e6244b29	hit_0929	left	20	20	selected_reference_consistent_prefix	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_0930	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0930	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0930	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0931	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	59
+seed_5f99a193e6244b29	hit_0931	left	36	36	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	69
+seed_5f99a193e6244b29	hit_0931	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0931	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0931	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0932	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	39
+seed_5f99a193e6244b29	hit_0932	left	51	51	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	59
+seed_5f99a193e6244b29	hit_0932	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0932	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0933	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0933	left	66	66	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	88
+seed_5f99a193e6244b29	hit_0933	right	250	265	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0934	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	0
+seed_5f99a193e6244b29	hit_0934	left	100	100	candidate_ranked_below_selected	external	1	534	587590758	-	-	-	1	0	0.96726624007892348	26	-1.2016305614032472	750	227
+seed_5f99a193e6244b29	hit_0934	left	250	250	candidate_ranked_below_selected	external	1	534	587590758	-	-	-	1	0	0.96726624007892348	26	-1.2016305614032472	750	958
+seed_5f99a193e6244b29	hit_0934	left	500	493	beam_pruned:32	external	1	534	587590758	-	-	-	1	0	0.96726624007892348			750	1362
+seed_5f99a193e6244b29	hit_0934	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0934	right	230	230	reject:source_array_context	array	4	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2300
+seed_5f99a193e6244b29	hit_0935	left	100	100	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	238
+seed_5f99a193e6244b29	hit_0935	left	250	250	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	1002
+seed_5f99a193e6244b29	hit_0935	left	500	502	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	1139
+seed_5f99a193e6244b29	hit_0935	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0935	right	215	215	reject:source_array_context	array	3	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2150
+seed_5f99a193e6244b29	hit_0936	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	39
+seed_5f99a193e6244b29	hit_0936	left	100	100	beam_pruned:40	external	2	100	596873907	-	-	-	38	0	0.84937520952666179			750	169
+seed_5f99a193e6244b29	hit_0936	left	250	250	beam_pruned:41	external	2	112	585275303	-	-	-	17	0	0.85917534969569853			750	724
+seed_5f99a193e6244b29	hit_0936	left	500	500	beam_pruned:41	external	2	112	585275303	-	-	-	17	0	0.85917534969569853			750	744
+seed_5f99a193e6244b29	hit_0936	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0936	right	170	170	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1700
+seed_5f99a193e6244b29	hit_0937	left	24	24	reject:source_array_context	array	1	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	50
+seed_5f99a193e6244b29	hit_0937	left	100	100	reject:source_array_context	array	3	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	188
+seed_5f99a193e6244b29	hit_0937	left	250	250	reject:source_array_context	array	4	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	437
+seed_5f99a193e6244b29	hit_0937	left	500	500	selected_reference_consistent_prefix	array	4	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	447
+seed_5f99a193e6244b29	hit_0937	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0937	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0937	right	125	125	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1250
+seed_5f99a193e6244b29	hit_0938	left	24	24	candidate_ranked_below_selected	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	30
+seed_5f99a193e6244b29	hit_0938	left	100	100	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	189
+seed_5f99a193e6244b29	hit_0938	left	250	250	reject:source_array_context	array	4	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	537
+seed_5f99a193e6244b29	hit_0938	left	500	500	reject:source_array_context	array	4	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	547
+seed_5f99a193e6244b29	hit_0939	left	11	11	witness_ends_before_source_context_resolved	pending	1											750	39
+seed_5f99a193e6244b29	hit_0939	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0939	right	46	46	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	460
+seed_5f99a193e6244b29	hit_0940	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	39
+seed_5f99a193e6244b29	hit_0940	left	26	26	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0941	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0941	left	41	41	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	59
+seed_5f99a193e6244b29	hit_0942	left	100	100	beam_pruned:39	external	3	46	577916119	-	-	-	1	0	4.3660481963955293			750	190
+seed_5f99a193e6244b29	hit_0942	left	146	146	beam_pruned:39	external	3	46	577916119	-	-	-	1	0	4.3660481963955293			750	260
+seed_5f99a193e6244b29	hit_0942	right	250	250	reject:source_array_context	array	1	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	2500
+seed_5f99a193e6244b29	hit_0944	left	100	100	reject:coverage_break	external	2	39	857796960	596851170	596851170	60	21	23.98932746992066	1.189256206716008			750	180
+seed_5f99a193e6244b29	hit_0944	left	131	131	reject:coverage_break	external	3	39	857796960	596851170	596851170	60	21	23.98932746992066	1.189256206716008			750	210
+seed_5f99a193e6244b29	hit_0944	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0945	left	56	56	reject:coverage_break	external	1	39	857796960	596851170	596851170	60	21	23.98932746992066	1.189256206716008			750	80
+seed_5f99a193e6244b29	hit_0945	right	100	98	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0945	right	250	250	reject:source_array_context	array	3	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0947	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	40
+seed_5f99a193e6244b29	hit_0947	left	100	100	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	160
+seed_5f99a193e6244b29	hit_0947	left	138	138	reject:source_array_context	array	3	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	200
+seed_5f99a193e6244b29	hit_0947	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0947	right	228	228	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2280
+seed_5f99a193e6244b29	hit_0948	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0948	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0948	right	348	348	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	3480
+seed_5f99a193e6244b29	hit_0949	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0949	right	58	58	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	580
+seed_5f99a193e6244b29	hit_0950	right	73	73	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	730
+seed_5f99a193e6244b29	hit_0951	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0951	left	100	100	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	337
+seed_5f99a193e6244b29	hit_0951	left	250	250	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	1029
+seed_5f99a193e6244b29	hit_0951	left	500	500	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	1350
+seed_5f99a193e6244b29	hit_0951	left	750	750	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	2850
+seed_5f99a193e6244b29	hit_0951	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0951	right	100	100	reject:source_array_context	array	3	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0951	right	122	122	reject:source_array_context	array	3	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1220
+seed_5f99a193e6244b29	hit_0952	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0952	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	139
+seed_5f99a193e6244b29	hit_0952	left	250	250	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	590
+seed_5f99a193e6244b29	hit_0952	left	500	500	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	590
+seed_5f99a193e6244b29	hit_0952	left	750	750	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	1190
+seed_5f99a193e6244b29	hit_0952	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0952	right	32	32	reject:source_array_context	array	2	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	320
+seed_5f99a193e6244b29	hit_0953	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0953	left	100	100	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	139
+seed_5f99a193e6244b29	hit_0953	left	250	250	reject:source_array_context	array	4	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	399
+seed_5f99a193e6244b29	hit_0953	left	500	500	selected_reference_consistent_prefix	array	4	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	399
+seed_5f99a193e6244b29	hit_0953	left	750	750	selected_reference_consistent_prefix	array	4	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	699
+seed_5f99a193e6244b29	hit_0953	right	2	2	witness_ends_before_source_context_resolved	pending	1											0	20
+seed_5f99a193e6244b29	hit_0954	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	39
+seed_5f99a193e6244b29	hit_0954	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	218
+seed_5f99a193e6244b29	hit_0954	left	250	250	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	982
+seed_5f99a193e6244b29	hit_0954	left	500	500	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	1080
+seed_5f99a193e6244b29	hit_0954	left	750	750	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	2280
+seed_5f99a193e6244b29	hit_0954	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0954	right	92	92	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	920
+seed_5f99a193e6244b29	hit_0955	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0955	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	189
+seed_5f99a193e6244b29	hit_0955	left	250	250	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	810
+seed_5f99a193e6244b29	hit_0955	left	500	500	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	810
+seed_5f99a193e6244b29	hit_0955	left	750	750	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	1710
+seed_5f99a193e6244b29	hit_0955	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0955	right	62	62	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	620
+seed_5f99a193e6244b29	hit_0956	left	6	6	selected_reference_consistent_prefix	pending	1	37	473615375	-	-	-	1	0	6.0376427956756435	31	-1.2050485523797669	750	0
+seed_5f99a193e6244b29	hit_0956	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0956	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0956	right	500	500	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	5000
+seed_5f99a193e6244b29	hit_0956	right	750	750	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	7500
+seed_5f99a193e6244b29	hit_0957	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	40
+seed_5f99a193e6244b29	hit_0957	left	100	100	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	179
+seed_5f99a193e6244b29	hit_0957	right	250	265	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0958	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0958	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0962	left	24	24	candidate_ranked_below_selected	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	30
+seed_5f99a193e6244b29	hit_0962	left	100	100	beam_pruned:36	external	2	46	577881145	-	-	-	1	0	4.1728221523815821			750	140
+seed_5f99a193e6244b29	hit_0962	right	100	100	reject:source_array_context	array	2	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	1000
+seed_5f99a193e6244b29	hit_0962	right	121	121	reject:source_array_context	array	2	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	1210
+seed_5f99a193e6244b29	hit_0963	left	24	24	candidate_ranked_below_selected	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	30
+seed_5f99a193e6244b29	hit_0963	left	71	72	beam_pruned:36	external	1	41	513861320	-	-	-	6	0	4.6372630034996485			750	119
+seed_5f99a193e6244b29	hit_0963	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0963	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0964	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_0964	left	100	101	reject:coverage_break	external	2	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	150
+seed_5f99a193e6244b29	hit_0964	left	161	162	reject:coverage_break	external	2	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	240
+seed_5f99a193e6244b29	hit_0964	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0964	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0965	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	60
+seed_5f99a193e6244b29	hit_0965	left	250	250	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	1040
+seed_5f99a193e6244b29	hit_0965	left	500	500	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	1334
+seed_5f99a193e6244b29	hit_0965	left	750	750	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	2852
+seed_5f99a193e6244b29	hit_0965	right	100	99	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0965	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0966	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_0966	left	100	99	reject:coverage_break	external	2	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	219
+seed_5f99a193e6244b29	hit_0966	left	250	250	candidate_ranked_below_selected	external	1	548	855519508	-	-	-	1	0	0.92068096067515148	24	-1.1958951179779538	750	983
+seed_5f99a193e6244b29	hit_0966	left	500	500	beam_pruned:33	external	1	548	855519508	-	-	-	1	0	0.92068096067515148			750	1139
+seed_5f99a193e6244b29	hit_0966	left	750	750	beam_pruned:34	external	1	609	108820607	-	-	-	8	0	0.85456972771260564			750	2587
+seed_5f99a193e6244b29	hit_0966	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0966	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0966	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0967	left	24	24	selected_reference_consistent_prefix	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	20
+seed_5f99a193e6244b29	hit_0967	left	100	100	beam_pruned:51	external	2	67	585260335	-	-	-	9	0	1.6549450324399504			750	129
+seed_5f99a193e6244b29	hit_0967	left	250	250	beam_pruned:51	external	3	67	585260335	-	-	-	9	0	1.6549450324399504			750	440
+seed_5f99a193e6244b29	hit_0967	left	500	500	selected_reference_consistent_prefix	external	3	67	585260335	-	-	-	9	0	1.6549450324399504			750	440
+seed_5f99a193e6244b29	hit_0967	left	750	750	beam_pruned:51	external	3	67	585260335	-	-	-	9	0	1.6549450324399504			750	1251
+seed_5f99a193e6244b29	hit_0968	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	49
+seed_5f99a193e6244b29	hit_0968	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0968	right	50	50	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	500
+seed_5f99a193e6244b29	hit_0969	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	68
+seed_5f99a193e6244b29	hit_0969	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0969	right	80	80	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	800
+seed_5f99a193e6244b29	hit_0970	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	59
+seed_5f99a193e6244b29	hit_0970	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	198
+seed_5f99a193e6244b29	hit_0970	right	20	20	witness_ends_before_source_context_resolved	pending	1											0	200
+seed_5f99a193e6244b29	hit_0971	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_0971	left	93	93	beam_pruned:34	external	2	45	389767328	-	-	-	1	0	4.4586937178167219			750	130
+seed_5f99a193e6244b29	hit_0971	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0971	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0972	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0972	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0973	left	24	24	candidate_ranked_below_selected	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	30
+seed_5f99a193e6244b29	hit_0973	left	100	100	beam_pruned:32	external	2	45	389759534	-	-	-	1	0	4.2647500305853789			750	159
+seed_5f99a193e6244b29	hit_0975	left	51	51	beam_pruned:41	external	2	40	596845911	-	-	-	1	0	5.8960528722222394			750	80
+seed_5f99a193e6244b29	hit_0975	right	100	100	reject:source_array_context	array	2	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	1000
+seed_5f99a193e6244b29	hit_0975	right	250	250	reject:source_array_context	array	3	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	2500
+seed_5f99a193e6244b29	hit_0976	left	24	24	reject:source_array_context	array	1	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	40
+seed_5f99a193e6244b29	hit_0976	left	100	100	reject:source_array_context	array	2	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	160
+seed_5f99a193e6244b29	hit_0976	left	111	111	reject:source_array_context	array	4	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	180
+seed_5f99a193e6244b29	hit_0976	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0976	right	100	100	reject:source_array_context	array	1	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	1000
+seed_5f99a193e6244b29	hit_0976	right	250	250	reject:source_array_context	array	1	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	2500
+seed_5f99a193e6244b29	hit_0977	left	24	24	reject:source_array_context	array	1	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	49
+seed_5f99a193e6244b29	hit_0977	left	100	100	reject:source_array_context	array	4	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	189
+seed_5f99a193e6244b29	hit_0977	left	141	141	reject:source_array_context	array	5	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	249
+seed_5f99a193e6244b29	hit_0977	right	250	248	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0978	left	100	100	reject:source_array_context	array	2	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	140
+seed_5f99a193e6244b29	hit_0978	left	250	250	reject:source_array_context	array	2	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	335
+seed_5f99a193e6244b29	hit_0978	left	500	500	selected_reference_consistent_prefix	array	2	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	335
+seed_5f99a193e6244b29	hit_0978	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0978	right	100	100	reject:source_array_context	array	3	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	1000
+seed_5f99a193e6244b29	hit_0978	right	250	250	reject:source_array_context	array	3	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	2500
+seed_5f99a193e6244b29	hit_0979	left	24	24	reject:source_array_context	array	1	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	50
+seed_5f99a193e6244b29	hit_0979	left	100	100	reject:source_array_context	array	3	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	190
+seed_5f99a193e6244b29	hit_0979	left	250	250	reject:source_array_context	array	4	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	629
+seed_5f99a193e6244b29	hit_0979	left	500	500	reject:source_array_context	array	4	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	850
+seed_5f99a193e6244b29	hit_0980	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	40
+seed_5f99a193e6244b29	hit_0980	left	100	100	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	169
+seed_5f99a193e6244b29	hit_0980	right	250	265	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0981	left	100	100	reject:source_array_context	array	2	21	642165489	697192212	697192212	6	0	0	5.5577218972921303			750	140
+seed_5f99a193e6244b29	hit_0981	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0981	right	250	250	reject:source_array_context	array	1	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	2500
+seed_5f99a193e6244b29	hit_0982	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0982	right	154	154	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1540
+seed_5f99a193e6244b29	hit_0983	left	100	100	reject:source_array_context	array	2	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	210
+seed_5f99a193e6244b29	hit_0983	left	172	172	reject:source_array_context	array	4	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	350
+seed_5f99a193e6244b29	hit_0983	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0983	right	250	253	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0984	left	67	67	reject:source_array_context	array	2	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	150
+seed_5f99a193e6244b29	hit_0984	right	100	99	reject:source_array_context	array	2	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	1000
+seed_5f99a193e6244b29	hit_0984	right	250	250	reject:source_array_context	array	3	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	2500
+seed_5f99a193e6244b29	hit_0985	left	24	24	reject:source_array_context	array	1	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	49
+seed_5f99a193e6244b29	hit_0985	left	100	100	reject:source_array_context	array	2	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	189
+seed_5f99a193e6244b29	hit_0985	left	202	202	reject:source_array_context	array	4	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	359
+seed_5f99a193e6244b29	hit_0986	left	24	24	selected_reference_consistent_prefix	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	20
+seed_5f99a193e6244b29	hit_0986	left	100	101	beam_pruned:51	external	2	67	585260335	-	-	-	9	0	1.6549450324399504			750	129
+seed_5f99a193e6244b29	hit_0986	left	250	250	beam_pruned:51	external	4	67	585260335	-	-	-	9	0	1.6549450324399504			750	488
+seed_5f99a193e6244b29	hit_0986	left	500	500	beam_pruned:51	external	4	67	585260335	-	-	-	9	0	1.6549450324399504			750	980
+seed_5f99a193e6244b29	hit_0987	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	10
+seed_5f99a193e6244b29	hit_0987	left	100	100	reject:coverage_break	external	1	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	130
+seed_5f99a193e6244b29	hit_0987	left	250	250	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	219
+seed_5f99a193e6244b29	hit_0987	left	500	500	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	219
+seed_5f99a193e6244b29	hit_0987	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0987	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0987	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0988	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	60
+seed_5f99a193e6244b29	hit_0988	left	100	100	reject:source_array_context	array	2	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	239
+seed_5f99a193e6244b29	hit_0988	left	250	250	reject:source_array_context	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	344
+seed_5f99a193e6244b29	hit_0988	left	500	500	selected_reference_consistent_prefix	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	344
+seed_5f99a193e6244b29	hit_0988	right	100	99	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_0988	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0989	left	20	20	witness_ends_before_source_context_resolved	pending	1											750	30
+seed_5f99a193e6244b29	hit_0990	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_0990	left	100	100	beam_pruned:34	external	3	45	389767328	-	-	-	1	0	4.4586937178167219			750	119
+seed_5f99a193e6244b29	hit_0990	right	46	46	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	460
+seed_5f99a193e6244b29	hit_0991	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	40
+seed_5f99a193e6244b29	hit_0991	left	100	100	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	130
+seed_5f99a193e6244b29	hit_0991	right	1	1	witness_ends_before_source_context_resolved	pending	1											0	10
+seed_5f99a193e6244b29	hit_0992	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_0992	left	100	100	beam_pruned:36	external	2	86	513887983	-	-	-	60	0	0.90645440167328173			750	129
+seed_5f99a193e6244b29	hit_0992	left	250	250	beam_pruned:36	external	2	86	513887983	-	-	-	60	0	0.90645440167328173			750	640
+seed_5f99a193e6244b29	hit_0992	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0992	right	250	265	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0993	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_0993	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_0995	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0996	left	24	24	selected_reference_consistent_prefix	external	1	37	697173247	-	-	-	1	0	6.0764634749954913	22	-1.170231924213327	750	20
+seed_5f99a193e6244b29	hit_0996	left	100	99	beam_pruned:41	external	2	52	585260140	-	-	-	18	0	2.6237036139711303			750	177
+seed_5f99a193e6244b29	hit_0996	right	250	250	reject:source_array_context	array	3	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0997	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0997	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	149
+seed_5f99a193e6244b29	hit_0997	left	250	250	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	518
+seed_5f99a193e6244b29	hit_0997	left	500	500	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	829
+seed_5f99a193e6244b29	hit_0997	left	750	750	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	829
+seed_5f99a193e6244b29	hit_0997	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0997	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0997	right	500	500	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	5000
+seed_5f99a193e6244b29	hit_0997	right	750	750	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	7500
+seed_5f99a193e6244b29	hit_0998	left	24	24	reject:source_array_context	array	1	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	40
+seed_5f99a193e6244b29	hit_0998	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	170
+seed_5f99a193e6244b29	hit_0998	left	250	250	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	547
+seed_5f99a193e6244b29	hit_0998	left	500	500	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	589
+seed_5f99a193e6244b29	hit_0998	left	750	750	selected_reference_consistent_prefix	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	589
+seed_5f99a193e6244b29	hit_0998	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0998	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0998	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0998	right	500	500	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	5000
+seed_5f99a193e6244b29	hit_0998	right	750	750	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	7500
+seed_5f99a193e6244b29	hit_0999	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_0999	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	178
+seed_5f99a193e6244b29	hit_0999	left	250	250	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	349
+seed_5f99a193e6244b29	hit_0999	left	500	500	selected_reference_consistent_prefix	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	349
+seed_5f99a193e6244b29	hit_0999	left	750	750	selected_reference_consistent_prefix	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	349
+seed_5f99a193e6244b29	hit_0999	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_0999	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_0999	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_0999	right	500	500	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	5000
+seed_5f99a193e6244b29	hit_0999	right	750	750	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	7500
+seed_5f99a193e6244b29	hit_1000	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	60
+seed_5f99a193e6244b29	hit_1000	left	100	100	reject:source_array_context	array	2	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	239
+seed_5f99a193e6244b29	hit_1000	left	250	250	reject:source_array_context	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	334
+seed_5f99a193e6244b29	hit_1000	left	500	500	selected_reference_consistent_prefix	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	334
+seed_5f99a193e6244b29	hit_1000	left	750	750	selected_reference_consistent_prefix	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	484
+seed_5f99a193e6244b29	hit_1000	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_1000	right	100	100	reject:source_array_context	array	3	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	1000
+seed_5f99a193e6244b29	hit_1000	right	250	250	reject:source_array_context	array	3	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	2500
+seed_5f99a193e6244b29	hit_1000	right	500	500	reject:source_array_context	array	3	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	5000
+seed_5f99a193e6244b29	hit_1000	right	750	750	reject:source_array_context	array	3	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	7500
+seed_5f99a193e6244b29	hit_1001	left	24	24	reject:source_array_context	array	1	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	40
+seed_5f99a193e6244b29	hit_1001	left	47	47	reject:source_array_context	array	2	22	697139298	927994259	927994259	1	0	0	8.3270635390806422			750	70
+seed_5f99a193e6244b29	hit_1001	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_1001	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_1001	right	500	500	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	5000
+seed_5f99a193e6244b29	hit_1001	right	750	750	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	7500
+seed_5f99a193e6244b29	hit_1002	left	24	24	reject:source_array_context	array	1	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	40
+seed_5f99a193e6244b29	hit_1002	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	170
+seed_5f99a193e6244b29	hit_1002	left	250	250	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	547
+seed_5f99a193e6244b29	hit_1002	left	500	500	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	589
+seed_5f99a193e6244b29	hit_1002	left	750	750	selected_reference_consistent_prefix	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	589
+seed_5f99a193e6244b29	hit_1002	right	14	14	witness_ends_before_source_context_resolved	pending	1											0	140
+seed_5f99a193e6244b29	hit_1003	left	24	24	reject:source_array_context	array	1	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	49
+seed_5f99a193e6244b29	hit_1003	left	100	100	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	178
+seed_5f99a193e6244b29	hit_1003	left	250	250	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	349
+seed_5f99a193e6244b29	hit_1003	left	500	500	selected_reference_consistent_prefix	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	349
+seed_5f99a193e6244b29	hit_1003	left	750	750	selected_reference_consistent_prefix	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	349
+seed_5f99a193e6244b29	hit_1003	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_1003	right	44	44	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	440
+seed_5f99a193e6244b29	hit_1004	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	60
+seed_5f99a193e6244b29	hit_1004	left	100	100	reject:source_array_context	array	2	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	239
+seed_5f99a193e6244b29	hit_1004	left	250	250	reject:source_array_context	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	334
+seed_5f99a193e6244b29	hit_1004	left	500	500	selected_reference_consistent_prefix	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	334
+seed_5f99a193e6244b29	hit_1004	left	750	750	selected_reference_consistent_prefix	array	3	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	484
+seed_5f99a193e6244b29	hit_1004	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_1004	right	74	74	reject:source_array_context	array	2	27	101973609	101973609	505282796	3	0	0	4.4283260225347005			0	740
+seed_5f99a193e6244b29	hit_1005	left	100	99	reject:source_array_context	array	2	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	200
+seed_5f99a193e6244b29	hit_1006	left	5	5	selected_reference_consistent_prefix	pending	1	37	473615375	-	-	-	1	0	6.0376427956756435	31	-1.2050485523797669	750	0
+seed_5f99a193e6244b29	hit_1007	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	40
+seed_5f99a193e6244b29	hit_1007	left	100	101	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	150
+seed_5f99a193e6244b29	hit_1008	left	100	100	beam_pruned:32	external	1	45	389759534	-	-	-	1	0	4.2647500305853789			750	149
+seed_5f99a193e6244b29	hit_1008	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_1008	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	2500
+seed_5f99a193e6244b29	hit_1009	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	20
+seed_5f99a193e6244b29	hit_1009	left	100	100	beam_pruned:34	external	3	45	389767328	-	-	-	1	0	4.4586937178167219			750	110
+seed_5f99a193e6244b29	hit_1009	right	100	100	reject:source_array_context	array	2	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	1000
+seed_5f99a193e6244b29	hit_1009	right	250	250	reject:source_array_context	array	3	27	133059868	133059868	513861320	6	0	0	2.3967873437697778			0	2500
+seed_5f99a193e6244b29	hit_1010	left	24	24	reject:source_array_context	array	1	21	642165634	697192861	697192861	16	0	0	1.8668821456961096			750	50
+seed_5f99a193e6244b29	hit_1010	left	100	100	reject:source_array_context	array	3	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	190
+seed_5f99a193e6244b29	hit_1010	left	250	250	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	965
+seed_5f99a193e6244b29	hit_1010	left	500	500	reject:source_array_context	array	2	20	404966638	642165547	642165547	140	0	0	0.23061582195644642			750	994
+seed_5f99a193e6244b29	hit_1010	right	80	80	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	800
+seed_5f99a193e6244b29	hit_1011	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	50
+seed_5f99a193e6244b29	hit_1011	left	100	100	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	319
+seed_5f99a193e6244b29	hit_1011	left	250	250	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	1050
+seed_5f99a193e6244b29	hit_1011	left	500	493	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	1362
+seed_5f99a193e6244b29	hit_1011	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	hit_1011	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1000
+seed_5f99a193e6244b29	hit_1011	right	110	110	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	4.5887414932807777			0	1100
+seed_5f99a193e6244b29	hit_1012	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	60
+seed_5f99a193e6244b29	hit_1012	left	250	250	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	1060
+seed_5f99a193e6244b29	hit_1012	left	500	499	reject:source_array_context	array	1	22	697192863	928185417	928185417	39	0	0	1.5697251540605086			750	1315
+seed_5f99a193e6244b29	hit_1012	right	47	47	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	470
+seed_5f99a193e6244b29	hit_1013	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	50
+seed_5f99a193e6244b29	hit_1013	left	62	62	reject:source_array_context	array	2	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	150
+seed_5f99a193e6244b29	hit_1013	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	hit_1013	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	hit_1014	left	24	25	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	59
+seed_bdf0cbd0c80d2f18	ext_0000	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0000	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	0
+seed_bdf0cbd0c80d2f18	ext_0000	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0001	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0001	left	100	99	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	99
+seed_bdf0cbd0c80d2f18	ext_0001	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0001	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	30
+seed_bdf0cbd0c80d2f18	ext_0002	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0002	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	0
+seed_bdf0cbd0c80d2f18	ext_0002	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	20
+seed_bdf0cbd0c80d2f18	ext_0003	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0003	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0003	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	30
+seed_bdf0cbd0c80d2f18	ext_0004	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0004	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0004	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	30
+seed_bdf0cbd0c80d2f18	ext_0005	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0005	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0005	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	30
+seed_bdf0cbd0c80d2f18	ext_0006	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0006	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0006	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	30
+seed_bdf0cbd0c80d2f18	ext_0007	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	10
+seed_bdf0cbd0c80d2f18	ext_0007	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0007	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	30
+seed_bdf0cbd0c80d2f18	ext_0008	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0008	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0008	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0008	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0009	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0009	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0009	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0009	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0010	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0010	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0010	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0010	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0011	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0011	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0011	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0011	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0012	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0012	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0012	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0012	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0013	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0013	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0013	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0013	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0014	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0014	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0014	right	24	24	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	10
+seed_bdf0cbd0c80d2f18	ext_0014	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0015	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0015	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0015	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	50
+seed_bdf0cbd0c80d2f18	ext_0016	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	20
+seed_bdf0cbd0c80d2f18	ext_0016	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	40
+seed_bdf0cbd0c80d2f18	ext_0017	left	24	24	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0017	left	100	100	selected_reference_consistent_prefix	external	1									1	-1.1119358539949262	122	0
+seed_bdf0cbd0c80d2f18	ext_0017	right	100	100	selected_reference_consistent_prefix	external	1									7	-1.3539275752933426	170	60
+seed_5f99a193e6244b29	ext_0018	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	10
+seed_5f99a193e6244b29	ext_0018	left	100	100	reject:coverage_break	external	1	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	130
+seed_5f99a193e6244b29	ext_0018	left	250	250	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	209
+seed_5f99a193e6244b29	ext_0018	left	500	500	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	209
+seed_5f99a193e6244b29	ext_0018	left	750	750	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	209
+seed_5f99a193e6244b29	ext_0018	right	100	100	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	ext_0018	right	250	250	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	ext_0018	right	500	500	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	5000
+seed_5f99a193e6244b29	ext_0018	right	750	750	reject:source_array_context	array	2	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	7500
+seed_5f99a193e6244b29	ext_0019	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	10
+seed_5f99a193e6244b29	ext_0019	left	100	100	reject:coverage_break	external	1	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	130
+seed_5f99a193e6244b29	ext_0019	left	250	250	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	209
+seed_5f99a193e6244b29	ext_0019	left	500	500	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	209
+seed_5f99a193e6244b29	ext_0019	left	750	750	selected_reference_consistent_prefix	external	3	36	642165634	697192860	697192860	10	47	21.524374912839871	0.65690791177105579			750	209
+seed_5f99a193e6244b29	ext_0019	right	59	59	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	590
+seed_5f99a193e6244b29	ext_0020	left	24	24	reject:source_array_context	array	1	23	928185414	857801893	857801893	10	0	0	2.1714972327323894			750	40
+seed_5f99a193e6244b29	ext_0020	left	100	100	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	109
+seed_5f99a193e6244b29	ext_0020	left	250	250	selected_reference_consistent_prefix	array	3	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	229
+seed_5f99a193e6244b29	ext_0020	left	500	500	selected_reference_consistent_prefix	array	3	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	229
+seed_5f99a193e6244b29	ext_0021	left	24	24	reject:source_array_context	array	1	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	29
+seed_5f99a193e6244b29	ext_0021	left	100	100	reject:source_array_context	array	2	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	177
+seed_5f99a193e6244b29	ext_0021	left	250	250	reject:source_array_context	array	4	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	296
+seed_5f99a193e6244b29	ext_0021	left	500	500	selected_reference_consistent_prefix	array	4	21	642165552	697192451	697192451	17	0	0	2.0318622001105249			750	306
+seed_5f99a193e6244b29	ext_0021	right	24	24	witness_ends_before_source_context_resolved	pending	1											0	240
+seed_5f99a193e6244b29	ext_0021	right	95	95	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	950
+seed_5f99a193e6244b29	ext_0022	left	24	24	selected_reference_consistent_prefix	external	1	31	501767595	-	-	-	1	0	7.1383876377078455			750	20
+seed_5f99a193e6244b29	ext_0022	left	100	100	beam_pruned:41	external	2	40	596845911	-	-	-	1	0	5.8960528722222394			750	170
+seed_5f99a193e6244b29	ext_0022	right	100	100	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	1000
+seed_5f99a193e6244b29	ext_0022	right	250	250	reject:source_array_context	array	1	26	445841668	445841667	133180422	92	0	0	5.9021294861478122			0	2500
+seed_5f99a193e6244b29	ext_0023	left	24	24	selected_reference_consistent_prefix	external	1	40	596848837	-	-	-	4	0	5.0497535709958514	31	-1.2050485523797669	750	10
+seed_5f99a193e6244b29	ext_0023	left	100	100	reject:coverage_break	external	2	39	857796960	596851170	596851170	60	21	23.98932746992066	1.189256206716008			750	110
+seed_5f99a193e6244b29	ext_0023	right	5	5	witness_ends_before_source_context_resolved	pending	1											0	50

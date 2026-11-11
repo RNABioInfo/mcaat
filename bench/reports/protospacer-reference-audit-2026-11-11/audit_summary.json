@@ -1,0 +1,34 @@
+{
+  "inputs": 81,
+  "reference_locations": 1041,
+  "sides": 2082,
+  "findings": {
+    "connected_reference_consistent_extension_verified": 8,
+    "no_90pct_24bp_flank_at_tested_locations": 68,
+    "input_shorter_than_graph_k": 5
+  },
+  "confirmed_inputs_by_reference_flank_length": {
+    "24": 8,
+    "100": 8,
+    "250": 7,
+    "500": 5,
+    "750": 5
+  },
+  "exact_inputs_by_flank_length": {
+    "24": 8,
+    "100": 7,
+    "250": 5,
+    "500": 5,
+    "750": 5
+  },
+  "route_statuses": {
+    "verified_graph_path": 810,
+    "no_path_at_90pct_anchored_identity": 3830,
+    "search_limit_unresolved": 2567,
+    "reference_end": 4,
+    "reference_ambiguous_base": 3,
+    "input_shorter_than_k": 2731
+  },
+  "unresolved_inputs": 73,
+  "reference_used_for_production_ranking": false
+}

@@ -18,6 +18,30 @@ struct TargetExtension {
     SearchDiagnostics diagnostics;
     std::set<std::string> stops;
 };
+// Compare against one fixed best-score threshold. A pairwise "near tie"
+// comparator would be non-transitive and cannot safely be passed to std::sort.
+// Within the existing ambiguity margin, prefer more validated sequence rather
+// than rewarding a prematurely stopped, slightly flatter branch.
+inline double select_supported_near_tie(std::vector<Candidate>& candidates,const Options& options) {
+    const double best=candidates.front().score;
+    const auto original=stability(candidates.front().left.coverage,candidates.front().right.coverage);
+    const double ambiguity_evidence=best+original.support;
+    const double within_limit=original.within+original.jumps+original.weak+options.prediction_margin;
+    if(options.resolve_graph_ties || options.prediction_margin<=0)return ambiguity_evidence;
+    size_t selected=candidates.size();
+    for(size_t i=0;i<candidates.size();++i) {
+        // Keep the support term in selection: removing it can make an absent
+        // flank look better and even shorten the original winning prediction.
+        if(candidates[i].score<best-options.prediction_margin-1e-12)continue;
+        const auto s=stability(candidates[i].left.coverage,candidates[i].right.coverage);
+        // Better agreement of the two mean depths must not compensate for
+        // substantially less stable sequence within an individual flank.
+        if(s.within+s.jumps+s.weak>within_limit+1e-12)continue;
+        if(selected==candidates.size() || candidates[i].sequence.size()>candidates[selected].sequence.size())selected=i;
+    }
+    if(selected && selected<candidates.size())std::rotate(candidates.begin(),candidates.begin()+selected,candidates.begin()+selected+1);
+    return ambiguity_evidence;
+}
 template<class Graph>
 void refresh_target(Graph& graph,Candidate& c,const std::vector<FlankContext>& left_models,
                     const std::vector<FlankContext>& right_models,const std::set<Node>& shared,const Options& options) {
@@ -96,8 +120,8 @@ TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
     std::sort(candidates.begin(),candidates.end(),[&](const auto& a,const auto& b){
         return better_prediction(a,sequence.size(),b,sequence.size(),options);
     });
+    double evidence=select_supported_near_tie(candidates,options);
     const auto& winner=candidates.front();
-    double evidence=winner.score+stability(winner.left.coverage,winner.right.coverage).support;
     size_t keep_left=winner.seed_begin,keep_right=winner.sequence.size()-winner.seed_end;
     for(size_t i=1;i<candidates.size();++i) {
         const auto& c=candidates[i];

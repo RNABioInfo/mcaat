@@ -201,6 +201,7 @@ struct MultiplicityProfile {
 struct Coverage {
     std::vector<double> baseline;
     std::vector<double> recent;
+    std::vector<double> sampled_recent;
     MultiplicityProfile profile;
     double penalty=0;size_t scored=0;
     double mean() const {return median(baseline);}
@@ -224,17 +225,35 @@ struct Coverage {
     }
     double observe(double count,const Options& options,bool sample=true) {
         profile.observe(count);
-        if(!sample)return 0;
-        if(baseline.size()<options.coverage_window) {baseline.push_back(count);recent.push_back(count);return 0;}
+        auto advance=[&] {
+            if(recent.size()>=options.coverage_window)recent.erase(recent.begin());
+            recent.push_back(count);
+        };
+        // The initial, separated observations describe the two-flank baseline.
+        // The moving window describes the actual immediately preceding bases;
+        // skipping unitig interiors here leaves a stale baseline at junctions.
+        if(baseline.size()<options.coverage_window) {
+            if(sample){baseline.push_back(count);sampled_recent.push_back(count);}
+            advance();return 0;
+        }
+        if(!sample){advance();return 0;}
         double alpha=options.coverage_model=="poisson"?0:local_dispersion();
         // Explicit NB uses a weak overdispersion floor when local MAD is zero.
         if(options.coverage_model=="negative-binomial")alpha=std::max(alpha,.05);
-        double value=loss(count,local_mean(),alpha);penalty+=value;++scored;
+        double value=loss(count,local_mean(),alpha);
+        // A short moving window follows gradual drift; separated observations
+        // retain the broader depth context through local spikes and valleys.
+        // Stop only when both scales reject the next sampled edge.
+        double broad_alpha=options.coverage_model=="poisson"?0:dispersion_of(sampled_recent);
+        if(options.coverage_model=="negative-binomial")broad_alpha=std::max(broad_alpha,.05);
+        if(!sampled_recent.empty())value=std::min(value,loss(count,median(sampled_recent),broad_alpha));
+        penalty+=value;++scored;
         // Test before adapting: a rejected jump cannot move the local baseline.
         // Keep the initial baseline separately for the two-flank comparison.
         if(value<=options.max_coverage_penalty) {
-            if(recent.size()>=options.coverage_window)recent.erase(recent.begin());
-            recent.push_back(count);
+            advance();
+            if(sampled_recent.size()>=options.coverage_window)sampled_recent.erase(sampled_recent.begin());
+            sampled_recent.push_back(count);
         }
         return value;
     }
@@ -470,7 +489,7 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
         // Bound terminal storage as well as the frontier.
         if(result.paths.size()>options.beam_width*2) {
             std::sort(result.paths.begin(),result.paths.end(),better_side);
-            result.paths.resize(options.beam_width);result.beam_pruned=true;
+            if(result.paths.size()>options.beam_width){result.paths.resize(options.beam_width);result.beam_pruned=true;}
         }
     };
     // Level-synchronous beam: every live path receives one more base before

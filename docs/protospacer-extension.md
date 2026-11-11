@@ -314,9 +314,9 @@ are stored, with uncapped counts and stored-row counts in the parameters JSON.
 read files or PAM rules also disables this early branch choice, preserving
 alternatives for their existing reranking; `branch_guard_active` records this.
 
-## Equal-depth beam and bounded repeats (schema 8)
+## Equal-depth beam and bounded repeats (schema 9)
 
-`equal_depth_beam_bounded_repeats_v3` applies to both discovery and supplied-target
+`equal_depth_beam_local_window_v4` applies to both discovery and supplied-target
 extension. The graph stays read-only. Length limits, work limits, source-repeat
 edit checks, adapter checks and flank compatibility checks remain enforced.
 A repeated external vertex can represent a real repeat; its copy number is still
@@ -337,10 +337,22 @@ provided to the graph search. Its comparison separates matching input records
 from unique extension regions and reports baseline matches gained/lost, lengths,
 work, revisited nodes and wall time including graph loading.
 
+The [all-81 reference audit](../bench/reports/protospacer-reference-audit-2026-11-11/README.md)
+records exact missing edges, verified connected witnesses, production path losses,
+before/after matches and unresolved bounded searches for the supplied SRR14017553 graph.
+
 ## Selecting one final prediction
 
 Use every emitted edge multiplicity outside the seed and known source-array context.
 The local stopping gate retains its spaced samples; final profile scoring does not.
+Its local median/MAD window advances on every accepted external edge, including
+unitig interiors. A second moving window retains the separated observations.
+At a sampled edge, accept support from either scale; stop only when the count is
+incompatible with both. This handles gradual drift without letting a short spike
+or valley erase the broader depth context. A sampled edge is checked before its
+count can update either window. The initial baseline remains separately stored
+for the left/right compatibility check. These are robust stopping heuristics,
+not independent probability tests.
 For each flank, transform each count `c` to `x = log2(1 + c)` and record its mean,
 population variance and mean squared difference between consecutive observations.
 Initial baseline observations participate in this calculation. All statistics are
@@ -372,6 +384,20 @@ score; exact ties prefer more matched spacer bases, more observed external edges
 then a longer region and finally sequence order for reproducibility. Choose one
 winner for the complete spacer query, including all its partial seed intervals.
 `--max-paths 1` alone would not do this, because it limits candidates per seed.
+
+In supplied-protospacer mode, the default additionally uses the existing
+`prediction-margin` to choose among near ties. First sort by the ordinary score.
+Among candidates within that fixed best-score margin (including the support
+term), prefer the longest validated sequence, but only if its
+`within + jumps + weak` loss is also within the same margin of the original
+winner. Agreement between left/right mean depths cannot compensate for a large
+deterioration within a flank. Equal lengths retain the original score ordering.
+This prevents a slightly flatter adapter-trimmed prefix automatically beating
+its supported continuation. It does not claim the longest path is correct.
+Near ties remain explicitly ambiguous. `--resolve-graph-ties true` retains the
+conservative common-prefix behavior; a zero margin disables length preference.
+For a longer near-tied selection, the signed score gap can be negative because
+the numerically highest-scoring shorter alternative remains the runner-up.
 
 `protospacer_selection.tsv` gives the selected seed/region, score components,
 sample counts, multiplicity levels, number of compared shortlisted candidates, and the

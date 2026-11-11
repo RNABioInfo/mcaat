@@ -1,0 +1,15 @@
+{
+  "dataset": "SRR14017553",
+  "graph_k": 23,
+  "original_inputs": 81,
+  "reference_positions": 1041,
+  "short_seed_hit_positions": 1017,
+  "additional_seed_spanning_extension_hit_positions": 24,
+  "short_hit_identity_percent": 90,
+  "short_hit_query_coverage_percent": 85,
+  "graph_metadata_sha256": "94ca5ad4422b97de35f7e0d46e165bdfb8efaaabe283166ecd3ea69360e21bce",
+  "reference_fasta_sha256": "e3a458156d7a2ed6be0ae8feefec9ceaa2af1640f28bb87c116f7fa045811dab",
+  "input_fasta_sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+  "cases_uncompressed_sha256": "dfdae04c57b4cf5602bd2a8f077bb8d447244e2788140b942634d880149a19ab",
+  "reference_use": "offline audit only; not linked into production extension"
+}

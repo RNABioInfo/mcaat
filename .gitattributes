@@ -1,0 +1,2 @@
+# Trailing tabs in TSV data encode empty final columns.
+*.tsv text eol=lf whitespace=-blank-at-eol

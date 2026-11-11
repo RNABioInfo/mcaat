@@ -378,7 +378,7 @@ void test_junction_checks_and_flank_caps() {
     auto walk=extend(g,seed,false,200,{},o);
     check(std::none_of(walk.paths.begin(),walk.paths.end(),[&](auto& s){return std::find(s.nodes.begin(),s.nodes.end(),path_a[junction+1])!=s.nodes.end();}),"junction-only coverage spike is checked immediately");
     o.junction_check=false;walk=extend(g,seed,false,200,{},o);
-    check(std::any_of(walk.paths.begin(),walk.paths.end(),[&](auto& s){return std::find(s.nodes.begin(),s.nodes.end(),path_a[junction+1])!=s.nodes.end();}),"legacy periodic sampling misses the off-grid junction spike");
+    check(std::any_of(walk.paths.begin(),walk.paths.end(),[&](auto& s){return std::find(s.nodes.begin(),s.nodes.end(),path_a[junction+1])!=s.nodes.end();}),"disabling junction sampling can miss an off-grid spike");
     o.branch_guard=true;o.junction_check=true;o.max_states=2;
     walk=extend(g,seed,false,200,{},o);
     check(walk.expanded<=2 && walk.work_limited,"work budget includes junction work");
@@ -447,6 +447,50 @@ void test_local_coverage() {
     auto local=cov.local_mean();
     check(cov.observe(1000,o)>o.max_coverage_penalty && cov.local_mean()==local,"abrupt jump is rejected before adaptation");
     check(cov.observe(1,o)>o.max_coverage_penalty && cov.local_mean()==local,"low-count error branch cannot move the baseline");
+    Coverage dense;
+    for(int i=0;i<7;++i)dense.observe(23,o);
+    for(double count:{39.,38.,37.,37.,71.,71.,72.,74.,73.,72.,71.,71.,71.})
+        check(dense.observe(count,o,false)<=o.max_coverage_penalty,"unitig interior updates local depth without waiting for a junction");
+    check(dense.observe(67,o)<=o.max_coverage_penalty && dense.mean()==23,"junction uses current depth while initial flank baseline stays fixed");
+    local=dense.local_mean();
+    check(dense.observe(1000,o)>o.max_coverage_penalty && dense.local_mean()==local,"junction jump is still checked before adaptation");
+    Coverage valley;
+    for(int i=0;i<7;++i)valley.observe(100,o);
+    for(int i=0;i<7;++i)valley.observe(20,o,false);
+    check(valley.local_mean()==20 && median(valley.sampled_recent)==100,"local and separated windows retain different depth scales");
+    check(valley.observe(100,o)<=o.max_coverage_penalty,"return from a local valley can use the still-supported broader depth context");
+    auto short_before=valley.recent,broad_before=valley.sampled_recent;
+    check(valley.observe(1000,o)>o.max_coverage_penalty && valley.recent==short_before && valley.sampled_recent==broad_before,"a jump rejected by both scales updates neither window");
+}
+
+void test_supported_near_tie() {
+    std::vector<Candidate> candidates;
+    Candidate short_path,medium,long_path;
+    short_path.sequence=std::string(100,'A');short_path.score=0;
+    medium.sequence=std::string(200,'A');medium.score=-.09;
+    long_path.sequence=std::string(300,'A');long_path.score=-.18;
+    Options options;options.prediction_margin=.1;
+    candidates={short_path,medium,long_path};select_supported_near_tie(candidates,options);
+    check(candidates.front().sequence.size()==200,"near-tie choice uses a fixed best-score threshold, not a transitive chain");
+    auto stable=short_path,unstable=medium;
+    for(auto* c:{&stable,&unstable}) {
+        c->left.coverage.profile.samples=c->right.coverage.profile.samples=10;
+        c->left.coverage.profile.m2=c->right.coverage.profile.m2=c==&stable?5:7;
+        c->left.coverage.profile.mean_log=3;
+        c->right.coverage.profile.mean_log=3+std::sqrt(c==&stable?.4:.25);
+        c->score=stability(c->left.coverage,c->right.coverage).score();
+    }
+    candidates={stable,unstable};select_supported_near_tie(candidates,options);
+    check(candidates.front().sequence.size()==100,"mean-depth agreement cannot hide a deterioration in within-flank stability");
+    Candidate paired,one_sided;
+    paired.sequence=std::string(321,'A');paired.score=-.67;
+    paired.left.coverage.profile.samples=paired.right.coverage.profile.samples=50;
+    one_sided.sequence=std::string(151,'A');one_sided.score=-1.11;
+    one_sided.right.coverage.profile.samples=100;
+    candidates={paired,one_sided};select_supported_near_tie(candidates,options);
+    check(candidates.front().sequence.size()==321,"length preference cannot reward an absent flank or shorten the numeric winner");
+    options.resolve_graph_ties=true;candidates={short_path,medium,long_path};select_supported_near_tie(candidates,options);
+    check(candidates.front().sequence.size()==100,"strict common-prefix mode keeps its conservative winner");
 }
 
 void test_equal_depth_and_bounded_repeats() {
@@ -513,7 +557,7 @@ void test_equal_depth_and_bounded_repeats() {
 }
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_local_coverage();test_equal_depth_and_bounded_repeats();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_node_visits=0;o.validate();});

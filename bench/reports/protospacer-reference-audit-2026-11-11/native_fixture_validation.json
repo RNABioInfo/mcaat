@@ -1,0 +1,13 @@
+{
+  "supplied_records": 9,
+  "retained_records": 9,
+  "baseline_records_preserved": 81,
+  "straight_length": 1535,
+  "branch_length": 1535,
+  "old_strict_branch_length": 785,
+  "adapter_length": 785,
+  "true_branch_recovered": true,
+  "threads_1_24_identical": true,
+  "failed_extensions_keep_protospacers": true,
+  "original_metagenome_graph_tested": false
+}

@@ -1,0 +1,9 @@
+{
+  "inputs": 81,
+  "four_and_24_threads_byte_identical_except_parameters": true,
+  "instrumented_and_production_selections_identical": true,
+  "baseline_trace_all_81_identical": true,
+  "graph_files_unchanged": true,
+  "all_81_fasta_bytes_unchanged": true,
+  "binary_sha256": "91ad9a6297e17cdae5a685253e6c2f955a2c4edde45d7eb02f2a9d57237ad2b5"
+}
