@@ -79,6 +79,15 @@ python3 bench/check_retained_protospacers.py \
 This checker verifies retention and output consistency. It does not assess
 reference-match quality of the extended flanks.
 
+### Equal-depth comparison on SRR14017553 (2026-11-11)
+
+N=16,32,64 each increased local reference-matching extensions from six to eight
+at >=90% identity / >=50% single-HSP coverage. All 81 inputs are unchanged and
+all six baseline matches survive. N=32 extends 45 input records into 40 unique
+regions; it is the current default. Doubling the N=64 work budget removes its
+reported work-limit stops but adds no reference match.
+See the [measured comparison and limitations](../bench/reports/protospacer-beam-2026-11-11/README.md).
+
 ### SRR14017553 graph investigation (2026-11-10)
 
 The downloaded k=23 graph and its matching 49-array/530-spacer report were used
@@ -184,12 +193,21 @@ protospacers.
    retained if it establishes an external context. A shared repeat prefix is
    traversable until the path diverges or qualifies as a repeat copy. This is a
    per-path decision, not a global deletion of repeat edges or an entire spacer.
-4. Extend at most 750 bp per side by default. Walk nonbranching stretches in
-   place; keep a bounded beam of alternatives at junctions, then compare the
-   multiplicity stability of their retained flanks. Strict local lookahead is
-   available explicitly with `--branch-guard true`. New flanks cannot revisit
-   seed or flank vertices. Repeated k-mers already present in the input spacer
-   are allowed. Joining left and right flanks rejects intersections between them.
+4. Extend at most 750 bp per side by default. Advance all live paths one base
+   before pruning to `--beam-width` alternatives: paths of different progress
+   never compete in the live beam. Terminal candidates are kept separately.
+   The provisional beam score uses all traversed counts, including unresolved
+   boundary context, so an untested one-base branch is not compared with a
+   completed flank. Final ranking excludes source-context observations.
+   Strict local lookahead is available with `--branch-guard true`.
+   Allow up to `--max-node-visits 3` visits per vertex outside source-array cycles.
+   For a vertex already repeated in the immutable input, permit at most two
+   additional visits. A closed segment consisting entirely of edges from the
+   source arrays' repeat/spacer cycles is rejected, even after the path previously
+   left array context. All spacer observations from the same source arrays are
+   included in this guard. A shared vertex alone is never blacklisted. Recheck
+   both visit limits and source-cycle closures across the joined left/seed/right
+   path. Existing repeats wholly within the supplied seed remain untouched.
    Check sequencing adapters during the walk. Roll back the complete detected
    adapter and stop only that branch; retain other continuations and the clean
    opposite flank. Recompute coverage on the retained sequence before ranking.
@@ -296,9 +314,33 @@ are stored, with uncapped counts and stored-row counts in the parameters JSON.
 read files or PAM rules also disables this early branch choice, preserving
 alternatives for their existing reranking; `branch_guard_active` records this.
 
+## Equal-depth beam and bounded repeats (schema 8)
+
+`equal_depth_beam_bounded_repeats_v3` applies to both discovery and supplied-target
+extension. The graph stays read-only. Length limits, work limits, source-repeat
+edit checks, adapter checks and flank compatibility checks remain enforced.
+A repeated external vertex can represent a real repeat; its copy number is still
+ambiguous without additional linkage evidence. The visit cap bounds that
+ambiguity rather than declaring a biologically correct copy number.
+
+The beam score is log-count variance plus squared adjacent changes, the
+multiplicity-one fraction, and `1/(observations+1)`. Final selection uses the
+emitted external flanks and additionally compares their levels, as below.
+Overlapping k-mers are correlated: these are ranking scores, not probabilities.
+Wider beams need more work and can hit the same `--max-states` cap earlier in
+base-pair progress. `search_limited` discloses pruning and budget exhaustion.
+
+`bench/benchmark_retained_beams.py` runs N=16,32,64 sequentially against an existing
+graph, checks every supplied ID/sequence and seed coordinate, then performs local
+BLAST on predictions and the saved baseline. Reference sequences are never
+provided to the graph search. Its comparison separates matching input records
+from unique extension regions and reports baseline matches gained/lost, lengths,
+work, revisited nodes and wall time including graph loading.
+
 ## Selecting one final prediction
 
-Use sampled edge multiplicities outside the seed and known source-array context.
+Use every emitted edge multiplicity outside the seed and known source-array context.
+The local stopping gate retains its spaced samples; final profile scoring does not.
 For each flank, transform each count `c` to `x = log2(1 + c)` and record its mean,
 population variance and mean squared difference between consecutive observations.
 Initial baseline observations participate in this calculation. All statistics are
@@ -309,13 +351,15 @@ within  = (variance_left + variance_right) / 2
 jumps   = (mean_squared_step_left + mean_squared_step_right) / 2
 between = (mean_left - mean_right)^2          # when both sides have observations
 support = 1/(n_left + 1) + 1/(n_right + 1)
-stability_score = -(within + jumps + between + support)
+weak = (fraction_of_count_1_edges_left + fraction_of_count_1_edges_right) / 2
+stability_score = -(within + jumps + between + support + weak)
 match_penalty = 1 - matched_bases / corrected_search_spacer_length
 total_score = stability_score - match_penalty + optional_read_pair_PAM_score
 ```
 
-Higher is better. Stability rewards consistent multiplicity, not higher absolute
-multiplicity. The between-flank term penalizes joining a stable low-depth flank
+Higher is better. The weak-edge fraction adds a soft penalty for multiplicity-one
+runs; isolated count-one edges remain allowed. Above that floor, a uniformly
+high-count path has no automatic advantage over a uniformly lower-count path. The between-flank term penalizes joining a stable low-depth flank
 to a stable high-depth flank. The support penalty prevents tiny or unobserved
 flanks from receiving a perfect score; one-sided reconstructions remain eligible.
 Missing-side variance/step terms are zero, and missing observations contribute
@@ -324,7 +368,7 @@ probabilities, p-values or calibrated confidence intervals.
 
 With supplied read pairs and positive `pair-weight`, pair-supported candidates
 still rank ahead of unsupported candidates. Within that tier, compare total
-score; exact ties prefer more matched spacer bases, more sampled observations,
+score; exact ties prefer more matched spacer bases, more observed external edges,
 then a longer region and finally sequence order for reproducibility. Choose one
 winner for the complete spacer query, including all its partial seed intervals.
 `--max-paths 1` alone would not do this, because it limits candidates per seed.
@@ -580,7 +624,8 @@ the original metagenomic graph, which was not available in the local audit data.
 | `--branch-lookahead` | 75 | Maximum inspected edges per branch probe; range 1–1000 |
 | `--branch-score-margin` | 1 | Required improvement over the next scored branch; lower score is better |
 | `--prediction-score-margin` | 0.1 | Final graph-only alternatives this close to the winner retain common sequence |
-| `--beam-width` | 32 | Retained search frontier and joined alternatives before read scoring |
+| `--beam-width` | 32 | Live alternatives at equal extension depth; also bounds terminal/joined shortlists |
+| `--max-node-visits` | 3 | Visits per new vertex outside source-array cycles; range 1–64; existing seed repeats remain intact |
 | `--max-states` | 50000 | Edge expansions per seed side, including lookahead |
 | `--max-query-states` | 200000 | Edge expansions across all intervals of one canonical spacer |
 | `--max-seeds` | 128 | Retained intervals per canonical spacer |

@@ -1,0 +1,82 @@
+seed_id	old_length	new_length	old_match_90_50	new_match_90_50	new_identity	new_query_coverage	new_reference	new_status	new_reason
+seed_541b71503abcacf8	1530	1530	True	True	100.000	100.0	OTU_1556	extended	bounded_search
+seed_85dec78f0df3afca	0	0	False	False				not_extended	no_supported_extension
+seed_815985dbbb929d9a	1240	1240	True	True	100.000	64.03225806451613	OTU_2046	extended_ambiguous	bounded_search
+seed_03150ef5d6c40be9	0	0	False	False				not_extended	shorter_than_graph_k
+seed_608580176351629e	181	779	False	False				extended_ambiguous	bounded_search
+seed_8457d3c888a55350	103	103	False	False				extended	best_candidate
+seed_3d706370c00ed358	113	113	False	False				extended	best_candidate
+seed_fb2dfafb0bf3b645	0	0	False	False				not_extended	no_supported_extension
+seed_bac8ba50be9ea7d9	774	774	False	False				extended_ambiguous	bounded_search
+seed_12839d3c8ccafc84	0	0	False	False				not_extended	shorter_than_graph_k
+seed_52471b63f83f34e7	0	0	False	False				not_extended	no_supported_extension
+seed_a06a8e822ab10969	91	91	False	False				extended	best_candidate
+seed_220de85e5722e860	164	124	False	False				extended_ambiguous	bounded_search
+seed_b028e33cab495531	0	0	False	False				not_extended	shorter_than_graph_k
+seed_4b0081e61d24ad6a	785	785	False	False				extended_ambiguous	bounded_search
+seed_bfe1e95d60e5270a	783	124	False	False				extended_ambiguous	bounded_search
+seed_00b0f720c7a86847	521	614	False	False				extended_ambiguous	bounded_search
+seed_c8187729f2e6f27e	0	0	False	False				not_extended	no_supported_extension
+seed_e843a45768a91d3a	0	0	False	False				not_extended	no_supported_extension
+seed_bd421ff105ab9342	89	89	False	False				extended	best_candidate
+seed_54a2de9b99648050	0	0	False	False				not_extended	no_supported_extension
+seed_a98911d2fd1dab01	1526	1526	False	False				extended_ambiguous	bounded_search
+seed_4c162d5352e263c2	178	785	False	False				extended_ambiguous	bounded_search
+seed_0e3fc52adc6e1e7e	1528	1528	True	True	100.000	100.0	OTU_1556	extended_ambiguous	bounded_search
+seed_c680dd8ddedb88b2	0	0	False	False				not_extended	no_supported_extension
+seed_9d378ed352accb22	786	345	False	False				extended_ambiguous	bounded_search
+seed_32494eda326293e7	0	0	False	False				not_extended	no_supported_extension
+seed_636ca383c5cc2689	130	130	False	False				extended	best_candidate
+seed_cc0aaf03cdff2e92	0	0	False	False				not_extended	no_supported_extension
+seed_65cd952ae8717645	0	0	False	False				not_extended	no_supported_extension
+seed_b8fc717239fea254	104	104	False	False				extended	best_candidate
+seed_c01903d4be089c3c	0	0	False	False				not_extended	no_supported_extension
+seed_ee0c531ff9ea59a8	0	0	False	False				not_extended	no_supported_extension
+seed_db4265a0f6a5aa8d	0	0	False	False				not_extended	no_supported_extension
+seed_edac35e71117a388	0	0	False	False				not_extended	no_supported_extension
+seed_b769b2ed358ecfcc	0	0	False	False				not_extended	no_supported_extension
+seed_7cdce7a5d8fb207a	787	346	False	False				extended_ambiguous	bounded_search
+seed_d48b67dba8929594	0	0	False	False				not_extended	no_supported_extension
+seed_29e07b57a2e8eaa7	135	135	False	False				extended	best_candidate
+seed_5805c9fca40cf9bc	0	0	False	False				not_extended	no_supported_extension
+seed_d3c0bdab3a242bc6	774	124	False	False				extended_ambiguous	bounded_search
+seed_c3ce27c19a179610	782	785	False	False				extended_ambiguous	bounded_search
+seed_265a496fca5ef727	0	0	False	False				not_extended	no_supported_extension
+seed_d613d895e6b2c2e8	0	0	False	False				not_extended	no_supported_extension
+seed_f59251651f7711eb	0	0	False	False				not_extended	no_supported_extension
+seed_7a5827b9089bd147	0	0	False	False				not_extended	no_supported_extension
+seed_696118a2a5ec012e	0	0	False	False				not_extended	no_supported_extension
+seed_a6cc50a7e027d60a	164	124	False	False				extended_ambiguous	bounded_search
+seed_aab7abf96b503072	0	0	False	False				not_extended	no_supported_extension
+seed_c3e54c4632399df3	784	614	False	False				extended_ambiguous	bounded_search
+seed_476a1596abe86549	0	0	False	False				not_extended	no_supported_extension
+seed_020113f1e4d18f3d	128	128	False	False				extended	best_candidate
+seed_f44094a9048cfb31	0	0	False	False				not_extended	no_supported_extension
+seed_9eae521f94253929	0	0	False	False				not_extended	shorter_than_graph_k
+seed_f00881e5a59e1c4e	117	117	True	True	98.276	99.14529914529915	OTU_1174	extended	bounded_search
+seed_dd4f9236528cee55	0	0	False	False				not_extended	no_supported_extension
+seed_1de20f6293b387ce	432	432	False	False				extended_ambiguous	bounded_search
+seed_a70f5b89cba98cab	134	134	False	False				extended	best_candidate
+seed_ae8ed7951acedc7e	130	130	False	False				extended	best_candidate
+seed_dddfa0570550f5c7	182	789	False	False				extended_ambiguous	bounded_search
+seed_bdf0cbd0c80d2f18	351	321	True	True	96.262	100.0	OTU_585	extended_ambiguous	bounded_search
+seed_a2973df6e0ce0e89	905	199	False	False				extended_ambiguous	bounded_search
+seed_7b14da8d4f8b1672	181	122	False	False				extended	bounded_search
+seed_e362112fa04dc5d2	784	784	False	False				extended_ambiguous	bounded_search
+seed_d31ea9e28939c4a0	0	0	False	False				not_extended	no_supported_extension
+seed_5580f7506ea0693d	0	0	False	False				not_extended	no_supported_extension
+seed_7708d74d9ff431bf	0	0	False	False				not_extended	no_supported_extension
+seed_c35af5b66b335ecd	1227	1242	True	True	99.372	64.09017713365539	OTU_2046	extended_ambiguous	bounded_search
+seed_13da97a211cd579d	0	0	False	False				not_extended	shorter_than_graph_k
+seed_2d1cf92baaa5319d	122	778	False	False				extended_ambiguous	bounded_search
+seed_d625b79f847e7138	431	431	False	False				extended_ambiguous	bounded_search
+seed_d3f6be8a0f21642d	0	0	False	False				not_extended	no_supported_extension
+seed_5de7c7a0e26edc14	1523	1523	False	False				extended	bounded_search
+seed_d08530af6d5a1bcd	127	127	False	False				extended	best_candidate
+seed_1f27d3d3513c95e0	0	0	False	False				not_extended	no_supported_extension
+seed_0eb07015d23769af	863	995	False	True	90.669	56.381909547738694	OTU_815	extended_ambiguous	bounded_search
+seed_3ae1c228c14b4816	785	775	False	False				extended_ambiguous	bounded_search
+seed_5f73b1d60653215b	432	432	False	False				extended_ambiguous	bounded_search
+seed_d950e4cbd0d63474	784	741	False	False				extended_ambiguous	bounded_search
+seed_f4ba551b06f0781e	784	741	False	False				extended_ambiguous	bounded_search
+seed_5f99a193e6244b29	377	779	False	True	96.662	100.0	OTU_2363	extended_ambiguous	bounded_search

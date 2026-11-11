@@ -15,6 +15,9 @@ namespace mcaat::proto {
 struct FlankContext {
     std::string spacer_remainder;
     std::string repeat;
+    // One source-array repeat/spacer cycle, in the query's forward orientation.
+    // Kept separately from the outward-oriented initial boundary model.
+    std::string cycle;
 };
 enum class ContextState { pending, external, array };
 
@@ -23,6 +26,7 @@ inline ContextState context_state(const std::string& outward,
                                   double identity) {
     bool possible = false;
     for (const auto& model : models) {
+        if (model.repeat.empty()) continue; // cycle-only model from another source spacer
         if (outward.size() < model.spacer_remainder.size()) {
             possible = true;
             continue;
@@ -57,12 +61,13 @@ inline std::vector<FlankContext> flank_contexts(const std::string& query,
                                                bool backward) {
     std::vector<FlankContext> result;
     for (auto repeat : repeats) {
+        auto cycle = query + repeat;
         auto remainder = backward ? query.substr(0, begin) : query.substr(end);
         if (backward) {
             std::reverse(remainder.begin(), remainder.end());
             std::reverse(repeat.begin(), repeat.end());
         }
-        result.push_back({std::move(remainder), std::move(repeat)});
+        result.push_back({std::move(remainder), std::move(repeat), std::move(cycle)});
     }
     return result;
 }

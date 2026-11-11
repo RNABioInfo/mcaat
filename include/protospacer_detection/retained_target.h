@@ -52,7 +52,8 @@ void refresh_target(Graph& graph,Candidate& c,const std::vector<FlankContext>& l
 }
 template<class Graph>
 TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
-                                      const std::vector<TargetContext>& contexts,const Options& options) {
+                                      const std::vector<TargetContext>& contexts,const Options& options,
+                                      const std::set<std::string>* source_cycles=nullptr) {
     TargetExtension result;
     if(sequence.size()<graph.k()){result.reason="shorter_than_graph_k";return result;}
     if(sequence.size()>options.max_bp){result.reason="seed_exceeds_length_cap";return result;}
@@ -72,6 +73,9 @@ TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
         auto right=flank_contexts(ctx.spacer,ctx.begin,ctx.end,{ctx.repeat},false);
         left_models.insert(left_models.end(),left.begin(),left.end());
         right_models.insert(right_models.end(),right.begin(),right.end());
+    }
+    if(source_cycles)for(const auto& cycle:*source_cycles) {
+        left_models.push_back({"","",cycle});right_models.push_back({"","",cycle});
     }
     Seed seed{path,0,sequence.size(),graph.neighbors(path.front(),true),graph.neighbors(path.back(),false)};
     auto local=options;local.max_states=std::min(options.max_states,options.max_query_states/2);

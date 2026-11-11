@@ -49,6 +49,7 @@ def check(baseline, output):
         assert len(sequence) <= params['max_length']
         assert len(sequence) == len(region['vertices'].split(',')) + params['graph_k'] - 1
         assert len(region['edges'].split(',')) + 1 == len(region['vertices'].split(','))
+    by_region = {r['region_id']: r for r in regions}
     links = table(output / 'protospacer_associations.tsv')
     assert len({r['seed_id'] for r in links}) == len(links), 'multiple final extensions for one input'
     extended = {r['seed_id'] for r in extensions if r['extension_status'].startswith('extended')}
@@ -69,6 +70,11 @@ def check(baseline, output):
             left, right = right, left
         assert (left, right) == (int(row['left_bp']), int(row['right_bp']))
         assert row['region_id'] == link['region_id'] and int(row['length']) == len(sequence)
+        if 'max_node_visits' in params:
+            vertices = by_region[link['region_id']]['vertices'].split(',')
+            original_visits = Counter(vertices[begin:end - params['graph_k'] + 1])
+            for vertex, visits in Counter(vertices).items():
+                assert visits <= max(1, original_visits[vertex]) + params['max_node_visits'] - 1, 'node visit cap violated'
     for row in extensions:
         assert int(row['expanded_states']) <= min(params['max_states_per_side'] * 2, params['max_query_states'])
         if row['extension_status'] == 'not_extended':

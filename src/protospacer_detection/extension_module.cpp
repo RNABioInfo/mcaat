@@ -49,6 +49,7 @@ struct Query {
     std::string sequence,status="unmapped",error;
     std::vector<Source> sources;
     std::set<Node> array_edges;
+    std::set<std::string> source_cycles;
     std::vector<Entry> entries;
     Entry detected;bool has_detection=false;
     std::vector<Decision> decisions;
@@ -227,6 +228,16 @@ static std::vector<Query> load_queries(const fs::path& folder,size_t k,const Opt
         auto key=canonical(s.spacer);s.reverse=key!=s.spacer;
         auto& q=queries[key];q.sequence=key;q.sources.push_back(std::move(s));
     }
+    // Protect every cycle reported in the same source arrays, including other
+    // spacers. A shared repeat vertex by itself is deliberately not forbidden.
+    std::map<std::string,std::set<std::string>> cycles_by_array;
+    for(const auto& entry:queries)for(const auto& source:entry.second.sources) {
+        cycles_by_array[source.group].insert(source.spacer+source.repeat);
+        cycles_by_array[source.group].insert(source.original_spacer+source.original_repeat);
+    }
+    for(auto& entry:queries)for(const auto& source:entry.second.sources)
+        for(const auto& cycle:cycles_by_array.at(source.group))
+            entry.second.source_cycles.insert(source.reverse?reverse_complement(cycle):cycle);
     std::vector<Query> result;for(auto& [seq,q]:queries)result.push_back(std::move(q));return result;
 }
 static std::vector<PamRule> load_pams(const fs::path& path) {
@@ -343,6 +354,7 @@ int run_extension_module(int argc,char** argv) {
                 "--max-paths 16 (internal shortlist per seed; final output is one per spacer)\n"
                 "--max-seeds 128 --max-query-states 200000 --min-match-bp 0 (0 = graph k)\n"
                 "--max-retained-bases 50000000 (abort explicitly before excessive result storage)\n"
+                "--max-node-visits 3 (bounded revisits outside source-array cycles; 1 forbids new revisits)\n"
                 "--coverage-model auto|poisson|negative-binomial --coverage-window 7\n"
                 "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
                 "--min-external-flank 0 (0 = k+1 bases wholly outside the seed; 1 restores short-tail behavior)\n"
@@ -365,6 +377,7 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--output" || flag=="--output-folder")destination=value;
         else if(flag=="--threads")threads=integer(flag,value);
         else if(flag=="--beam-width")options.beam_width=integer(flag,value);
+        else if(flag=="--max-node-visits")options.max_node_visits=integer(flag,value);
         else if(flag=="--max-length")options.max_bp=integer(flag,value);
         else if(flag=="--max-flank-length")options.max_flank_bp=integer(flag,value);
         else if(flag=="--max-states")options.max_states=integer(flag,value);
@@ -468,6 +481,9 @@ int run_extension_module(int argc,char** argv) {
                 entry.seed=std::move(seed);
                 auto left_context=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,true);
                 auto right_context=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,false);
+                for(const auto& cycle:q.source_cycles) {
+                    left_context.push_back({"","",cycle});right_context.push_back({"","",cycle});
+                }
                 if(used+2>options.max_query_states) {
                     Candidate c;c.path=entry.seed.path;c.sequence=graph.spell(c.path);c.seed_end=c.sequence.size();
                     c.left.stop=c.right.stop="query_work_limit";c.search_limited=true;entry.paths.push_back(std::move(c));
@@ -607,7 +623,7 @@ int run_extension_module(int argc,char** argv) {
         auto branch_out=output(staging/"protospacer_branch_checks.tsv");
         branch_out<<"query_id\tseed_id\tside\tvertex\tedge\ttarget\tprobe_steps\tobservations\tscore\tstatus\tchosen\tdecision\n";
         adapter_stops<<"query_id\tseed_id\tside\tmotif\tclean_flank_bp\toverlaps_seed\tclean_endpoint_vertex\tdetected_vertex\n";
-        selection<<"query_id\tseed_id\tregion_id\tcompared_paths\tcompared_regions\ttotal_score\tstability_score\twithin_flank_variance\tadjacent_change\tleft_right_difference\tsample_penalty\tleft_samples\tright_samples\tleft_multiplicity\tright_multiplicity\tquery_coverage\tmultiplicity_evidence\trunner_up_score\tscore_gap\tscore_tie\tsearch_limited\tshort_flank_trimmed\tflank_multiplicity_conflict\tjoint_flank_loss_before_split\tambiguity_trimmed\n";
+        selection<<"query_id\tseed_id\tregion_id\tcompared_paths\tcompared_regions\ttotal_score\tstability_score\twithin_flank_variance\tadjacent_change\tleft_right_difference\tsample_penalty\tweak_edge_fraction\tleft_samples\tright_samples\tleft_multiplicity\tright_multiplicity\tquery_coverage\tmultiplicity_evidence\trunner_up_score\tscore_gap\tscore_tie\tsearch_limited\tshort_flank_trimmed\tflank_multiplicity_conflict\tjoint_flank_loss_before_split\tambiguity_trimmed\n";
         auto regions_out=output(staging/"protospacer_regions.tsv");
         regions_out<<"region_id\tlength\tsequence\tvertices\tedges\tviral_status\n";
         auto fasta=output(staging/"ContiguousPaths.fasta");
@@ -684,7 +700,7 @@ int run_extension_module(int argc,char** argv) {
                     const auto& lp=(flip?c.right:c.left).coverage.profile;const auto& rp=(flip?c.left:c.right).coverage.profile;
                     bool left_enough=lp.samples>=options.coverage_window,right_enough=rp.samples>=options.coverage_window;
                     selection<<query_id<<'\t'<<e.id<<'\t'<<id<<'\t'<<q.compared_paths<<'\t'<<q.compared_regions<<'\t'<<c.score<<'\t'
-                        <<stable.score()<<'\t'<<stable.within<<'\t'<<stable.jumps<<'\t'<<stable.between<<'\t'<<stable.support<<'\t'
+                        <<stable.score()<<'\t'<<stable.within<<'\t'<<stable.jumps<<'\t'<<stable.between<<'\t'<<stable.support<<'\t'<<stable.weak<<'\t'
                         <<lp.samples<<'\t'<<rp.samples<<'\t'<<lp.level()<<'\t'<<rp.level()<<'\t'<<double(e.seed.end-e.seed.begin)/q.sequence.size()<<'\t'
                         <<(left_enough&&right_enough?"both_flanks":left_enough||right_enough?"one_flank":"insufficient")<<'\t';
                     if(q.has_runner)selection<<q.runner_score;else selection<<"NA";
@@ -709,8 +725,8 @@ int run_extension_module(int argc,char** argv) {
         }
         auto parameters=output(staging/"protospacer_parameters.json");
         auto adapters_json=adapter_json(options);
-        parameters<<"{\n  \"schema\": 7,\n  \"extension_algorithm\": \"supported_successors_local_median_v2\",\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
-            <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_states_per_side\": "<<options.max_states
+        parameters<<"{\n  \"schema\": 8,\n  \"extension_algorithm\": \"equal_depth_beam_bounded_repeats_v3\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"weak_edge_fraction_weight\": 1,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
+            <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_node_visits\": "<<options.max_node_visits<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases
             <<",\n  \"coverage_model\": "<<json_string(options.coverage_model)<<",\n  \"coverage_window\": "<<options.coverage_window<<",\n  \"max_coverage_penalty\": "<<options.max_coverage_penalty

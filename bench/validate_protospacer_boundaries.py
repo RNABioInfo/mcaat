@@ -39,7 +39,7 @@ run('default',[*common,'--output',out/'default'])
 result=out/'default';queries=rows(result/'protospacer_queries.tsv');regions=rows(result/'protospacer_regions.tsv')
 links=rows(result/'protospacer_associations.tsv');by_source={q['source_id']:q for q in queries};by_region={r['region_id']:r for r in regions}
 params=json.loads((result/'protospacer_parameters.json').read_text())
-assert params['schema']==6 and params['branch_guard_active'] and params['boundary_corrected_source_observations']==16
+assert params['schema']==8 and params['branch_guard_active'] and params['boundary_corrected_source_observations']==16
 assert params['max_flank_length']==750 and params['boundary_support']==.85
 for q in queries:
     assert q['boundary_status']=='conserved_terminal_reassigned'

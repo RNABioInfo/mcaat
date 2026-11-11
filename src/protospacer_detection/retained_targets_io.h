@@ -2,6 +2,7 @@
 struct SuppliedTarget {
     std::string id,sequence,error;
     std::vector<TargetContext> contexts;
+    std::set<std::string> source_cycles;
     std::vector<std::tuple<std::string,std::string,size_t,size_t,char>> sources;
     TargetExtension extension;
 };
@@ -38,6 +39,8 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
         for(const auto& q:queries)for(bool flip:{false,true}) {
             auto full=flip?reverse_complement(q.sequence):q.sequence;
             for(size_t pos=full.find(target.sequence);pos!=std::string::npos;pos=full.find(target.sequence,pos+1)) {
+                for(const auto& cycle:q.source_cycles)
+                    target.source_cycles.insert(flip?reverse_complement(cycle):cycle);
                 for(const auto& s:q.sources) {
                     bool source_flip=s.reverse!=flip;
                     auto repeat=source_flip?reverse_complement(s.repeat):s.repeat;
@@ -60,7 +63,7 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
         auto& target=targets[i];
         try {
             if(cancelled)continue;
-            target.extension=extend_retained_target(graph,target.sequence,target.contexts,options);
+            target.extension=extend_retained_target(graph,target.sequence,target.contexts,options,&target.source_cycles);
             if(target.extension.has_extension && retained.fetch_add(target.extension.selected.sequence.size())+target.extension.selected.sequence.size()>max_bases)
                 throw std::runtime_error("retained targets/extensions exceed --max-retained-bases");
         }catch(const std::exception& e){target.error=e.what();cancelled=true;}
@@ -123,13 +126,13 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
             extensions<<'\n';
         }
         auto params=output(staging/"protospacer_parameters.json");
-        params<<"{\n  \"schema\": 7,\n  \"extension_algorithm\": \"supported_successors_local_median_v2\",\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
+        params<<"{\n  \"schema\": 8,\n  \"extension_algorithm\": \"equal_depth_beam_bounded_repeats_v3\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
             <<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())<<",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())
             <<",\n  \"graph_k\": "<<graph.k()
             <<",\n  \"input_records\": "<<targets.size()<<",\n  \"retained_records\": "<<targets.size()<<",\n  \"extended_records\": "<<extended
             <<",\n  \"not_extended_records\": "<<targets.size()-extended<<",\n  \"ambiguous_records\": "<<ambiguous<<",\n  \"regions\": "<<written.size()
             <<",\n  \"search_limited_records\": "<<limited<<",\n  \"threads\": "<<threads<<",\n  \"max_length\": "<<options.max_bp<<",\n  \"max_flank_length\": "<<options.max_flank_bp
-            <<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_states_per_side\": "<<options.max_states<<",\n  \"max_query_states\": "<<options.max_query_states
+            <<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_node_visits\": "<<options.max_node_visits<<",\n  \"max_states_per_side\": "<<options.max_states<<",\n  \"max_query_states\": "<<options.max_query_states
             <<",\n  \"branch_guard\": "<<(options.branch_guard?"true":"false")<<",\n  \"resolve_graph_ties\": "<<(options.resolve_graph_ties?"true":"false")
             <<",\n  \"junction_check\": "<<(options.junction_check?"true":"false")<<",\n  \"joint_flank_check\": "<<(options.joint_flank_check?"true":"false")
             <<",\n  \"coverage_model\": "<<json_string(options.coverage_model)<<",\n  \"coverage_window\": "<<options.coverage_window

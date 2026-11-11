@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <tuple>
 #include "protospacer_detection/array_context.h"
@@ -36,6 +37,7 @@ struct AdapterPattern {
 struct Options {
     size_t max_bp=1550,max_flank_bp=750,beam_width=32,max_states=50000,max_paths=16,max_seeds=128,min_match=0;
     size_t coverage_window=7,max_query_states=200000;
+    size_t max_node_visits=3;
     size_t min_external_flank=0; // 0: k+1, one complete edge outside the seed
     bool joint_flank_check=true;
     bool resolve_graph_ties=false;
@@ -53,6 +55,8 @@ struct Options {
                                          {"CTGTCTCTTATACACATCT"}};
     void validate() const {
         boundaries.validate();
+        if(!max_node_visits || max_node_visits>64)
+            throw std::invalid_argument("max-node-visits must be in [1, 64]");
         if(!max_bp || !max_flank_bp || !branch_lookahead || branch_lookahead>1000 || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
             throw std::invalid_argument("extension sizes must be positive; coverage-window must be >=3");
         if(beam_width>1024 || max_paths>1024 || max_seeds>65536)
@@ -180,9 +184,10 @@ SeedSearch isolate(Graph& graph,const Path& full,const std::set<Node>& array_edg
 }
 
 struct MultiplicityProfile {
-    size_t samples=0;
+    size_t samples=0,weak=0;
     double mean_log=0,m2=0,step_sum=0,previous=0;
     void observe(double count) {
+        if(count<=1)++weak;
         double value=std::log2(1+std::max(0.,count));
         if(samples)step_sum+=(value-previous)*(value-previous);
         ++samples;double delta=value-mean_log;mean_log+=delta/samples;m2+=delta*(value-mean_log);previous=value;
@@ -190,7 +195,8 @@ struct MultiplicityProfile {
     double variance() const {return samples?std::max(0.,m2/samples):0;}
     double roughness() const {return samples>1?step_sum/(samples-1):0;}
     double level() const {return samples?std::exp2(mean_log)-1:0;}
-    double loss() const {return variance()+roughness()+1./(samples+1);}
+    double weak_fraction() const {return samples?double(weak)/samples:0;}
+    double loss() const {return variance()+roughness()+weak_fraction()+1./(samples+1);}
 };
 struct Coverage {
     std::vector<double> baseline;
@@ -216,8 +222,9 @@ struct Coverage {
         double r=1/dispersion;
         return std::max(0.,(count?count*std::log(count/mean):0)-(count+r)*std::log((count+r)/(mean+r)));
     }
-    double observe(double count,const Options& options) {
+    double observe(double count,const Options& options,bool sample=true) {
         profile.observe(count);
+        if(!sample)return 0;
         if(baseline.size()<options.coverage_window) {baseline.push_back(count);recent.push_back(count);return 0;}
         double alpha=options.coverage_model=="poisson"?0:local_dispersion();
         // Explicit NB uses a weak overdispersion floor when local MAD is zero.
@@ -234,14 +241,15 @@ struct Coverage {
     double score() const {return scored?-penalty/scored:0;}
 };
 struct Stability {
-    double within=0,jumps=0,between=0,support=0;
-    double score() const {return -(within+jumps+between+support);}
+    double within=0,jumps=0,between=0,support=0,weak=0;
+    double score() const {return -(within+jumps+between+support+weak);}
 };
 inline Stability stability(const Coverage& left,const Coverage& right) {
     const auto& l=left.profile;const auto& r=right.profile;
     Stability s;
     s.within=(l.variance()+r.variance())/2;
     s.jumps=(l.roughness()+r.roughness())/2;
+    s.weak=(l.weak_fraction()+r.weak_fraction())/2;
     if(l.samples && r.samples)s.between=(l.mean_log-r.mean_log)*(l.mean_log-r.mean_log);
     // A short/absent flank must not earn a perfect score from zero observations.
     s.support=1./(l.samples+1)+1./(r.samples+1);return s;
@@ -249,6 +257,8 @@ inline Stability stability(const Coverage& left,const Coverage& right) {
 struct Side {
     Path nodes; // starts at seed endpoint, grows outwards
     Coverage coverage;
+    MultiplicityProfile beam_profile; // provisional: includes unresolved boundary edges
+    size_t source_run=0;
     size_t branches=0,since_sample=0;
     std::string stop;
     std::string context="unexamined",context_prefix;
@@ -290,8 +300,9 @@ Coverage path_coverage(Graph& graph,const Path& nodes,size_t length,bool backwar
         if(shared_context && shared_context->count(chosen.edge)){++since;continue;}
         bool junction=options.junction_check &&
             (graph.neighbors(nodes[i-1],backwards).size()>1 || graph.neighbors(nodes[i],!backwards).size()>1);
-        if(!junction && !cov.baseline.empty() && since<graph.k()+1){++since;continue;}
-        cov.observe(chosen.count,options);since=0;
+        bool sample=junction || cov.baseline.empty() || since>=graph.k()+1;
+        cov.observe(chosen.count,options,sample);
+        if(sample)since=0;else ++since;
     }
     return cov;
 }
@@ -310,13 +321,66 @@ struct BranchProbe {
     double score=0;
     std::string status="insufficient_evidence";
 };
+// A shared vertex alone is not evidence of an array return. Reject a closed
+// walk only when every edge since the previous visit belongs to source cycles.
+// Other repeats are bounded by visits per vertex and the ordinary work/bp caps.
+class SourceCycleGuard {
+    std::unordered_set<std::string> words_;
+    std::unordered_map<Node,bool> cache_;
+public:
+    SourceCycleGuard(size_t k,const std::vector<FlankContext>* models) {
+        if(models)for(const auto& m:*models)if(!m.cycle.empty()) {
+            std::string wrapped=m.cycle;
+            while(wrapped.size()<m.cycle.size()+k)wrapped+=m.cycle;
+            for(size_t i=0;i<m.cycle.size();++i)words_.insert(wrapped.substr(i,k+1));
+        }
+    }
+    template<class Graph> bool contains(Graph& graph,Node from,const Arc& arc,bool back) {
+        if(words_.empty())return false;
+        auto it=cache_.find(arc.edge);if(it!=cache_.end())return it->second;
+        auto label=graph.label(from);char base=graph.extension_base(arc,back);
+        bool found=words_.count(back?std::string(1,base)+label:label+base);
+        cache_.emplace(arc.edge,found);return found;
+    }
+    template<class Graph> bool contains(Graph& graph,Node from,Node to,bool back) {
+        for(auto arc:graph.neighbors(from,back))if(arc.to==to)return contains(graph,from,arc,back);
+        throw std::runtime_error("missing source-cycle path edge");
+    }
+};
+inline std::string repeat_stop(const Path& seed,const Side& state,Node next,size_t source_run,size_t limit) {
+    size_t count=0,seed_count=0,last=0;
+    for(size_t i=0;i<seed.size();++i)if(seed[i]==next){++count;++seed_count;last=i;}
+    for(size_t i=1;i<state.nodes.size();++i)if(state.nodes[i]==next){++count;last=seed.size()-1+i;}
+    if(!count)return {};
+    size_t position=seed.size()-1+state.nodes.size();
+    if(source_run>=position-last)return "source_array_cycle";
+    if(count>=std::max(size_t(1),seed_count)+limit-1)return "repeat_visit_limit";
+    return {};
+}
+template<class Graph>
+bool compatible_walk(Graph& graph,const Path& path,const Path& seed,size_t seed_begin,
+                     SourceCycleGuard& guard,const Options& options) {
+    std::unordered_map<Node,size_t> originals,counts,last;
+    for(auto v:seed)++originals[v];
+    size_t run=0,seed_end=seed_begin+seed.size();
+    for(size_t i=0;i<path.size();++i) {
+        if(i)run=guard.contains(graph,path[i-1],path[i],false)?run+1:0;
+        auto v=path[i];
+        if(++counts[v]>std::max(size_t(1),originals[v])+options.max_node_visits-1)return false;
+        auto previous=last.find(v);
+        if(previous!=last.end() && run>=i-previous->second &&
+           !(previous->second>=seed_begin && i<seed_end))return false;
+        last[v]=i;
+    }
+    return true;
+}
 template<class Graph>
 BranchProbe probe_branch(Graph& graph,const Side& current,Arc first,bool backward,
-                         const std::unordered_set<Node>& visited,const std::set<Node>& masked,
+                         const Path& oriented_seed,SourceCycleGuard& source_guard,const std::set<Node>& masked,
                          const std::set<Node>* shared_context,const std::vector<FlankContext>* contexts,
                          const AdapterGuard& guard,size_t budget,size_t& expanded,
                          const Options& options,SearchDiagnostics* diagnostics) {
-    BranchProbe result;auto seen=visited;Path path=current.nodes;
+    BranchProbe result;Side walk=current;Path& path=walk.nodes;
     std::string prefix=current.context_prefix,context=current.context,tail=current.adapter_tail;
     MultiplicityProfile local;double loss=0;
     const bool baseline=current.coverage.baseline.size()>=3;
@@ -326,7 +390,9 @@ BranchProbe probe_branch(Graph& graph,const Side& current,Arc first,bool backwar
     for(size_t step=0;step<std::min(budget,options.branch_lookahead);++step) {
         if(expanded>=options.max_states){result.limited=true;result.status="work_limit";return result;}
         ++expanded;++result.steps;
-        if(seen.count(arc.to) || masked.count(arc.edge)){result.status="cycle_or_masked";break;}
+        size_t source_run=source_guard.contains(graph,path.back(),arc,backward)?walk.source_run+1:0;
+        auto stop=repeat_stop(oriented_seed,walk,arc.to,source_run,options.max_node_visits);
+        if(!stop.empty() || masked.count(arc.edge)){result.status=stop.empty()?"source_array_context":stop;break;}
         char base=graph.extension_base(arc,backward);
         auto adapter=guard.append(tail,base);
         if(!adapter.empty()) {
@@ -347,10 +413,13 @@ BranchProbe probe_branch(Graph& graph,const Side& current,Arc first,bool backwar
             }
             loss+=penalty;local.observe(arc.count);++result.observations;
         }
-        path.push_back(arc.to);seen.insert(arc.to);
+        path.push_back(arc.to);walk.source_run=source_run;
         auto next=graph.neighbors(arc.to,backward);
         bool reaches_mask=std::any_of(next.begin(),next.end(),[&](const auto& a){return masked.count(a.edge);});
-        next.erase(std::remove_if(next.begin(),next.end(),[&](const auto& a){return seen.count(a.to)||masked.count(a.edge);}),next.end());
+        next.erase(std::remove_if(next.begin(),next.end(),[&](const auto& a){
+            size_t run=source_guard.contains(graph,path.back(),a,backward)?walk.source_run+1:0;
+            return !repeat_stop(oriented_seed,walk,a.to,run,options.max_node_visits).empty()||masked.count(a.edge);
+        }),next.end());
         if(next.empty() && reaches_mask){result.viable=false;result.status="source_array_context";return result;}
         if(next.size()!=1)break;
         arc=next.front();
@@ -373,6 +442,10 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
     const auto& first=backward?seed.left:seed.right;
     Node endpoint=backward?seed.path.front():seed.path.back();
     Side initial;initial.nodes={endpoint};
+    Path oriented_seed=seed.path;if(backward)std::reverse(oriented_seed.begin(),oriented_seed.end());
+    SourceCycleGuard source_guard(graph.k(),contexts);
+    for(size_t i=1;i<oriented_seed.size();++i)
+        initial.source_run=source_guard.contains(graph,oriented_seed[i-1],oriented_seed[i],backward)?initial.source_run+1:0;
     AdapterGuard adapter_guard(options.adapters,backward);
     if(!adapter_guard.empty()) {
         auto sequence=graph.spell(seed.path);if(backward)std::reverse(sequence.begin(),sequence.end());
@@ -400,35 +473,34 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
             result.paths.resize(options.beam_width);result.beam_pruned=true;
         }
     };
+    // Level-synchronous beam: every live path receives one more base before
+    // pruning. Terminal paths never displace still-growing alternatives.
     while(!frontier.empty()) {
-        std::sort(frontier.begin(),frontier.end(),better_side);
-        Side current=std::move(frontier.front());frontier.erase(frontier.begin());
-        std::unordered_set<Node> visited(seed.path.begin(),seed.path.end());
-        visited.insert(current.nodes.begin(),current.nodes.end());
-        // Nonbranching stretches are walked in place: no full path copy per k-mer.
-        while(true) {
-            if(current.nodes.size()-1>=budget) {finish(std::move(current),"length_limit");break;}
+        std::vector<Side> next_frontier;
+        for(auto& entry:frontier) {
+            Side current=std::move(entry);
+            if(current.nodes.size()-1>=budget){finish(std::move(current),"length_limit");continue;}
             if(result.expanded>=options.max_states) {
-                result.work_limited=true;finish(std::move(current),"work_limit");
-                for(auto& p:frontier)finish(std::move(p),"work_limit");
-                frontier.clear();break;
+                result.work_limited=true;finish(std::move(current),"work_limit");continue;
             }
             auto arcs=current.nodes.size()==1?first:graph.neighbors(current.nodes.back(),backward);
-            std::vector<Arc> usable;bool cycle=false,masked=false;
+            std::vector<Arc> usable;bool masked=false;std::string repeat_reason;
             for(auto a:arcs) {
-                if(visited.count(a.to)){cycle=true;continue;}
+                size_t run=source_guard.contains(graph,current.nodes.back(),a,backward)?current.source_run+1:0;
+                auto stop=repeat_stop(oriented_seed,current,a.to,run,options.max_node_visits);
+                if(!stop.empty()){repeat_reason=stop;continue;}
                 if(array_edges.count(a.edge)){masked=true;continue;}
                 usable.push_back(a);
             }
             std::sort(usable.begin(),usable.end(),[](auto a,auto b){return a.to<b.to;});
-            if(usable.empty()){finish(std::move(current),cycle?"cycle":masked?"array_context":"dead_end");break;}
+            if(usable.empty()){finish(std::move(current),!repeat_reason.empty()?repeat_reason:masked?"array_context":"dead_end");continue;}
             bool branch=usable.size()>1;
             if(branch)++current.branches;
             if(branch && options.branch_guard) {
                 std::vector<BranchProbe> probes;std::vector<size_t> viable;
                 bool limited=false;
                 for(size_t j=0;j<usable.size();++j) {
-                    probes.push_back(probe_branch(graph,current,usable[j],backward,visited,array_edges,shared_context,
+                    probes.push_back(probe_branch(graph,current,usable[j],backward,oriented_seed,source_guard,array_edges,shared_context,
                         contexts,adapter_guard,budget-(current.nodes.size()-1),result.expanded,options,diagnostics));
                     limited|=probes.back().limited;
                     if(probes.back().viable)viable.push_back(j);
@@ -451,7 +523,7 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 if(diagnostics)for(size_t j=0;j<usable.size();++j)
                     diagnostics->record_branch({backward,j==chosen,current.nodes.back(),usable[j].edge,usable[j].to,
                         probes[j].observations,probes[j].steps,probes[j].score,probes[j].status,decision});
-                if(chosen==usable.size()) {finish(std::move(current),decision);break;}
+                if(chosen==usable.size()) {finish(std::move(current),decision);continue;}
                 usable={usable[chosen]};
             }
             std::vector<Side> children;
@@ -460,6 +532,8 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 if(result.expanded>=options.max_states){result.work_limited=true;break;}
                 ++result.expanded;
                 Side next=branch?current:std::move(current);
+                next.source_run=source_guard.contains(graph,next.nodes.back(),a,backward)?next.source_run+1:0;
+                next.beam_profile.observe(a.count);
                 char base=0;
                 if(!adapter_guard.empty() || next.context=="pending")base=graph.extension_base(a,backward);
                 auto adapter=adapter_guard.append(next.adapter_tail,base);
@@ -495,26 +569,27 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                     next.context!="pending" &&
                     (junction || next.coverage.baseline.empty() || next.since_sample>=graph.k()+1);
                 auto before=next.coverage;
-                double penalty=sample?next.coverage.observe(a.count,options):0;
+                bool evidence=next.context!="pending" && (!shared_context || !shared_context->count(a.edge));
+                double penalty=evidence?next.coverage.observe(a.count,options,sample):0;
                 if(sample)next.since_sample=0;else ++next.since_sample;
                 if(penalty>options.max_coverage_penalty) {next.coverage=std::move(before);rejected.emplace_back(std::move(next),"coverage_break");continue;}
                 next.nodes.push_back(a.to);children.push_back(std::move(next));
             }
-            // A rejected successor is not a reason to stop a prefix that still
-            // has an accepted successor. Otherwise low-count error branches
-            // manufacture short terminal paths which can outrank the genuine
-            // continuation solely because their multiplicity varies less.
-            if(children.empty())for(auto& stop:rejected)finish(std::move(stop.first),std::move(stop.second));
-            if(!branch && children.size()==1) {
-                current=std::move(children.front());visited.insert(current.nodes.back());continue;
+            // Rejected siblings cannot manufacture a short winning prefix.
+            if(children.empty()) {
+                if(rejected.empty())finish(std::move(current),"work_limit");
+                else for(auto& stop:rejected)finish(std::move(stop.first),std::move(stop.second));
             }
-            for(auto& c:children)frontier.push_back(std::move(c));
-            if(frontier.size()>options.beam_width) {
-                std::sort(frontier.begin(),frontier.end(),better_side);
-                frontier.resize(options.beam_width);result.beam_pruned=true;
-            }
-            break;
+            for(auto& child:children)next_frontier.push_back(std::move(child));
         }
+        if(next_frontier.size()>options.beam_width) {
+            std::sort(next_frontier.begin(),next_frontier.end(),[](const Side& a,const Side& b){
+                if(a.beam_profile.loss()!=b.beam_profile.loss())return a.beam_profile.loss()<b.beam_profile.loss();
+                return a.nodes<b.nodes;
+            });
+            next_frontier.resize(options.beam_width);result.beam_pruned=true;
+        }
+        frontier=std::move(next_frontier);
     }
     std::sort(result.paths.begin(),result.paths.end(),better_side);
     // The same partial path can stop before several incompatible successors.
@@ -634,6 +709,10 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
     auto side_budget=std::min(budget,options.max_flank_bp);
     auto left=extend(graph,seed,true,side_budget,array_edges,options,shared_context,left_context,diagnostics);
     auto right=extend(graph,seed,false,side_budget,array_edges,options,shared_context,right_context,diagnostics);
+    std::vector<FlankContext> cycle_models;
+    if(left_context)cycle_models.insert(cycle_models.end(),left_context->begin(),left_context->end());
+    if(right_context)cycle_models.insert(cycle_models.end(),right_context->begin(),right_context->end());
+    SourceCycleGuard join_guard(graph.k(),&cycle_models);
     std::vector<Candidate> results;std::set<std::tuple<Path,std::string,std::string>> seen;size_t combinations=0;
     bool combination_limit=left.paths.size()*right.paths.size()>options.beam_width*4;
     for(size_t diagonal=0;diagonal<left.paths.size()+right.paths.size();++diagonal)
@@ -657,9 +736,9 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         c.seed_begin=ln;c.seed_end=ln+seed_bp;
         c.path.insert(c.path.end(),seed.path.begin(),seed.path.end());
         for(size_t i=1;i<=rn;++i)c.path.push_back(r.nodes[i]);
-        // Repeated k-mers already present in the supplied spacer are allowed;
-        // new flank vertices must still be disjoint from seed and opposite flank.
-        if(std::set<Node>(c.path.begin(),c.path.end()).size()!=std::set<Node>(seed.path.begin(),seed.path.end()).size()+ln+rn)continue;
+        // The same bounds apply across the joined flanks. Existing seed repeats
+        // remain intact; new source-array loops are never permitted.
+        if(!compatible_walk(graph,c.path,seed.path,ln,join_guard,options))continue;
         if(!seen.emplace(c.path,c.left.context,c.right.context).second)continue;
         c.sequence=graph.spell(c.path);
         if(c.sequence.size()!=c.path.size()+graph.k()-1)throw std::runtime_error("incorrect reconstructed length");

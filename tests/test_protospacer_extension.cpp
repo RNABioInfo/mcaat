@@ -88,7 +88,7 @@ void test_coverage() {
         check(std::isfinite(Coverage::loss(x,m,d)) && Coverage::loss(x,m,d)>=0,"finite nonnegative coverage loss");
 }
 void test_join_and_repeated_seed() {
-    Graph g;Options o;o.max_bp=500;
+    Graph g;Options o;o.max_bp=500;o.max_node_visits=1;
     auto spacer=dna(32),shared=dna(45);
     auto cycle=g.add(shared+spacer+shared);
     Path path(cycle.begin()+shared.size(),cycle.begin()+shared.size()+spacer.size()-g.k()+1);
@@ -448,11 +448,76 @@ void test_local_coverage() {
     check(cov.observe(1000,o)>o.max_coverage_penalty && cov.local_mean()==local,"abrupt jump is rejected before adaptation");
     check(cov.observe(1,o)>o.max_coverage_penalty && cov.local_mean()==local,"low-count error branch cannot move the baseline");
 }
+
+void test_equal_depth_and_bounded_repeats() {
+    Options o;o.adapters.clear();o.max_bp=600;o.max_flank_bp=500;o.max_states=10000;o.beam_width=16;
+    Graph g;auto seed_seq=dna(35),loop=dna(32),tail=dna(65);
+    auto sequence=seed_seq+loop+loop+loop+tail;
+    auto full=g.add(sequence);for(auto& entry:g.arcs)entry.second.count=12;
+    Path seed(full.begin(),full.begin()+seed_seq.size()-g.k()+1);
+    Seed start{seed,0,seed_seq.size(),{},g.neighbors(seed.back(),false)};
+    auto walks=extend(g,start,false,500,{},o);
+    auto has_sequence=[&](const WalkResult& result,const std::string& wanted) {
+        for(const auto& side:result.paths) {
+            auto path=seed;path.insert(path.end(),side.nodes.begin()+1,side.nodes.end());
+            if(g.spell(path)==wanted)return true;
+        }return false;
+    };
+    check(has_sequence(walks,sequence),"bounded external repeats retain the three-copy exit path");
+    for(const auto& side:walks.paths) {
+        std::map<Node,size_t> visits;for(auto v:side.nodes)++visits[v];
+        for(auto v:visits)check(v.second<=3,"external repeat visits are bounded");
+    }
+    o.max_node_visits=1;
+    check(!has_sequence(extend(g,start,false,500,{},o),sequence),"visit cap one forbids additional repeat copies");
+    o.max_node_visits=3;
+    std::vector<FlankContext> contexts={{"",std::string(24,'A'),loop}};
+    auto guarded=extend(g,start,false,500,{},o,nullptr,&contexts);
+    check(!has_sequence(guarded,sequence),"source-only cycle closes are rejected after external context is established");
+    check(has_sequence(guarded,seed_seq+loop+tail),"shared source nodes can be crossed without making a source cycle");
+    check(std::any_of(guarded.paths.begin(),guarded.paths.end(),[](const Side& p){return p.stop=="source_array_cycle";}),"source loop rejection has a separate stop reason");
+    SourceCycleGuard guard(g.k(),&contexts);
+    check(!compatible_walk(g,full,seed,0,guard,o),"join cannot reintroduce a source-only cycle");
+    SourceCycleGuard empty_guard(g.k(),nullptr);
+    check(compatible_walk(g,full,seed,0,empty_guard,o),"external bounded repeat survives joining");
+    check(compatible_walk(g,full,full,0,guard,o),"repeats already present in immutable seed remain allowed");
+    Path tail_seed(full.end()-20,full.end());
+    Seed backwards{tail_seed,0,tail_seed.size()+g.k()-1,g.neighbors(tail_seed.front(),true),{}};
+    auto left_walks=extend(g,backwards,true,500,{},o,nullptr,&contexts);
+    check(std::any_of(left_walks.paths.begin(),left_walks.paths.end(),[](const Side& p){return p.stop=="source_array_cycle";}),"source-cycle guard also works during backward traversal");
+    TargetGraph target_graph;target_graph.k_=g.k();
+    target_graph.add(sequence);for(auto& entry:target_graph.arcs)entry.second.count=12;
+    std::set<std::string> other_source_cycles={loop};
+    auto retained=extend_retained_target(target_graph,seed_seq,{{seed_seq,std::string(24,'A'),0,seed_seq.size()}},o,&other_source_cycles);
+    check(retained.has_extension && retained.selected.sequence.find(loop+loop)==std::string::npos,"other source-array spacer cycles are excluded in retained-target mode");
+    o.max_states=4;
+    check(extend(g,start,false,500,{},o).expanded<=4,"bounded-repeat work budget enforced");
+
+    Graph branched;auto query=dna(35),good=std::string("G")+dna(200);
+    auto correct=branched.add(query+good,30);
+    for(char base:std::string("ACGT"))branched.add(query+"A"+base+dna(190),1);
+    // Shared k-mers in the input are not flank evidence.
+    for(auto& entry:branched.arcs)if(entry.second.count<30)entry.second.count=1;
+    Path q(correct.begin(),correct.begin()+query.size()-branched.k()+1);
+    Seed bs{q,0,query.size(),{},branched.neighbors(q.back(),false)};
+    std::vector<FlankContext> pending={{dna(30),std::string(24,'T'),""}};
+    o.max_states=10000;o.beam_width=2;
+    auto beam=extend(branched,bs,false,400,{},o,nullptr,&pending);
+    check(std::any_of(beam.paths.begin(),beam.paths.end(),[&](const Side& side){
+        auto p=q;p.insert(p.end(),side.nodes.begin()+1,side.nodes.end());return branched.spell(p)==query+good;
+    }),"same-depth beam preserves a supported branch while its source context is unresolved");
+    MultiplicityProfile weak,strong;for(int n=0;n<100;++n){weak.observe(1);strong.observe(12);}
+    check(strong.loss()<weak.loss(),"flat multiplicity one is softly penalized, not automatically perfect");
+    Coverage all;all.observe(12,o);all.observe(1,o,false);
+    check(all.profile.samples==2 && all.baseline.size()==1,"all-edge profile remains separate from sampled likelihood gate");
+}
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_local_coverage();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_local_coverage();test_equal_depth_and_bounded_repeats();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
+        invalid([]{Options o;o.max_node_visits=0;o.validate();});
+        invalid([]{Options o;o.max_node_visits=65;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});
         invalid([]{Options o;o.coverage_model="bad";o.validate();});
         invalid([]{Options o;o.array_repeat_identity=1.1;o.validate();});

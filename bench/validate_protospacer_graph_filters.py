@@ -75,7 +75,7 @@ for name, flags in [('strict', ['--branch-guard', 'true', '--resolve-graph-ties'
     links = table(result / 'protospacer_associations.tsv')
     queries = {q['array_id']: q for q in table(result / 'protospacer_queries.tsv')}
     parameters = json.loads((result / 'protospacer_parameters.json').read_text())
-    assert parameters['schema'] == 6 and parameters['reads1'] == ''
+    assert parameters['schema'] == 8 and parameters['reads1'] == ''
     for row in table(result / 'protospacer_regions.tsv'):
         assert len(row['sequence']) == int(row['length']) == len(row['vertices'].split(',')) + 22
         assert len(row['edges'].split(',')) + 1 == len(row['vertices'].split(','))
