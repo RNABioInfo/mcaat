@@ -42,6 +42,10 @@ branch_a_other=seeds['branch']+common+arm_a+'C'+dna(900)
 branch_b_other=seeds['branch']+common+arm_b+'C'+dna(900)
 adapter_left=dna(800);adapter_target=adapter_left+seeds['adapter']+adapter+dna(800)
 sequences=[(straight,4),(true_branch,4),(branch_other,4),(branch_a_other,4),(branch_b_other,4),(adapter_target,4),(seeds['dead_end'],4),(variant_truth,4)]
+seeds['masked_variant']='AGGAGGGGGCTCTGCCGCACGGCGC'
+masked_allele='AGCAGGGGGCTCTGCTGCACCGCGC'
+masked_truth=dna(1000)+masked_allele+dna(1000)
+sequences.append((masked_truth,4))
 reads=out/'construction.fasta'
 with reads.open('w') as f:
  for num,(seq,copies) in enumerate(sequences):
@@ -86,7 +90,7 @@ links=rows(result/'protospacer_associations.tsv')
 assert len(links)==len({r['seed_id'] for r in links})
 for link in links:
  r=regions[link['region_id']];seq=r['sequence'];lo,hi=int(link['seed_begin']),int(link['seed_end'])
- expected=variant_allele if link['seed_id']=='variant' else seeds[link['seed_id']]
+ expected={'variant':variant_allele,'masked_variant':masked_allele}.get(link['seed_id'],seeds[link['seed_id']])
  assert (rc(seq[lo:hi]) if link['strand']=='-' else seq[lo:hi])==expected
  assert lo<=750 and len(seq)-hi<=750 and len(seq)<=1550
  assert len(seq)==len(r['vertices'].split(','))+22
@@ -103,11 +107,16 @@ assert branch_sequence in true_branch or rc(branch_sequence) in true_branch, 'lo
 variant=extensions['variant'];assert variant['extension_status'].startswith('extended_variant')
 variant_sequence=regions[variant['region_id']]['sequence']
 assert len(variant_sequence)==1537 and (variant_sequence in variant_truth or rc(variant_sequence) in variant_truth)
+masked=extensions['masked_variant'];assert masked['extension_status'].startswith('extended_variant')
+masked_sequence=regions[masked['region_id']]['sequence']
+assert len(masked_sequence)==1525 and (masked_sequence in masked_truth or rc(masked_sequence) in masked_truth)
+assert any(r['seed_id']=='masked_variant' and r['phase']=='masked_extend' for r in rows(result/'protospacer_placement_checks.tsv'))
 run('exact_only',[*common_args,'--output',out/'exact_only','--target-variant-fallback','false'])
 exact_only={r['seed_id']:r for r in rows(out/'exact_only/protospacer_extensions.tsv')}
 assert exact_only['below_k']['reason']=='shorter_than_graph_k'
 assert exact_only['absent']['reason']=='seed_not_mapped'
 assert exact_only['variant']['reason']=='seed_not_mapped'
+assert exact_only['masked_variant']['reason']=='seed_not_mapped'
 check_outputs(provided,out/'exact_only')
 # Twenty-four threads must yield exactly the same records, paths and diagnostics.
 run('threads24',[*common_args,'--output',out/'threads24','--threads','24'])
@@ -140,6 +149,7 @@ summary=dict(supplied_records=len(seeds),retained_records=len(seeds),baseline_re
  straight_length=int(extensions['straight']['length']),branch_length=int(extensions['branch']['length']),
  old_strict_branch_length=int(strict['branch']['length']),adapter_length=int(extensions['adapter']['length']),
  true_branch_recovered=True,variant_target_recovered=True,variant_length=len(variant_sequence),
+ masked_target_recovered=True,masked_length=len(masked_sequence),
  exact_only_policy_checked=True,threads_1_24_identical=True,failed_extensions_keep_protospacers=True,
  original_metagenome_graph_tested=False)
 (out/'validation.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary,indent=2))

@@ -48,8 +48,27 @@ extends the best N placements using the existing multiplicity score and source,
 cycle, adapter and depth guards. It shares the existing per-query work budget.
 `--max-target-placement-states 50000` separately bounds placement work;
 `--max-seeds` caps retained placements. Work limits and unextended alternatives
-are explicit. This is a bounded substitution-aware mapper with exact and
-one-substitution anchors, **not** a complete indel-aware search. It cannot prove
+are explicit. If these anchors produce no extension and budget remains, queries
+of at least k bases receive a masked BOSS lookup. This searches beyond the
+one-substitution anchor restriction: a valid 90%/85% target may have two
+substitutions in every complete k-mer. Candidates must still pass the full
+query-interval check and spell actual graph paths. The rescue shares both work
+budgets with the earlier attempts and reports `masked_probe`/`masked_extend`
+checks. It never replaces an existing exact or first-fallback extension.
+
+Only this final rescue uses a counting-noise tolerance in beam and final profile
+ranking. From positive edge counts, estimate the zero-truncated Poisson rate
+whose conditional mean equals the observed mean. A delta-method variance for
+`log2(1 + count)` supplies a tolerance for within-flank variance and adjacent
+changes; the expected fraction of singleton counts supplies the corresponding
+singleton tolerance. Excesses remain penalized, as do finite support and residual
+between-flank differences. This allows ordinary variation between counts one
+and two without automatically preferring a short flat dead end. It is a ranking
+heuristic for correlated k-mers, not a fitted probability of phage origin.
+Existing predictions retain their original scoring. The policy is recorded as
+`masked_rescue_stability` in schema 12 parameters.
+
+The production mapper remains bounded and does not allow target indels. It cannot prove
 which organism supplied a short sequence shared by several graph locations.
 Use `--target-variant-fallback false` to retain the earlier exact-placement policy.
 Missing source context, adapter-containing seeds and work limits receive
@@ -102,6 +121,10 @@ This checker verifies retention and output consistency. It does not assess
 reference-match quality of the extended flanks.
 
 ### Target-placement correction and full input audit (2026-11-12)
+
+The following paragraph describes the earlier one-substitution-anchor run.
+The subsequent complete-placement audit and masked-rescue comparison are in
+[the updated report](../bench/reports/protospacer-complete-placement-2026-11-12/README.md).
 
 The graph-only retained-input workflow now selects 10 reference-matching
 extensions, compared with 8 before the placement fallback. N=16, 32 and 64

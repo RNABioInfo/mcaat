@@ -6,6 +6,7 @@
 #include "short_seed_placements.h"
 #include "reachable_membership.h"
 #include "adapter_filtered_graph.h"
+#include "reference_root_graph.h"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -26,11 +27,14 @@ int main(int argc,char** argv){try{
     bool prefer_progress=std::getenv("MCAAT_AUDIT_PREFER_PROGRESS")!=nullptr;
     bool filter_adapters=std::getenv("MCAAT_AUDIT_FILTER_ADAPTERS")!=nullptr;
     bool strong_bounds=std::getenv("MCAAT_AUDIT_STRONG_BOUNDS")!=nullptr;
+    bool radius_bounds=std::getenv("MCAAT_AUDIT_RADIUS_BOUNDS")!=nullptr;
     bool unitigs=std::getenv("MCAAT_AUDIT_UNITIGS")!=nullptr;
     bool exact_only=std::getenv("MCAAT_AUDIT_EXACT_ONLY")!=nullptr;
     bool rolling=std::getenv("MCAAT_AUDIT_ROLLING")!=nullptr;
     std::set<std::string> filter;if(argc>4){std::ifstream in(argv[4]);std::string s;while(in>>s)filter.insert(s);}
     auto cases=table(dir+"/reference_cases.tsv"),targets=table(dir+"/targets.tsv");
+    size_t max_reference_bp=0;
+    for(const auto& row:cases)max_reference_bp=std::max({max_reference_bp,row.at("left_outward").size(),row.at("right_outward").size()});
     std::map<std::string,std::string> sequences;for(auto r:targets)sequences[r["seed_id"]]=r["sequence"];
     std::map<std::pair<std::string,bool>,std::vector<FlankContext>> source_models;
     std::map<std::string,std::vector<FlankContext>> cycle_models;
@@ -56,17 +60,33 @@ int main(int argc,char** argv){try{
         if(seq.size()<g.k())endpoints[{id,back}]=audit::short_seed_endpoints(g,seq,back);
         else if(!seeds[id].empty())endpoints[{id,back}]={back?seeds[id].front():seeds[id].back()};
     }
+    using RootView=audit::RootGraph<ExtensionGraph>;
+    std::map<std::pair<std::string,bool>,std::unique_ptr<RootView>> root_graphs;
+    for(const auto& item:endpoints)root_graphs[item.first]=std::make_unique<RootView>(g,item.first.second);
+    const char* roots_path=std::getenv("MCAAT_AUDIT_ROOTS");
+    if(roots_path) {
+        for(auto& item:endpoints)item.second.clear();
+        for(const auto& row:table(roots_path)) {
+            auto key=std::make_pair(row.at("seed_id"),row.at("side")=="left");
+            if(!sequences.count(key.first))continue;
+            auto node=std::stoull(row.at("vertex"));
+            endpoints.at(key).push_back(root_graphs.at(key)->add_root(node,row.at("flank_prefix")));
+        }
+        for(auto& item:endpoints){auto& values=item.second;std::sort(values.begin(),values.end());values.erase(std::unique(values.begin(),values.end()),values.end());}
+    }
     std::ofstream exact_file(dir+"/exact_native_routes.tsv"),summary_file(dir+"/oracle_routes.tsv"),paths_file(dir+"/oracle_paths.tsv");
     exact_file<<"case_id\tseed_id\tside\treference\tseed_length\tseed_mapped\treference_seed_exact\treference_boundary_clipped\tavailable_reference_bp\tknown_reference_bp\texact_bp\tfirst_stop\tvertex\texpected_base\tavailable_edges\tplacement_count\texact_start_vertex\n";
     summary_file<<"case_id\tseed_id\tside\treference\tcheckpoint_ref_bp\tstatus\tquery_bp\tedit_cost\tidentity\tstates_discovered\tstates_popped\tlimited\texhausted\tlowest_unexplored_cost\n";
     paths_file<<"case_id\tseed_id\tside\tcheckpoint_ref_bp\tquery_bp\tsequence_outward\toperations\tvertices\tcounts\n";
     size_t done=0,totalstates=0;
     std::vector<std::map<std::string,size_t>> bound_caches(4);
-    using Filtered=audit::AdapterFilteredGraph<ExtensionGraph>;
+    using Filtered=audit::AdapterFilteredGraph<RootView>;
     std::vector<std::unordered_map<Node,bool>> adapter_caches(4);
     std::vector<std::map<std::pair<std::string,bool>,std::unique_ptr<Filtered>>> filtered_graphs(4);
     using Reach=audit::ReachableMembership<Filtered>;
     std::vector<std::map<std::pair<std::string,bool>,std::unique_ptr<Reach>>> reachability(4);
+    using Radius=audit::RadiusMembership<Filtered>;
+    std::vector<std::map<std::pair<std::string,bool>,std::unique_ptr<Radius>>> radii(4);
     std::ofstream bounds_file(dir+"/segment_bounds.tsv");bounds_file<<"case_id\tside\treference_bp\tglobal_cost_bound\tblock_costs\n";
     std::ofstream strong_file(dir+"/strong_bounds.tsv");strong_file<<"case_id\tside\treference_bp\tglobal_cost_bound\tblock_costs\n";
     std::exception_ptr error;
@@ -82,12 +102,23 @@ int main(int argc,char** argv){try{
             auto ref=r.at(back?"left_outward":"right_outward");size_t available=ref.size();auto unknown=ref.find_first_not_of("ACGT");if(unknown!=std::string::npos)ref.resize(unknown);
             const auto& roots=endpoints.at({sid,back});
             auto& filtered=filtered_graphs.at(omp_get_thread_num())[{sid,back}];
-            if(!filtered)filtered=std::make_unique<Filtered>(g,filter_adapters,roots,sequences.at(sid).size(),back,adapter_caches.at(omp_get_thread_num()));
+            if(!filtered)filtered=std::make_unique<Filtered>(*root_graphs.at({sid,back}),filter_adapters,roots,sequences.at(sid).size(),back,adapter_caches.at(omp_get_thread_num()));
             auto& g=*filtered;
+            Radius* radius=nullptr;
+            if(radius_bounds) {
+                auto& ptr=radii.at(omp_get_thread_num())[{sid,back}];
+                // At >=90% identity, an alignment to R reference bases
+                // emits at most floor(R/0.9) graph bases. Extra k is a
+                // conservative allowance for membership block context.
+                if(!ptr){ptr=std::make_unique<Radius>(g,roots,back,(max_reference_bp*10+8)/9+g.k());
+                    #pragma omp critical
+                    std::cerr<<"Radius "<<sid<<' '<<back<<": "<<ptr->reachable.size()<<" nodes; complete="<<ptr->complete<<std::endl;}
+                radius=ptr.get();
+            }
             Reach* reachable=nullptr;
             if(use_reachability) {
                 auto& ptr=reachability.at(omp_get_thread_num())[{sid,back}];
-                if(!ptr)ptr=std::make_unique<Reach>(g,roots,back);
+                if(!ptr)ptr=std::make_unique<Reach>(g,root_graphs.at({sid,back})->native_membership_roots(roots),back);
                 reachable=ptr.get();
             }
             Node start=roots.empty()?missing:roots.front(),v=start;size_t n=0;
@@ -106,9 +137,9 @@ int main(int argc,char** argv){try{
             audit::SegmentBounds bounds;bounds.block=g.k();
             for(size_t i=0;!exact_only&&i+g.k()<=ref.size();i+=g.k()) {
                 auto word=ref.substr(i,g.k());if(back)std::reverse(word.begin(),word.end());
-                auto key=(use_reachability||filter_adapters)?sid+std::to_string(back)+word:word;
+                auto key=(use_reachability||filter_adapters||radius_bounds)?sid+std::to_string(back)+word:word;
                 auto cached=bound_cache.find(key);
-                if(cached==bound_cache.end())cached=bound_cache.emplace(key,reachable?audit::segment_lower_bound(*reachable,word):audit::segment_lower_bound(g,word)).first;
+                if(cached==bound_cache.end())cached=bound_cache.emplace(key,radius?audit::segment_lower_bound(*radius,word):reachable?audit::segment_lower_bound(*reachable,word):audit::segment_lower_bound(g,word)).first;
                 bounds.costs.push_back(cached->second);
             }
             bounds.prepare();if(!exact_only)bound_report<<r.at("case_id")<<'\t'<<(back?"left":"right")<<'\t'<<ref.size()<<'\t'<<bounds(0,ref.size())<<'\t'<<joined(bounds.costs)<<std::endl;
@@ -117,7 +148,7 @@ int main(int argc,char** argv){try{
                 for(size_t i=0;i+strong.block<=ref.size();i+=strong.block) {
                     auto word=ref.substr(i,strong.block);if(back)std::reverse(word.begin(),word.end());
                     auto key="strong"+sid+std::to_string(back)+word;auto cached=bound_cache.find(key);
-                    if(cached==bound_cache.end())cached=bound_cache.emplace(key,audit::two_edit_segment_lower_bound(g,word)).first;
+                    if(cached==bound_cache.end())cached=bound_cache.emplace(key,radius?audit::two_edit_segment_lower_bound(*radius,word):audit::two_edit_segment_lower_bound(g,word)).first;
                     strong.costs.push_back(cached->second);
                 }
                 strong.prepare();strong_report<<r.at("case_id")<<'\t'<<(back?"left":"right")<<'\t'<<ref.size()<<'\t'<<strong(0,ref.size())<<'\t'<<joined(strong.costs)<<std::endl;

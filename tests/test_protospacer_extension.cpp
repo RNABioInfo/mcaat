@@ -399,6 +399,13 @@ struct TargetGraph:Graph {
         }
         return result;
     }
+    std::vector<std::pair<Node,size_t>> find_masked(const std::string& pattern,size_t budget,size_t max_work,size_t& work,bool& limited)const {
+        std::vector<std::pair<Node,size_t>> result;
+        for(size_t v=0;v<labels.size();++v){if(work>=max_work){limited=true;break;}++work;size_t errors=0;
+            for(size_t j=0;j<k();++j)errors+=pattern[j]!='.'&&pattern[j]!=labels[v][j];if(errors<=budget)result.emplace_back(v,errors);
+        }
+        return result;
+    }
     Path trace(const std::string& sequence)const {
         Path p;if(sequence.size()<k())return p;
         for(size_t i=0;i+k()<=sequence.size();++i) {
@@ -454,6 +461,18 @@ void test_variant_placement() {
     auto recovered=extend_target_with_fallback(graph,query,contexts,options);
     check(recovered.has_extension && recovered.variant_placement && recovered.selected.sequence==truth,"graph-only fallback recovers diverged target without a reference");
     check(recovered.placement.identity>=.9 && recovered.placement.coverage>=.85 && recovered.placement.sequence==allele,"variant identity and clipped query coordinates are explicit");
+    {
+        TargetGraph missed;std::string q="AGGAGGGGGCTCTGCCGCACGGCGC",a="AGCAGGGGGCTCTGCTGCACCGCGC";
+        auto expected=left+a+right;missed.add(expected);missed.add(repeat+q+repeat,30);
+        auto fast=place_target(missed,q,0);bool present=false;for(const auto& p:fast.values)present|=p.sequence==a;
+        check(!present,"regression target has no one-substitution k-mer anchor");
+        auto masked=place_target_masked(missed,q);present=false;for(const auto& p:masked.values)present|=p.sequence==a;
+        check(present,"masked lookup finds a target satisfying the stated identity and coverage rule");
+        auto rescued=extend_target_with_fallback(missed,q,{{q,repeat,0,q.size()}},options);
+        check(rescued.has_extension&&rescued.selected.sequence==expected,"unextended fast placements trigger the independent masked rescue");
+        check(rescued.expanded<=options.max_query_states&&rescued.placement_work<=options.max_target_placement_states,"rescue shares both existing work budgets");
+        auto capped=place_target_masked(missed,q,1,128);check(capped.limited&&capped.work<=1,"masked lookup cap is explicit");
+    }
     options.target_variant_fallback=false;
     check(!extend_target_with_fallback(graph,query,contexts,options).has_extension,"variant fallback can be disabled");
     options.target_variant_fallback=true;
@@ -595,13 +614,38 @@ void test_equal_depth_and_bounded_repeats() {
         auto p=q;p.insert(p.end(),side.nodes.begin()+1,side.nodes.end());return branched.spell(p)==query+good;
     }),"same-depth beam preserves a supported branch while its source context is unresolved");
     MultiplicityProfile weak,strong;for(int n=0;n<100;++n){weak.observe(1);strong.observe(12);}
-    check(strong.loss()<weak.loss(),"flat multiplicity one is softly penalized, not automatically perfect");
+    check(strong.loss()<weak.loss(),"existing prediction mode retains its original soft singleton penalty");
     Coverage all;all.observe(12,o);all.observe(1,o,false);
     check(all.profile.samples==2 && all.baseline.size()==1,"all-edge profile remains separate from sampled likelihood gate");
+}
+void test_low_depth_continuation() {
+    MultiplicityProfile low,jumps;
+    for(size_t i=0;i<100;++i){low.observe(i%2?1:2,true);jumps.observe(i%2?1:20,true);}
+    check(low.loss()<jumps.loss(),"counting noise does not excuse large coverage jumps");
+    for(double value:{0.,1.,1.0001,2.,5.,20.,100.,65535.}) {
+        MultiplicityProfile p;for(int i=0;i<20;++i)p.observe(value,true);
+        auto n=p.counting_noise();
+        check(std::isfinite(n.first)&&n.first>=0&&std::isfinite(n.second)&&n.second>=0&&n.second<=1,"finite counting-noise model at low and high depth");
+    }
+    TargetGraph graph;graph.k_=23;
+    auto query=dna(25),left=dna(136),right=dna(149),repeat=dna(28);
+    auto wrong=dna(35)+left.substr(left.size()-7);
+    auto correct=graph.add(left+query+right,2);graph.add(wrong+query+right,2);
+    for(auto& edge:graph.arcs)edge.second.count=2;
+    // A real low-depth continuation has ordinary 1/2-count variation. The
+    // competing, shorter dead end happens to have perfectly flat count two.
+    for(size_t i=1;i<67;++i)graph.arcs.at({correct[i-1],correct[i]}).count=1;
+    graph.arcs.at({correct[128],correct[129]}).count=1;
+    for(size_t n:{16,32,64}) {
+        Options o;o.beam_width=n;o.noise_adjusted_stability=true;
+        auto result=extend_retained_target(graph,query,{{query,repeat,0,query.size()}},o);
+        check(result.has_extension&&result.selected.sequence==left+query+right,"ordinary low-count fluctuations must not replace a longer supported flank with a short flat dead end");
+    }
 }
 int main() {
     try {
         test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_variant_placement();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
+        test_low_depth_continuation();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_node_visits=0;o.validate();});

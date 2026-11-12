@@ -39,6 +39,7 @@ struct Options {
     size_t coverage_window=7,max_query_states=200000;
     size_t max_node_visits=3;
     bool target_variant_fallback=true;
+    bool noise_adjusted_stability=false; // enabled only for the masked-target rescue
     size_t max_target_placement_states=50000;
     size_t min_external_flank=0; // 0: k+1, one complete edge outside the seed
     bool joint_flank_check=true;
@@ -187,8 +188,11 @@ SeedSearch isolate(Graph& graph,const Path& full,const std::set<Node>& array_edg
 
 struct MultiplicityProfile {
     size_t samples=0,weak=0;
-    double mean_log=0,m2=0,step_sum=0,previous=0;
-    void observe(double count) {
+    bool noise_adjusted=false;
+    double mean_log=0,m2=0,step_sum=0,previous=0,count_sum=0;
+    void observe(double count,bool adjust=false) {
+        noise_adjusted=adjust;
+        count_sum+=std::max(0.,count);
         if(count<=1)++weak;
         double value=std::log2(1+std::max(0.,count));
         if(samples)step_sum+=(value-previous)*(value-previous);
@@ -198,7 +202,29 @@ struct MultiplicityProfile {
     double roughness() const {return samples>1?step_sum/(samples-1):0;}
     double level() const {return samples?std::exp2(mean_log)-1:0;}
     double weak_fraction() const {return samples?double(weak)/samples:0;}
-    double loss() const {return variance()+roughness()+weak_fraction()+1./(samples+1);}
+    std::pair<double,double> counting_noise()const {
+        // Only observed, positive-count edges enter the profile. Estimate a
+        // zero-truncated Poisson mean, then use a delta-method log variance.
+        // This is a ranking tolerance, not a calibrated confidence estimate:
+        // overlapping k-mer counts are correlated.
+        if(!samples)return {0,0};
+        double mean=count_sum/samples;
+        if(mean<=1+1e-7)return {0,1};
+        double lambda=std::max(1e-6,mean-1);
+        if(mean>30)lambda=mean;
+        else for(size_t i=0;i<6;++i) {
+            double z=-std::expm1(-lambda),a=std::exp(-lambda);
+            double f=lambda/z-mean,df=(z-lambda*a)/(z*z);
+            lambda=std::max(1e-8,lambda-f/df);
+        }
+        double variance=std::max(0.,mean*(1+lambda-mean));
+        double singleton=lambda>700?0:lambda/std::expm1(lambda);
+        return {variance/((1+mean)*(1+mean)*std::log(2.)*std::log(2.)),singleton};
+    }
+    double excess_variance()const{return noise_adjusted?std::max(0.,variance()-counting_noise().first):variance();}
+    double excess_roughness()const{return noise_adjusted?std::max(0.,roughness()-2*counting_noise().first):roughness();}
+    double excess_weak()const{return noise_adjusted?std::max(0.,weak_fraction()-counting_noise().second):weak_fraction();}
+    double loss() const {return excess_variance()+excess_roughness()+excess_weak()+1./(samples+1);}
 };
 struct Coverage {
     std::vector<double> baseline;
@@ -226,7 +252,7 @@ struct Coverage {
         return std::max(0.,(count?count*std::log(count/mean):0)-(count+r)*std::log((count+r)/(mean+r)));
     }
     double observe(double count,const Options& options,bool sample=true) {
-        profile.observe(count);
+        profile.observe(count,options.noise_adjusted_stability);
         auto advance=[&] {
             if(recent.size()>=options.coverage_window)recent.erase(recent.begin());
             recent.push_back(count);
@@ -268,10 +294,11 @@ struct Stability {
 inline Stability stability(const Coverage& left,const Coverage& right) {
     const auto& l=left.profile;const auto& r=right.profile;
     Stability s;
-    s.within=(l.variance()+r.variance())/2;
-    s.jumps=(l.roughness()+r.roughness())/2;
-    s.weak=(l.weak_fraction()+r.weak_fraction())/2;
-    if(l.samples && r.samples)s.between=(l.mean_log-r.mean_log)*(l.mean_log-r.mean_log);
+    s.within=(l.excess_variance()+r.excess_variance())/2;
+    s.jumps=(l.excess_roughness()+r.excess_roughness())/2;
+    s.weak=(l.excess_weak()+r.excess_weak())/2;
+    if(l.samples && r.samples)s.between=std::max(0.,(l.mean_log-r.mean_log)*(l.mean_log-r.mean_log)
+        -(l.noise_adjusted?l.counting_noise().first:0)-(r.noise_adjusted?r.counting_noise().first:0));
     // A short/absent flank must not earn a perfect score from zero observations.
     s.support=1./(l.samples+1)+1./(r.samples+1);return s;
 }
@@ -554,7 +581,7 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 ++result.expanded;
                 Side next=branch?current:std::move(current);
                 next.source_run=source_guard.contains(graph,next.nodes.back(),a,backward)?next.source_run+1:0;
-                next.beam_profile.observe(a.count);
+                next.beam_profile.observe(a.count,options.noise_adjusted_stability);
                 char base=0;
                 if(!adapter_guard.empty() || next.context=="pending")base=graph.extension_base(a,backward);
                 auto adapter=adapter_guard.append(next.adapter_tail,base);

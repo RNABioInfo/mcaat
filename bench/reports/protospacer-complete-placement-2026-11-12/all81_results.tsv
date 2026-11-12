@@ -1,0 +1,82 @@
+seed_id	sequence	recoverable_100bp_90pct	reference_locations	eligible_reference_sides	completed_negative_sides	left_placement_endpoints	right_placement_endpoints	longest_exact_walk_bp	witness_reference	witness_side	witness_reference_bp	witness_identity	witness_stage	production_status	selected_region	selected_length	match_90identity_50coverage	reference	identity	coverage	selected_left_bp	selected_right_bp
+seed_541b71503abcacf8	AAACCATCGTTAGTTGTGATGCTACGAATT	yes	1	2	0	7	7	750	OTU_1556	left	100	100.0	complete-roots-batch1	matching_extension_selected	region_f56f57c79a504b68	1530	True	OTU_1556	100.000	100.0	750	750
+seed_85dec78f0df3afca	TGCCACGTACAAAGACGTCTCTCATGGGATAGA	no	3	6	6	2	5	2						no_qualifying_reference_continuation	-	0	False				0	0
+seed_815985dbbb929d9a	AACAGCGGTAATCGCAACAGCGGTGA	yes	21	31	6	12	17	750	OTU_2041	right	100	100.0	complete-roots-batch1	matching_extension_selected	region_40e55fd7c48a77c6	1526	True	OTU_2046	100.000	52.03145478374836	750	750
+seed_03150ef5d6c40be9	TCCATTCGCTGTATGGGTA	no	2	4	4	31	31	4						no_qualifying_reference_continuation	region_f639f1c17a3b000d	1515	False				746	750
+seed_608580176351629e	ACCACGAGAAATCATAGCATTAGGGGAGT	no	18	35	35	1	1	1						no_qualifying_reference_continuation	region_5c370dfb051a4c3a	779	False				750	0
+seed_8457d3c888a55350	ACCGGCGTTCTGACCATCTTTGATGAGGGCGGAC	no	2	4	4	3	3	0						no_qualifying_reference_continuation	region_556ed0b76a5816ea	103	False				0	69
+seed_3d706370c00ed358	ACCGGGGCAGTAAGTACTTCATACATGGCGTCG	no	2	4	4	2	3	5						no_qualifying_reference_continuation	region_50d081950570f490	113	False				0	80
+seed_fb2dfafb0bf3b645	ACTATCAATCAGCTTCGTATGGCCTTCCAGATCCAA	no	20	40	40	2	1	1						no_qualifying_reference_continuation	-	0	False				0	0
+seed_bac8ba50be9ea7d9	TTTCTTCTATTTCGATTCGCTCTG	no	5	10	10	8	8	3						no_qualifying_reference_continuation	region_fbc47234d528bd10	774	False				0	750
+seed_12839d3c8ccafc84	ACAATAATTATGTTTTT	yes	234	467	0	5132	5132	750	OTU_12626	left	100	100.0	complete-roots-positive128	different_target_selected	region_1c0cbbd524f87e7e	302	False				148	137
+seed_52471b63f83f34e7	AGACCAATCATCAGAATATACACGTCCATCTGAGC	no	3	6	6	5	5	1						no_qualifying_reference_continuation	-	0	False				0	0
+seed_a06a8e822ab10969	AGTGCGGACGCGGGGCTGTGCGGATGGCGGATGAT	no	3	6	6	2	3	1						no_qualifying_reference_continuation	region_cd6bedd9b8f44358	91	False				56	0
+seed_220de85e5722e860	CAGGCACCGAAAAAATGGATCGACCCGGCCAAG	no	3	6	6	11	8	0						no_qualifying_reference_continuation	region_12999c45aaf2ffff	783	False				0	750
+seed_b028e33cab495531	CCACCAGCGACGTTACC	no	28	56	56	641	641	34						no_qualifying_reference_continuation	region_a2f994da67b0a34f	802	False				365	420
+seed_4b0081e61d24ad6a	GCATTTCGTCTGCGATAGCCACGTTGCAGGTCAGG	no	3	6	6	12	17	0						no_qualifying_reference_continuation	region_bc45239de29fbae0	785	False				750	0
+seed_bfe1e95d60e5270a	GCCTGCTTTTGGACCTGATTGAGCTGATCTTGG	no	4	8	8	8	6	0						no_qualifying_reference_continuation	region_7e606c8a2560847b	188	False				155	0
+seed_00b0f720c7a86847	GGCCGGACCTGAAGGGGTATCCCGAGCCCCTGGC	no	1	2	2	3	2	0						no_qualifying_reference_continuation	region_22f3934d770a9f1e	784	False				750	0
+seed_c8187729f2e6f27e	TGGCTGGCGGTGCGGCGGTTTTTTGACTGGGATG	no	8	16	16	4	6	1						no_qualifying_reference_continuation	-	0	False				0	0
+seed_e843a45768a91d3a	AGGATGGGAGCGCATACACAGAGCGACGGGAGATA	no	24	48	48	2	2	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_bd421ff105ab9342	AGTGCGGACGCGGGGCTGTGCGGATGGCGGATG	no	3	6	6	1	1	3						no_qualifying_reference_continuation	region_9cd200dba6800bcb	89	False				56	0
+seed_54a2de9b99648050	AGTTTGCAGACGGGCAACCATGGATGTCTTCACCTG	no	12	24	24	2	2	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_a98911d2fd1dab01	ATTGTTTTTATAAGTTTATAAATTAA	no	3	6	6	9	10	3						no_qualifying_reference_continuation	region_363a1840846e1a8b	1526	False				750	750
+seed_4c162d5352e263c2	ATACTATAAGTACAGTAAAGGAGGTCACAAACATG	no	4	8	8	1	1	0						no_qualifying_reference_continuation	region_02c9cf0d8f23bf3a	785	False				0	750
+seed_0e3fc52adc6e1e7e	TACTTTATAGCCACCACGTCCTCGCATA	yes	2	4	0	8	7	750	OTU_1556	left	100	100.0	complete-roots-batch1	matching_extension_selected	region_03b3c426747179e2	1528	True	OTU_1556	100.000	100.0	750	750
+seed_c680dd8ddedb88b2	ATATGGAGCTTGATTTTTATGAGTTCTTGGCCCTGA	yes	13	26	23	3	3	97	OTU_12357	right	100	90.0	complete-roots-batch1	matching_extension_selected	region_6739b2aac05d40ad	133	True	OTU_12556	100.000	100.0	0	97
+seed_9d378ed352accb22	ATCAAGAGACCCTGGCCTAACAATAGCACCAGAGCC	no	13	23	23	3	2	1						no_qualifying_reference_continuation	region_3281ce3356ceaca2	786	False				0	750
+seed_32494eda326293e7	ATGCGCTCCCCTTCCGTGCCTACGCGCTCATTATG	no	14	28	28	3	3	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_636ca383c5cc2689	CATAAAAGGCATAGGTGAAATCATCAAAGCCTATCTCG	no	9	18	18	1	1	0						no_qualifying_reference_continuation	region_bc3e853181f0465d	130	False				0	92
+seed_cc0aaf03cdff2e92	CGGCAACGGCCAGGATGGCTTTGCGCTCCTCCTCG	no	1	2	2	5	7	3						no_qualifying_reference_continuation	-	0	False				0	0
+seed_65cd952ae8717645	CTTCATCACATACCGGGCAACGTAAGCACAGGTTTCCC	no	11	22	22	2	1	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_b8fc717239fea254	TACCGGCGTTCTGACCATCTTTGATGAGGGCGGAC	no	2	4	4	2	3	0						no_qualifying_reference_continuation	region_9a4ff46631e4d53b	104	False				0	69
+seed_c01903d4be089c3c	TACCGGGGCAGTAAGTACTTCATACATGGCGTCGTA	no	2	4	4	2	5	3						no_qualifying_reference_continuation	region_ed5af3adb9bcc70c	114	False				0	78
+seed_ee0c531ff9ea59a8	TAGAAACTTTATGAGAAGGATGCAAGAGGAGGTAC	no	29	58	58	1	2	1						no_qualifying_reference_continuation	-	0	False				0	0
+seed_db4265a0f6a5aa8d	AGCTCCATGATCTTCGCGGTAACGTCGCTGGT	no	1	2	2	4	4	2						no_qualifying_reference_continuation	region_966c3974cf18a456	92	False				60	0
+seed_edac35e71117a388	AGGAGGGGGCTCTGCCGCACGGCGC	yes	3	6	3	9	9	15	OTU_8822	left	100	95.0	complete-roots-batch2	matching_extension_selected	region_61d3170c72716b1d	310	True	OTU_6330	90.820	98.38709677419355	136	149
+seed_b769b2ed358ecfcc	TAGTAGCTCGTCAGCCTCCAGGCGCTTGTCGTTGCTC	no	23	46	46	2	2	0						no_qualifying_reference_continuation	region_6f0cc14463fddda5	94	False				0	57
+seed_7cdce7a5d8fb207a	TATCAAGAGACCCTGGCCTAACAATAGCACCAGAGCC	no	17	30	30	3	2	1						no_qualifying_reference_continuation	region_dd8c5bcc590ee3aa	787	False				0	750
+seed_d48b67dba8929594	TATTACCGCGAACCAGGAAGCCCAGACCGCCGAG	no	11	22	22	3	3	0						no_qualifying_reference_continuation	region_aa3372cac06323d3	784	False				750	0
+seed_29e07b57a2e8eaa7	TCAACAGTTTATGCAGCAGATGAAGGGCAAAGACCC	no	8	16	16	2	2	1						no_qualifying_reference_continuation	region_8762fc4e7c853cc8	135	False				0	99
+seed_5805c9fca40cf9bc	CATCCCAGTCAAAAAACCGCCGCACCGCCAGCCA	no	8	16	16	6	4	1						no_qualifying_reference_continuation	-	0	False				0	0
+seed_d3c0bdab3a242bc6	CCAAGATCAGCTCAATCAGGTCCAAAAGCAGGC	no	4	8	8	6	8	0						no_qualifying_reference_continuation	region_7e606c8a2560847b	188	False				0	155
+seed_c3ce27c19a179610	CCTGAACTGCAACGTGGCTATCGCAGACGAAATGC	no	3	6	6	18	13	0						no_qualifying_reference_continuation	region_7851399e424edc77	785	False				0	750
+seed_265a496fca5ef727	TCCTGTCTTTGCTGTTTCGTTGGCACACTCAATC	no	2	4	4	2	1	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_d613d895e6b2c2e8	TCGCTACCGTCTGTCCTGTATAGAGCCCGCCATAG	no	3	6	6	3	4	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_f59251651f7711eb	TCGCTCCCGCGCGGCGACCGTCTCGATGATCGCCA	no	13	26	26	3	3	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_7a5827b9089bd147	TCTCCACGGCCACCCGCAGCACCGTCAACACCTTCTG	yes	9	18	2	3	4	750	OTU_4223	right	306	90.0	complete-roots-batch2	matching_extension_selected	region_3865bf90979e3afd	1537	True	OTU_2191	100.000	100.0	750	750
+seed_696118a2a5ec012e	TCTGAGATTTCCGCTTATTCGGAAAAGGCTTGGC	no	6	12	12	3	2	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_a6cc50a7e027d60a	CTTGGCCGGGTCGATCCATTTTTTCGGTGCCTG	no	3	6	6	8	11	0						no_qualifying_reference_continuation	region_12999c45aaf2ffff	783	False				750	0
+seed_aab7abf96b503072	TGAGGATAGCTGCGCCTCCCCCGGCGTGCGGGGCGA	no	7	14	14	1	1	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_c3e54c4632399df3	GCCAGGGGCTCGGGATACCCCTTCAGGTCCGGCC	no	1	2	2	2	3	0						no_qualifying_reference_continuation	region_22f3934d770a9f1e	784	False				0	750
+seed_476a1596abe86549	TGCTGCCCTCTTTCCAAGCGTGCTCGGTCACAATCA	no	1	2	2	2	2	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_020113f1e4d18f3d	TGGGAGCTGGGTATACTTGTCGGCAAGATGCCAGAC	no	26	51	51	4	4	0						no_qualifying_reference_continuation	region_884a5710947ac508	128	False				0	92
+seed_f44094a9048cfb31	TTCAACTAAATCGAATGGACTACATACCTTATGCG	no	8	16	16	1	1	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_9eae521f94253929	TTCGCCTGTCCGTGTAATATAA	no	9	18	18	5	5	15						no_qualifying_reference_continuation	region_941336734c7229b2	772	False				0	750
+seed_f00881e5a59e1c4e	TTGGCGTGCCGTTTCTGGCAGATATCGCAA	yes	5	10	5	3	1	171	OTU_1230	left	100	100.0	complete-roots-batch3	matching_extension_selected	region_5869ef0bd9541858	780	True	OTU_2363	100.000	89.23076923076923	0	750
+seed_dd4f9236528cee55	TTTTACCGCTCTCCTTGAGGGTCATAACGCCGAAGCGG	no	14	27	27	2	1	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_1de20f6293b387ce	ATTGCCAATCTGTTTAATGAGTTGTTCGGA	no	14	28	28	1	1	0						no_qualifying_reference_continuation	region_269e8303ac01754a	575	False				0	545
+seed_a70f5b89cba98cab	CAACAGTTTATGCAGCAGATGAAGGGCAAAGACCC	no	8	16	16	2	2	1						no_qualifying_reference_continuation	region_0a8d607406edca82	134	False				0	99
+seed_ae8ed7951acedc7e	CATAAAAGGCATAGGTGAAATCATCAAAGCCTATCTCGGTCG	no	8	16	16	1	1	5						no_qualifying_reference_continuation	region_bc3e853181f0465d	130	False				0	88
+seed_dddfa0570550f5c7	CATGTTTGTGACCTCCTTTACTGTACTTATAGTATGTCG	no	2	4	4	1	1	3						no_qualifying_reference_continuation	region_45be4f17baa667e4	789	False				750	0
+seed_bdf0cbd0c80d2f18	CCCAATACCTTGATAAAAAAGTAGTAATC	yes	20	40	1	11	11	120	OTU_1559	right	100	99.0	complete-roots-batch3	matching_extension_selected	region_f7f0b5ef82400f06	321	True	OTU_585	96.262	100.0	122	170
+seed_a2973df6e0ce0e89	CCCCACCCCCCCCCCACCCACACCA	no	1	2	2	1214	1430	9						no_qualifying_reference_continuation	region_533c53df8ffd37cd	592	False				287	280
+seed_7b14da8d4f8b1672	CCTTCATTTTACTATAACAAGTGCCAAGC	no	9	18	18	12	12	3						no_qualifying_reference_continuation	region_a6b4f9aa154222b7	122	False				93	0
+seed_e362112fa04dc5d2	CGCCTGCTGGACCGGACGCTGTCCAACGTGCGGC	no	2	4	4	1	1	1						no_qualifying_reference_continuation	region_ad6ef193479b9af4	784	False				0	750
+seed_d31ea9e28939c4a0	CGCTACCGTCTGTCCTGTATAGAGCCCGCCATAG	no	3	6	6	3	4	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_5580f7506ea0693d	CTTCTAGGAAAAGTATTAACAACAAGACTGTACTC	no	7	14	14	4	5	1						no_qualifying_reference_continuation	-	0	False				0	0
+seed_7708d74d9ff431bf	ATCAGGGACGGCTATATTGACAT	no	11	22	22	11	11	14						no_qualifying_reference_continuation	region_e1f6d7c9a5510145	151	False				61	67
+seed_c35af5b66b335ecd	GCAACAGCGGTAATTGGAACAGCGGT	yes	34	48	10	20	15	750	OTU_2041	right	100	100.0	complete-roots-batch2	matching_extension_selected	region_49165641a4b4b23e	1526	True	OTU_2046	99.372	52.16251638269987	750	750
+seed_13da97a211cd579d	CGTTTCCGTCTCTGTGCGTCC	no	2	4	4	14	14	1						no_qualifying_reference_continuation	region_e8cdacfd678dafdd	1519	False				750	748
+seed_2d1cf92baaa5319d	GCCGGAAGGACCCCAGGGACCGGAAGGA	no	1	2	2	24	27	2						no_qualifying_reference_continuation	region_775831afdc2b9a19	778	False				750	0
+seed_d625b79f847e7138	GCTATAATGTGGGGTTCCTTTGCCGCCGC	no	24	48	48	2	2	0						no_qualifying_reference_continuation	region_df97a1c3852839c7	563	False				0	534
+seed_d3f6be8a0f21642d	GCTCAGATGGACGTGTATATTCTGATGATTGGTCT	no	3	6	6	5	5	1						no_qualifying_reference_continuation	region_79913f49d414c2ba	80	False				0	45
+seed_5de7c7a0e26edc14	GGAACTGCCGCATTAACAGCTAA	no	3	6	6	17	17	2						no_qualifying_reference_continuation	region_858fea4c2199d0f5	1523	False				750	750
+seed_d08530af6d5a1bcd	GGGAGCTGGGTATACTTGTCGGCAAGATGCCAGAC	no	26	51	51	4	4	0						no_qualifying_reference_continuation	region_75ce8bc4995a5299	127	False				0	92
+seed_1f27d3d3513c95e0	CGCATAAGGTATGTAGTCCATTCGATTTAGTTGA	no	8	16	16	1	1	0						no_qualifying_reference_continuation	-	0	False				0	0
+seed_0eb07015d23769af	CTTTTATTGCGATATCTGCCAGAAACGGCACG	yes	5	10	5	2	1	175	OTU_1230	right	100	100.0	complete-roots-batch4	matching_extension_selected	region_1582d1c102ac65b0	421	True	OTU_815	99.035	73.87173396674584	176	213
+seed_3ae1c228c14b4816	GCCGAAAAGCCGGTTTATATTACACGGACAGGCGA	no	9	18	18	2	2	1						no_qualifying_reference_continuation	region_7e4fd0eeb414661f	785	False				750	0
+seed_5f73b1d60653215b	TTGCGGCGTCCCTCGGCGGTTTCGCTCCAA	no	25	50	50	1	1	0						no_qualifying_reference_continuation	region_79b3c0d849d375f3	575	False				545	0
+seed_d950e4cbd0d63474	TCCTCCAGTACCTTTTTAAGCTGATATAGGCTCA	no	14	28	28	5	2	1						no_qualifying_reference_continuation	region_3b851b11d69aacb8	752	False				0	718
+seed_f4ba551b06f0781e	TGAGCCTATATCAGCTTAAAAAGGTACTGGAGGA	no	14	28	28	2	5	1						no_qualifying_reference_continuation	region_3b851b11d69aacb8	752	False				718	0
+seed_5f99a193e6244b29	GGCACCGCGCAGGTCGGCATCGCCCAGGT	yes	100	144	14	25	22	750	OTU_1434	right	150	90.0	complete-roots-batch4	matching_extension_selected	region_b181deda7d37de5f	779	True	OTU_2363	96.662	100.0	750	0

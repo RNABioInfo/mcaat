@@ -1,0 +1,108 @@
+{
+  "inputs": 81,
+  "counts": {
+    "yes": 12,
+    "no": 69
+  },
+  "reference_locations": 1041,
+  "placement_endpoints": 15044,
+  "target_identity_percent": 90,
+  "target_coverage_percent": 85,
+  "target_alignment": "ungapped; all permitted substitutions and clipped ends",
+  "continuation": "a connected anchored flank aligning 100..750 reference bases at >=90% identity",
+  "continuation_alignment": "substitutions and indels; actual graph edges",
+  "source_array_closed_walks": "excluded",
+  "external_revisits": "allowed in existence search",
+  "adapters": "excluded",
+  "negative_requires": "all admissible endpoints and all catalogued reference locations; exhausted search",
+  "exact_walk_note": "longest_exact_walk_bp does not enforce the source-cycle history guard",
+  "positive_note": "existence proof; does not require exhausting alternative locations",
+  "scope": "this existing graph and the supplied reference-location catalogue; not an assertion about unknown phages",
+  "reference_used_during_production_prediction": false,
+  "stages": [
+    {
+      "stage": "complete-roots-batch1",
+      "routes_sha256": "b03d3c72c61d439519eb27c5963dedf33c0023ad209bf7e5e9ad4b9b556d2969",
+      "roots_sha256": "fdc2d063e6a47c8c35d1794588adc3c32d71803b7cf40d6f8ffa0dc769799f66",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-batch2",
+      "routes_sha256": "fd6127dc14dd293ab1f1743f39927510efe76118e4d3ab1cfdc81eac2ea5e59f",
+      "roots_sha256": "6968498cf70436bee1bba9de3110c540872c5e19e64069e967ccf462c77d8a18",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-batch3",
+      "routes_sha256": "0509ca39652ae784ead40a75a1d2faeaec38195fc014fbdabc2146eff8801365",
+      "roots_sha256": "cf0750fad1cff77e15871e3590192d51839e44e50fef80a567127830077a512d",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-batch4",
+      "routes_sha256": "5b4daf8f463dd1aee993ac4bd3ce4f38a430ddeeb33da4c681636972d9bc9962",
+      "roots_sha256": "572fe1918fb79182b727c634eb58f90cf479ac0838117e843388a3ee69f0bc0b",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-batch5",
+      "routes_sha256": "40bfa0b60bec4860b71ab13740362ea2ec1990f9d44b2d623f96cae017030a69",
+      "roots_sha256": "a1dea1d01d49f6cc3e0054cc151fcc4634f2507225f689d81392e2cb77da9cf3",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-deep1",
+      "routes_sha256": "5eca1ba155280affc70f4461e6e8338ebc5118f85fb4060a848e09d40e5d8c1f",
+      "roots_sha256": "374ffa5eee9930deae33245d5f9a3f793399cfbea2ea4a8f1b222dfe1e88dd76",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-deep2",
+      "routes_sha256": "0a2dc92aed0dc856c3ebe9887bc0ba2d8c640973994dc0808bf2ed85b21edd38",
+      "roots_sha256": "6b7c80470b8f5ff308e90f1f681df2a2026e16b4e440a692baca5d5ea970a648",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-deep3",
+      "routes_sha256": "44433f665ae5ae6c1a1f52d896bcf5da03c8f48fe50d8058920cb9d18f7cda53",
+      "roots_sha256": "ea5e9c1bc1136f8382bd439ce444901f92c820f549f5804b90265b1e55aca744",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-deep4",
+      "routes_sha256": "f318cb09aa980e503d39c8565c8279286c463cb5be47cb0a0ea054e52d3a429e",
+      "roots_sha256": "3315148b3b34eb129e8a310825c9c4c0d85f042d0cd4987317c7c31d9c5894d4",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-positive128",
+      "routes_sha256": "626400d5f7cba660b705fe75e2339c086e2141818aad0ef361c436284f0dcb63",
+      "roots_sha256": "57a618ebc6b31c35093646f95b25dadf63264feb5412f2efe332533f8f2e47e7",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-radius-relaxed-ee",
+      "routes_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "roots_sha256": "257d434e2416e01745d415639ee45ef987771bebf6f7d0f3761323a4164d5eea",
+      "source_cycle_guard": "relaxed"
+    },
+    {
+      "stage": "complete-roots-reachable-ee",
+      "routes_sha256": "d76c6314e151235b608667aeb5246283171f5aab9ef4f3c8b849e5fc7b5eb065",
+      "roots_sha256": "257d434e2416e01745d415639ee45ef987771bebf6f7d0f3761323a4164d5eea",
+      "source_cycle_guard": "enabled"
+    },
+    {
+      "stage": "complete-roots-relaxed-ee",
+      "routes_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "roots_sha256": "257d434e2416e01745d415639ee45ef987771bebf6f7d0f3761323a4164d5eea",
+      "source_cycle_guard": "relaxed"
+    },
+    {
+      "stage": "complete-roots-unitig-ee",
+      "routes_sha256": "a4ffb6741a79ed091972e1dad1783ac3778f663e21748b63d3c728f3e6b3e352",
+      "roots_sha256": "257d434e2416e01745d415639ee45ef987771bebf6f7d0f3761323a4164d5eea",
+      "source_cycle_guard": "enabled"
+    }
+  ]
+}

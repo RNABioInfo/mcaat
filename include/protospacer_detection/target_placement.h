@@ -113,5 +113,40 @@ template<class Graph> TargetPlacements place_target(Graph& graph,const std::stri
     });
     return result;
 }
+// Rescue placements without an exact/one-substitution k-mer anchor. This is
+// used only after the fast placements yield no extension. The lookup pattern
+// is a superset of every permitted ungapped 90%/85% alignment; the final full
+// query check enforces those thresholds. The work/candidate caps remain explicit.
+template<class Graph> TargetPlacements place_target_masked(Graph& graph,const std::string& query,
+        size_t max_work=50000,size_t max_candidates=128) {
+    TargetPlacements result;const size_t n=query.size(),k=graph.k();if(n<k||!max_work)return result;
+    size_t minimum=(85*n+99)/100,clip=n-minimum,allowed=clip+n/10;
+    std::string pattern(k,'.');for(size_t j=0;j<k;++j)if(j>=clip&&j<minimum)pattern[j]=query[j];
+    auto roots=graph.find_masked(pattern,n/10,std::max(size_t(1),max_work/2),result.work,result.limited);
+    std::set<std::string> seen;
+    std::function<void(Path,size_t,size_t)> visit=[&](Path path,size_t pos,size_t errors) {
+        if(result.work>=max_work){result.limited=true;return;}++result.work;
+        if(errors>allowed)return;
+        if(pos==n) {
+            auto sequence=graph.spell(path);auto score=score_target_placement(query,sequence,0);
+            if(!score.query_end||!seen.insert(sequence).second)return;
+            if(result.values.size()>=max_candidates){result.limited=true;return;}
+            result.values.push_back(std::move(score));if(result.values.size()>=max_candidates)result.limited=true;return;
+        }
+        for(auto arc:graph.neighbors(path.back(),false)) {
+            auto next=path;next.push_back(arc.to);
+            visit(std::move(next),pos+1,errors+(graph.extension_base(arc,false)!=query[pos]));
+        }
+    };
+    for(auto [node,ignored]:roots) {
+        auto word=graph.label(node);size_t errors=0;for(size_t j=0;j<k;++j)errors+=word[j]!=query[j];
+        visit(Path{node},k,errors);if(result.work>=max_work||result.values.size()>=max_candidates)break;
+    }
+    std::sort(result.values.begin(),result.values.end(),[](const auto& a,const auto& b){
+        if(a.coverage!=b.coverage)return a.coverage>b.coverage;
+        if(a.identity!=b.identity)return a.identity>b.identity;return a.sequence<b.sequence;
+    });
+    return result;
+}
 }
 #endif

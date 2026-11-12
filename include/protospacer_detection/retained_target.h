@@ -167,8 +167,9 @@ TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
 // Original input strings and source-array models are never edited.
 template<class Graph>
 TargetExtension extend_target_with_fallback(Graph& graph,const std::string& query,
-        const std::vector<TargetContext>& contexts,const Options& options,const std::set<std::string>* source_cycles=nullptr) {
-    auto exact=extend_retained_target(graph,query,contexts,options,source_cycles);
+        const std::vector<TargetContext>& contexts,const Options& options,const std::set<std::string>* source_cycles=nullptr,
+        const TargetExtension* previous_attempt=nullptr) {
+    auto exact=previous_attempt?*previous_attempt:extend_retained_target(graph,query,contexts,options,source_cycles);
     if(exact.has_extension || !options.target_variant_fallback || contexts.empty() || query.size()<15 ||
             contexts.size()>1024 || query.size()>options.max_bp ||
             AdapterGuard(options.adapters).contains(query))return exact;
@@ -181,12 +182,18 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
     }
     size_t left_padding=extra>available_right?extra-available_right:0;
     if(left_padding>available_left){exact.reason="short_query_context_insufficient";return exact;}
-    auto placements=place_target(graph,query,left_padding,options.max_target_placement_states,options.max_seeds);
-    exact.placement_work=placements.work;exact.placement_candidates=placements.values.size();exact.placement_limited=placements.limited;
+    auto placements=previous_attempt?
+        place_target_masked(graph,query,options.max_target_placement_states-exact.placement_work,options.max_seeds):
+        place_target(graph,query,left_padding,options.max_target_placement_states,options.max_seeds);
+    if(previous_attempt) {
+        std::set<std::string> checked{query};for(const auto& check:exact.placement_checks)checked.insert(check.core);
+        placements.values.erase(std::remove_if(placements.values.begin(),placements.values.end(),[&](const auto& p){return checked.count(p.sequence);}),placements.values.end());
+    }
+    exact.placement_work+=placements.work;exact.placement_candidates+=placements.values.size();exact.placement_limited|=placements.limited;
     auto adjusted=contexts;for(auto& ctx:adjusted){ctx.begin-=left_padding;ctx.end+=extra-left_padding;}
     size_t remaining=options.max_query_states>exact.expanded?options.max_query_states-exact.expanded:0;
     std::vector<TargetExtension> alternatives;
-    std::vector<PlacementCheck> checks;
+    std::vector<PlacementCheck> checks=exact.placement_checks;
     auto evaluate=[&](const TargetPlacement& placement,Options local,const std::string& phase) {
         auto candidate=extend_retained_target(graph,placement.sequence,adjusted,local,source_cycles,false);
         remaining-=std::min(remaining,candidate.expanded);
@@ -213,7 +220,7 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
         // a repetitive early placement can spend the entire query budget.
         local.max_flank_bp=std::min(size_t(75),local.max_flank_bp);
         local.max_query_states=std::max(size_t(2),std::min(size_t(1000),remaining/(placements.values.size()-i)));
-        auto candidate=evaluate(placement,local,"probe");
+        auto candidate=evaluate(placement,local,previous_attempt?"masked_probe":"probe");
         if(!candidate.has_extension)continue;
         alternatives.push_back(std::move(candidate));
     }
@@ -227,7 +234,7 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
         if(remaining<2){exact.placement_limited=true;break;}
         auto local=options;local.max_flank_bp-=extra;
         local.max_query_states=std::max(size_t(2),remaining/(refine-i));
-        auto candidate=evaluate(alternatives[i].placement,local,"extend");
+        auto candidate=evaluate(alternatives[i].placement,local,previous_attempt?"masked_extend":"extend");
         if(candidate.has_extension)alternatives[i]=std::move(candidate);
     }
     exact.placement_limited|=alternatives.size()>refine;
@@ -237,6 +244,10 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
     if(alternatives.empty()) {
         exact.placement_checks=std::move(checks);
         exact.reason=exact.placement_limited?"variant_search_limit_no_extension":"no_supported_variant_extension";
+        if(!previous_attempt&&query.size()>=graph.k()&&remaining>=2&&exact.placement_work<options.max_target_placement_states) {
+            auto rescue=options;rescue.noise_adjusted_stability=true;
+            return extend_target_with_fallback(graph,query,contexts,rescue,source_cycles,&exact);
+        }
         return exact;
     }
     std::sort(alternatives.begin(),alternatives.end(),better);
@@ -252,7 +263,7 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
             }
         }
     }
-    result.placement_work=placements.work;result.placement_candidates=placements.values.size();result.placement_limited=exact.placement_limited;
+    result.placement_work=exact.placement_work;result.placement_candidates=exact.placement_candidates;result.placement_limited=exact.placement_limited;
     result.expanded=options.max_query_states-remaining;
     result.placement_checks=std::move(checks);
     result.search_limited|=result.placement_limited;

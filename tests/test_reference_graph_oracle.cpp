@@ -1,4 +1,5 @@
 #include "../bench/reference_graph_oracle.h"
+#include "../bench/reference_root_graph.h"
 #include "../bench/reference_unitig_oracle.h"
 #include "../bench/reference_rolling_oracle.h"
 #include "../bench/reference_segment_bounds.h"
@@ -24,7 +25,28 @@ struct Graph {
 size_t optimal(const std::string& ref,const std::string& seq){std::vector<size_t> row(seq.size()+1),next(row.size());for(size_t j=0;j<row.size();++j)row[j]=j*9;for(size_t i=1;i<=ref.size();++i){next[0]=i*10;for(size_t j=1;j<row.size();++j)next[j]=std::min({row[j]+10,next[j-1]+9,row[j-1]+(ref[i-1]==seq[j-1]?0:10)});row.swap(next);}return *std::min_element(row.begin(),row.end());}
 int main(){try{
     std::mt19937 rng(111129);auto dna=[&](size_t n){std::string s;while(n--)s+="ACGT"[rng()%4];return s;};
+    for(bool back:{false,true}) {
+        Graph base;auto sequence=dna(180);auto path=base.add(sequence);
+        Node physical=back?path.at(130):path.at(10);auto word=base.label(physical);
+        std::string prefix=back?word.substr(0,5):word.substr(18);if(back)std::reverse(prefix.begin(),prefix.end());
+        audit::RootGraph<Graph> graph(base,back);Node start=graph.add_root(physical,prefix);
+        audit::ReachableMembership<audit::RootGraph<Graph>> membership(graph,graph.native_membership_roots({start}),back);
+        if(membership.find(word)==missing)throw std::runtime_error("cursor roots must not make their physical graph context appear disconnected");
+        auto reference=back?sequence.substr(35,100):sequence.substr(28,100);if(back)std::reverse(reference.begin(),reference.end());
+        auto found=audit::align(graph,start,reference,back,{100},100000);
+        if(!found.found.count(100) || found.found.at(100).sequence!=reference)throw std::runtime_error("short-target cursor lost a real continuation");
+    }
     size_t cases=0;
+    for(bool back:{false,true}) {
+        Graph graph;auto path=graph.add(dna(120));Node root=back?path.back():path.front();
+        audit::RadiusMembership<Graph> radius(graph,{root},back,5);
+        for(size_t i=0;i<path.size();++i) {
+            auto node=back?path[path.size()-1-i]:path[i];
+            if((radius.find(graph.label(node))!=missing)!=(i<=5))throw std::runtime_error("radius membership excludes a reachable node or includes an out-of-radius node");
+        }
+        audit::RadiusMembership<Graph> capped(graph,{root},back,5,1);
+        if(capped.complete||capped.find(graph.label(path[10]))==missing)throw std::runtime_error("incomplete radius enumeration must retain global membership");
+    }
     for(int variant=0;variant<24;++variant){auto seed=dna(23),ref=dna(100),seq=ref;
         if(variant<16)for(int m=0;m<variant;++m){size_t p=m*6;seq[p]="ACGT"[(std::string("ACGT").find(seq[p])+1)%4];}
         else if(variant<20)seq.insert(40,dna((variant-15)*3));else seq.erase(35,(variant-19)*3);
@@ -51,6 +73,12 @@ int main(){try{
         if(unitig_result.limited || !unitig_result.found.empty()!=any_expected)throw std::runtime_error("unitig alignment changed complete answer");
         auto rolling_result=audit::align_rolling(g,p.front(),ref,false,lengths,200000,lower,{},true);
         if(rolling_result.limited || !rolling_result.found.empty()!=any_expected)throw std::runtime_error("rolling alignment changed complete answer");
+        audit::RadiusMembership<Graph> radius(g,{p.front()},false,112+g.k());
+        audit::SegmentBounds radial;radial.block=g.k();
+        for(size_t pos=0;pos+g.k()<=ref.size();pos+=g.k())radial.costs.push_back(audit::segment_lower_bound(radius,ref.substr(pos,g.k())));
+        radial.prepare();
+        auto radial_result=audit::align_rolling(g,p.front(),ref,false,lengths,200000,radial,{},true);
+        if(radial_result.limited||!radial_result.found.empty()!=any_expected)throw std::runtime_error("radius bound changed independent DP result");
         auto rolling_limited=audit::align_rolling(g,p.front(),ref,false,{100},1);
         if(!rolling_limited.limited || rolling_limited.exhausted || rolling_limited.lowest_unexplored_cost>100)throw std::runtime_error("rolling cap produced a false absence certificate");
         if(result.found.count(100)!=expected || result.limited)throw std::runtime_error("oracle disagrees with independent string DP: "+std::to_string(variant));

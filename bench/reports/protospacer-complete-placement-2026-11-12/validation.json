@@ -1,0 +1,67 @@
+{
+  "input_sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+  "binary_sha256": "c37f578cfc0241c7c7dfa7252d8cdcc7519acfb344edfdea6118f542617564a2",
+  "complete_classification": true,
+  "unresolved_inputs": 0,
+  "native_cli": {
+    "supplied_records": 11,
+    "retained_records": 11,
+    "baseline_records_preserved": 81,
+    "straight_length": 1535,
+    "branch_length": 1535,
+    "old_strict_branch_length": 785,
+    "adapter_length": 785,
+    "true_branch_recovered": true,
+    "variant_target_recovered": true,
+    "variant_length": 1537,
+    "masked_target_recovered": true,
+    "masked_length": 1525,
+    "exact_only_policy_checked": true,
+    "threads_1_24_identical": true,
+    "failed_extensions_keep_protospacers": true,
+    "original_metagenome_graph_tested": false
+  },
+  "full_graph_beam_widths": [
+    16,
+    32,
+    64
+  ],
+  "full_graph_threads": 24,
+  "reference_used_for_production": false,
+  "previous_predictions_unchanged": {
+    "16": {
+      "previous_predictions": 54,
+      "preserved_identically": 54,
+      "changed": [],
+      "sequences_compared_directly": true
+    },
+    "32": {
+      "previous_predictions": 56,
+      "preserved_identically": 56,
+      "changed": [],
+      "sequences_compared_directly": true
+    },
+    "64": {
+      "previous_predictions": 56,
+      "preserved_identically": 56,
+      "changed": [],
+      "sequences_compared_directly": true
+    }
+  },
+  "test_logs": {
+    "release": "Internal ctest changing into directory: /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-tests\nTest project /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-tests\n    Start 1: protospacer_extension\n1/4 Test #1: protospacer_extension ............   Passed    1.79 sec\n    Start 2: real_protospacer_fragments\n2/4 Test #2: real_protospacer_fragments .......   Passed    2.90 sec\n    Start 3: reference_graph_oracle\n3/4 Test #3: reference_graph_oracle ...........   Passed    7.72 sec\n    Start 4: complete_target_placements\n4/4 Test #4: complete_target_placements .......   Passed    1.83 sec\n\n100% tests passed, 0 tests failed out of 4\n\nTotal Test time (real) =  14.26 sec\n",
+    "sanitizers": "Internal ctest changing into directory: /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-sanitizers\nTest project /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-sanitizers\n    Start 1: protospacer_extension\n1/4 Test #1: protospacer_extension ............   Passed   36.67 sec\n    Start 2: real_protospacer_fragments\n2/4 Test #2: real_protospacer_fragments .......   Passed   24.47 sec\n    Start 3: reference_graph_oracle\n3/4 Test #3: reference_graph_oracle ...........   Passed   47.70 sec\n    Start 4: complete_target_placements\n4/4 Test #4: complete_target_placements .......   Passed    9.03 sec\n\n100% tests passed, 0 tests failed out of 4\n\nTotal Test time (real) = 117.89 sec\n",
+    "final_oracle_release": "Internal ctest changing into directory: /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-tests\nTest project /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-tests\n    Start 3: reference_graph_oracle\n1/1 Test #3: reference_graph_oracle ...........   Passed    3.50 sec\n\n100% tests passed, 0 tests failed out of 1\n\nTotal Test time (real) =   3.51 sec\n",
+    "final_oracle_sanitizers": "Internal ctest changing into directory: /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-sanitizers\nTest project /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-sanitizers\n    Start 3: reference_graph_oracle\n1/1 Test #3: reference_graph_oracle ...........   Passed   47.48 sec\n\n100% tests passed, 0 tests failed out of 1\n\nTotal Test time (real) =  47.48 sec\n"
+  },
+  "sources": {
+    "include/protospacer_detection/target_placement.h": "3af7ee08968ebe9e42165a2307cff5bb04982444a2c3a1488b6c6adc0eddd731",
+    "include/protospacer_detection/retained_target.h": "cfec5920e5a25d1b513bff2db56de9da2d3a565488801df5f0b505872de8b623",
+    "include/protospacer_detection/extension_engine.h": "f0661dd1a30e78845920670b5acbbce065b059983797c9dafd6fa7b3ac02f38b",
+    "include/protospacer_detection/sdbg_extension_graph.h": "0c9220b49d469a14db5180e957211e22987077c0131003f1ab2096c56daec4a1",
+    "src/protospacer_detection/retained_targets_io.h": "4ae61971f11c09a08a54631243de06afdf0e860d53b86b4d9787858255bba606",
+    "bench/complete_target_placements.h": "d73e53eff644389f560050516b0fb10e865473ea881f9d84717cf6b31e4f0796",
+    "bench/reference_root_graph.h": "f549c5525b5913ea524bdfc9f4c3f6c5af1878c5ec1c0afce78ef958de37acc3",
+    "bench/collect_complete_recovery_audit.py": "f9f0c7bcb5277a75e172b5d0f719a7170ea864e34f9e10e64cd4a475cb4340ed"
+  }
+}

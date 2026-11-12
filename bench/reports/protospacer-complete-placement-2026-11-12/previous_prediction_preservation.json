@@ -1,0 +1,20 @@
+{
+  "16": {
+    "previous_predictions": 54,
+    "preserved_identically": 54,
+    "changed": [],
+    "sequences_compared_directly": true
+  },
+  "32": {
+    "previous_predictions": 56,
+    "preserved_identically": 56,
+    "changed": [],
+    "sequences_compared_directly": true
+  },
+  "64": {
+    "previous_predictions": 56,
+    "preserved_identically": 56,
+    "changed": [],
+    "sequences_compared_directly": true
+  }
+}

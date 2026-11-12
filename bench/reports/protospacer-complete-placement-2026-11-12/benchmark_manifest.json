@@ -1,0 +1,214 @@
+{
+  "arguments": {
+    "binary": "work/mcaat-unitig-jumps/build/apple/mcaat",
+    "arrays": "/Users/feeka/Desktop/servak/new",
+    "graph": "/Users/feeka/Desktop/servak/new/graph/graph",
+    "protospacers": "work/mcaat-unitig-jumps/bench/fixtures/protospacer-baseline-81/Protospacers.fasta",
+    "baseline": "outputs/SRR14017553-all81-audit-2026-11-12-complete/final-beams/N32",
+    "output": "outputs/SRR14017553-all81-audit-2026-11-12-complete/rescue-beams",
+    "database": "/Users/feeka/Desktop/work/workspace/blaster/all_curated_db",
+    "blastn": "/usr/local/bin/blastn",
+    "blastdbcmd": "/usr/local/bin/blastdbcmd",
+    "threads": 24,
+    "widths": [
+      16,
+      32,
+      64
+    ],
+    "max_node_visits": 3,
+    "max_states": 50000,
+    "analyze_only": false
+  },
+  "binary_sha256": "c37f578cfc0241c7c7dfa7252d8cdcc7519acfb344edfdea6118f542617564a2",
+  "input_sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+  "arrays_sha256": "996237f15be63221091946ba066e7e501200857e4b7a679984225b2208a32832",
+  "graph_metadata_sha256": "94ca5ad4422b97de35f7e0d46e165bdfb8efaaabe283166ecd3ea69360e21bce",
+  "graph_files": {
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.0": [
+      76875806,
+      1794335585113275112
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.1": [
+      75058842,
+      1794335612557919489
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.10": [
+      80023512,
+      1794335894773402472
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.11": [
+      77671564,
+      1794335925056084284
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.12": [
+      78333040,
+      1794335953280125206
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.13": [
+      76890848,
+      1794335981315861392
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.14": [
+      80157780,
+      1794336011323549957
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.15": [
+      76988032,
+      1794336039434347109
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.16": [
+      79366560,
+      1794336071592437888
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.17": [
+      75827768,
+      1794336102417691301
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.18": [
+      76047300,
+      1794336133657157786
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.19": [
+      75811762,
+      1794336163074304418
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.2": [
+      76308548,
+      1794335643009128646
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.20": [
+      80158202,
+      1794336194487484220
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.21": [
+      76413234,
+      1794336224087135983
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.22": [
+      76141782,
+      1794336253900596723
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.23": [
+      77090962,
+      1794336285367823762
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.24": [
+      75639664,
+      1794336318344216211
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.25": [
+      76787512,
+      1794336349051986701
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.3": [
+      76231560,
+      1794335672783838557
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.4": [
+      75424996,
+      1794335701991788022
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.5": [
+      78564260,
+      1794335736140883541
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.6": [
+      76323502,
+      1794335766793366121
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.7": [
+      75947480,
+      1794335798573570044
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.8": [
+      76053864,
+      1794335828429392100
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg.9": [
+      76307550,
+      1794335863662973979
+    ],
+    "/Users/feeka/Desktop/servak/new/graph/graph.sdbg_info": [
+      1978215,
+      1794335555420900749
+    ]
+  },
+  "reference_used_during_search": false,
+  "identity_percent": 90,
+  "coverage_percent": 50,
+  "coverage_definition": "single HSP query-coordinate span / full predicted extension length",
+  "baseline_parameters": {
+    "schema": 10,
+    "extension_algorithm": "equal_depth_beam_local_window_v4",
+    "source_cycle_scope": "all_observations_from_source_arrays",
+    "stability_observations": "all_external_edges",
+    "coverage_local_window": "all_external_edges",
+    "length_tie_policy": "fixed_margin_and_within_flank_stability",
+    "weak_edge_fraction_weight": 1,
+    "mode": "extend_supplied_protospacers",
+    "protospacers": "/Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/bench/fixtures/protospacer-baseline-81/Protospacers.fasta",
+    "arrays": "/Users/feeka/Desktop/servak/new",
+    "graph": "/Users/feeka/Desktop/servak/new/graph/graph",
+    "graph_k": 23,
+    "target_variant_fallback": true,
+    "max_target_placement_states": 50000,
+    "variant_min_identity": 0.9,
+    "variant_min_query_coverage": 0.85,
+    "input_records": 81,
+    "retained_records": 81,
+    "extended_records": 56,
+    "not_extended_records": 25,
+    "ambiguous_records": 39,
+    "regions": 51,
+    "search_limited_records": 42,
+    "threads": 24,
+    "max_length": 1550,
+    "max_flank_length": 750,
+    "beam_width": 32,
+    "max_node_visits": 3,
+    "max_states_per_side": 50000,
+    "max_query_states": 200000,
+    "branch_guard": false,
+    "resolve_graph_ties": false,
+    "junction_check": true,
+    "joint_flank_check": true,
+    "coverage_model": "auto",
+    "coverage_window": 7,
+    "max_coverage_penalty": 20,
+    "array_repeat_identity": 0.85,
+    "min_external_flank_bp": 24,
+    "branch_lookahead": 75,
+    "branch_score_margin": 1,
+    "prediction_score_margin": 0.1,
+    "correct_spacer_boundaries": true,
+    "boundary_support": 0.85,
+    "boundary_min_spacers": 5,
+    "boundary_min_bases": 6,
+    "max_retained_bases": 50000000,
+    "adapter_patterns": [
+      {
+        "sequence": "AGATCGGAAGAGCACACGT",
+        "exact_begin": 0,
+        "exact_end": 13,
+        "max_edits": 2,
+        "allow_indels": true
+      },
+      {
+        "sequence": "AGATCGGAAGAGCGTCGTG",
+        "exact_begin": 0,
+        "exact_end": 13,
+        "max_edits": 2,
+        "allow_indels": true
+      },
+      {
+        "sequence": "CTGTCTCTTATACACATCT",
+        "exact_begin": 0,
+        "exact_end": 0,
+        "max_edits": 0,
+        "allow_indels": false
+      }
+    ],
+    "branch_checks": 0,
+    "adapter_encounters": 723
+  }
+}

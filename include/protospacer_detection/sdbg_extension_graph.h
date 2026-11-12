@@ -2,6 +2,7 @@
 #define MCAAT_SDBG_EXTENSION_GRAPH_H
 #include "protospacer_detection/extension_engine.h"
 #include "sdbg/sdbg.h"
+#include <functional>
 
 namespace mcaat::proto {
 // Identity is a k-mer vertex (the last edge slot), while coverage belongs to the
@@ -53,6 +54,43 @@ public:
             index=vertex+1;
         }
         return Path(unique.begin(),unique.end());
+    }
+    // Search observed BOSS labels with '.' wildcards and a substitution budget.
+    // Work is bounded independently of the number of surviving graph paths.
+    std::vector<std::pair<Node,size_t>> find_masked(const std::string& pattern,size_t budget,
+            size_t max_work,size_t& work,bool& limited) const {
+        if(pattern.size()!=k()||pattern.find_first_not_of("ACGT.")!=std::string::npos)
+            throw std::runtime_error("invalid masked k-mer pattern");
+        std::map<Node,size_t> result;std::vector<uint8_t> bases(k());
+        auto spend=[&](){if(work>=max_work){limited=true;return false;}++work;return true;};
+        std::function<void(Node,Node,size_t,size_t)> visit;
+        visit=[&](Node lo,Node hi,size_t depth,size_t errors) {
+            if(lo>=hi||!spend())return;
+            if(depth==k()||hi-lo<=32) {
+                for(Node index=lo;index<hi;) {
+                    if(!spend())return;
+                    Node v=graph_.GetLastIndex(index);graph_.GetLabel(v,bases.data());std::string word;
+                    for(auto b:bases){if(b<1||b>4){word.clear();break;}word+="ACGT"[b-1];}
+                    if(!word.empty()) {
+                        size_t actual=0;for(size_t j=0;j<k();++j)actual+=pattern[j]!='.'&&pattern[j]!=word[j];
+                        auto mapped=find(word);if(mapped!=missing&&actual<=budget)result.emplace(mapped,actual);
+                    }
+                    if(v<index)throw std::runtime_error("invalid BOSS range");index=v+1;
+                }
+                return;
+            }
+            const size_t at=k()-1-depth;
+            auto bound=[&](unsigned base) {
+                auto a=lo,b=hi;
+                while(a<b){auto mid=a+(b-a)/2;graph_.GetLabel(mid,bases.data());if(bases[at]<base)a=mid+1;else b=mid;}
+                return a;
+            };
+            for(unsigned base=1;base<=4&&!limited;++base) {
+                size_t cost=errors+(pattern[at]!='.'&&pattern[at]!="ACGT"[base-1]);
+                if(cost<=budget)visit(bound(base),bound(base+1),depth+1,cost);
+            }
+        };
+        visit(0,graph_.size(),0,0);return {result.begin(),result.end()};
     }
     std::vector<Arc> neighbors(Node v,bool backward) const {
         std::vector<Arc> result;if(v>=graph_.size())return result;

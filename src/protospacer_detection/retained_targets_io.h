@@ -138,12 +138,12 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
             extensions<<'\n';
         }
         auto params=output(staging/"protospacer_parameters.json");
-        params<<"{\n  \"schema\": 10,\n  \"extension_algorithm\": \"equal_depth_beam_local_window_v4\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
+        params<<"{\n  \"schema\": 12,\n  \"extension_algorithm\": \"equal_depth_beam_local_window_v4\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
             <<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())<<",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())
             <<",\n  \"graph_k\": "<<graph.k()
             <<",\n  \"target_variant_fallback\": "<<(options.target_variant_fallback?"true":"false")
             <<",\n  \"max_target_placement_states\": "<<options.max_target_placement_states
-            <<",\n  \"variant_min_identity\": 0.90,\n  \"variant_min_query_coverage\": 0.85"
+            <<",\n  \"target_anchor_policy\": \"one_substitution_then_masked_kmer_if_unextended\",\n  \"masked_rescue_stability\": \"zero_truncated_poisson_noise_adjusted\",\n  \"variant_min_identity\": 0.90,\n  \"variant_min_query_coverage\": 0.85"
             <<",\n  \"input_records\": "<<targets.size()<<",\n  \"retained_records\": "<<targets.size()<<",\n  \"extended_records\": "<<extended
             <<",\n  \"not_extended_records\": "<<targets.size()-extended<<",\n  \"ambiguous_records\": "<<ambiguous<<",\n  \"regions\": "<<written.size()
             <<",\n  \"search_limited_records\": "<<limited<<",\n  \"threads\": "<<threads<<",\n  \"max_length\": "<<options.max_bp<<",\n  \"max_flank_length\": "<<options.max_flank_bp

@@ -1,0 +1,19 @@
+{
+  "inputs": 81,
+  "completed_input_sides": 162,
+  "placement_endpoints": 15044,
+  "work_limit": null,
+  "candidate_limit": null,
+  "identity": 0.9,
+  "query_coverage": 0.85,
+  "target_alignment": "ungapped",
+  "flank_alignment": "substitutions_and_indels",
+  "last_inputs": [
+    "seed_12839d3c8ccafc84",
+    "seed_4b0081e61d24ad6a",
+    "seed_b028e33cab495531"
+  ],
+  "bidirectional_graph_contract": "libs/megahit/src/sorting/read_to_sdbg_s2.cpp emits each edge and reverse complement",
+  "native_index_against_exhaustive_scan": "passed",
+  "binary_sha256": "3b7351e63616e810b6680f6af2f2fa5f4bb73f874e589cdfa98601fff284b40a"
+}

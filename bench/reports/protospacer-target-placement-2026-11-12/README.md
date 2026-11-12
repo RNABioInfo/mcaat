@@ -1,5 +1,7 @@
 # SRR14017553: all 81 inputs, target placement, and extension recovery
 
+**Superseded by the [complete-placement audit](../protospacer-complete-placement-2026-11-12/README.md): 12 demonstrated recoverable inputs, 69 completed negative classifications, and 11 production matches. The results below describe the earlier run.**
+
 The earlier claim that almost all 81 extensions could be recovered was wrong.
 Checking the starting sequence, the intervening edges, and the emitted DNA
 shows **11 inputs with a demonstrated reference-consistent continuation**.
