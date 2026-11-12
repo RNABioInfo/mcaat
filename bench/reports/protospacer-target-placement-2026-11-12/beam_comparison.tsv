@@ -1,0 +1,5 @@
+run	retained	extended_records	unique_regions	matching_input_records	matching_unique_regions	baseline_matches_kept	baseline_matches_lost	new_matches	median_extension_length	min_extension_length	max_extension_length	length_at_least_500	ambiguous	search_limited	expanded_states	work_limited_records	regions_with_revisited_nodes	wall_seconds
+baseline	81	45	40	8	8	8	0	0	774	89	1530	29	32	34	1007786	0	16	not re-timed
+N16	81	54	51	10	10	8	0	2	778.5	92	1537	32	38	49	1000722	2	20	66.71574759200121
+N32	81	56	51	10	10	8	0	2	773.0	89	1537	35	39	42	1621144	2	18	68.76364861900038
+N64	81	56	53	10	10	8	0	2	628.5	89	1537	36	39	40	2425882	18	22	77.81518180400053

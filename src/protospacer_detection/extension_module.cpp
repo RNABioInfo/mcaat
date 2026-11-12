@@ -344,6 +344,8 @@ int run_extension_module(int argc,char** argv) {
             std::cout<<"mcaat phage-curate --arrays DIR --graph PREFIX [--output DIR]\n"
                 "Exact protospacer seeds and bounded bidirectional extension; partial results retained.\n"
                 "--protospacers FILE: extend an existing FASTA; retain EVERY supplied ID/sequence regardless of extension outcome.\n"
+                "--target-variant-fallback true (--protospacers only): if exact placement has no extension, try graph alleles at >=90% identity / >=85% query coverage.\n"
+                "--max-target-placement-states 50000: bound fallback placement work; output reports observed target sequence and alignment.\n"
                 "This mode requires a separate --output directory; extension status is reported independently.\n"
                 "Primary outputs require an external flank. Unresolved seeds are reported separately.\n"
                 "Select ONE prediction per distinct spacer across all seed intervals, ranked by multiplicity stability.\n"
@@ -382,6 +384,11 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--max-flank-length")options.max_flank_bp=integer(flag,value);
         else if(flag=="--max-states")options.max_states=integer(flag,value);
         else if(flag=="--max-query-states")options.max_query_states=integer(flag,value);
+        else if(flag=="--max-target-placement-states")options.max_target_placement_states=integer(flag,value);
+        else if(flag=="--target-variant-fallback") {
+            if(value!="true" && value!="false")throw std::invalid_argument(flag+" needs true or false");
+            options.target_variant_fallback=value=="true";
+        }
         else if(flag=="--max-retained-bases")max_retained_bases=integer(flag,value);
         else if(flag=="--max-paths")options.max_paths=integer(flag,value);
         else if(flag=="--max-seeds")options.max_seeds=integer(flag,value);

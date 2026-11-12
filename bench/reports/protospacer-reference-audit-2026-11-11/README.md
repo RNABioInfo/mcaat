@@ -1,5 +1,7 @@
 # SRR14017553: all-81 reference and graph audit
 
+This is the historical unchanged-seed audit. The [2026-11-12 follow-up](../protospacer-target-placement-2026-11-12/README.md) also tests the actual reference alleles, corrects missed target placements, and reports the remaining ranking failure.
+
 All 81 supplied protospacers were checked against the local reference database
 and the existing k=23 graph. The earlier claim that almost all 81 reference
 extensions could be recovered was unsupported: k-mer presence and endpoint

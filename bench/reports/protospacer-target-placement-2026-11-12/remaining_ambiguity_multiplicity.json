@@ -1,0 +1,54 @@
+[
+  {
+    "path": "selected",
+    "side": "left",
+    "edges": 148,
+    "min": 201.0,
+    "median": 230.0,
+    "max": 248.0,
+    "mean": 227.8581081081081,
+    "coefficient_of_variation": 0.0545721189463216,
+    "counts_at_most_one": 0,
+    "unique_path_vertices": 280,
+    "branch_vertices": 43
+  },
+  {
+    "path": "selected",
+    "side": "right",
+    "edges": 137,
+    "min": 213.0,
+    "median": 232.0,
+    "max": 248.0,
+    "mean": 231.7810218978102,
+    "coefficient_of_variation": 0.039534434640285714,
+    "counts_at_most_one": 0,
+    "unique_path_vertices": 280,
+    "branch_vertices": 42
+  },
+  {
+    "path": "reference_consistent",
+    "side": "left",
+    "edges": 303,
+    "min": 1.0,
+    "median": 5.0,
+    "max": 9.0,
+    "mean": 5.0594059405940595,
+    "coefficient_of_variation": 0.4511912751686602,
+    "counts_at_most_one": 21,
+    "unique_path_vertices": 1048,
+    "branch_vertices": 4
+  },
+  {
+    "path": "reference_consistent",
+    "side": "right",
+    "edges": 750,
+    "min": 1.0,
+    "median": 3.0,
+    "max": 6.0,
+    "mean": 3.224,
+    "coefficient_of_variation": 0.35353778890120896,
+    "counts_at_most_one": 59,
+    "unique_path_vertices": 1048,
+    "branch_vertices": 4
+  }
+]

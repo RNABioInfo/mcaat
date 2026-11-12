@@ -1,0 +1,33 @@
+{
+  "inputs": 81,
+  "reference_locations": 1041,
+  "demonstrated_matching_graph_paths_inputs": 11,
+  "selected_reference_matches_N32": 10,
+  "outcome_counts": {
+    "selected_reference_match": 10,
+    "mapped_reference_alleles_have_no_qualifying_flank_at_tested_locations": 33,
+    "reference_alleles_absent_original_anchor_has_no_qualifying_flank": 37,
+    "matching_graph_path_exists_but_another_target_is_selected": 1
+  },
+  "inputs_with_an_exact_reference_allele_in_graph": 44,
+  "inputs_without_an_exact_reference_allele_in_graph": 37,
+  "input_preservation": {
+    "N16": {
+      "sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+      "retained": 81
+    },
+    "N32": {
+      "sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+      "retained": 81
+    },
+    "N64": {
+      "sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+      "retained": 81
+    }
+  },
+  "initial_repeat_filter_used_for_absence_certificates": false,
+  "reference_used_by_production": false,
+  "global_maximum_proved": false,
+  "scope": "All original inputs and all 1041 reference-allele locations; known flanks 100..750 bases, >=90% aligned identity, adapters and closed source-array walks excluded. Original input preservation is separate from observed target-allele placement.",
+  "limitation": "No upper bound is claimed over arbitrary target variants absent from the reference collection, unknown reference gaps, or every larger approximate walk. One original-anchor search for an already recovered variant input remains unresolved. Alternative locations of already positive inputs can also remain work-limited."
+}

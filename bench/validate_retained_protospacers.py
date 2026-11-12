@@ -25,6 +25,11 @@ def run(name,args,success=True):
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 seeds={k:dna(35) for k in ['straight','branch','adapter','dead_end','absent','unknown_source']}
 seeds['below_k']=dna(17)
+seeds['variant']=dna(37)
+variant_allele=list(seeds['variant'])
+for position in (0,2,25,35):variant_allele[position]='ACGT'[('ACGT'.index(variant_allele[position])+1)%4]
+variant_allele=''.join(variant_allele)
+variant_truth=dna(1000)+variant_allele+dna(1000)
 repeat=dna(27);adapter='AGATCGGAAGAGCACACGT'
 left,right=dna(1000),dna(1000);straight=left+seeds['straight']+right
 branch_left,common=dna(900),dna(20)
@@ -36,7 +41,7 @@ branch_other=seeds['branch']+common+arm_b+'A'+dna(900)
 branch_a_other=seeds['branch']+common+arm_a+'C'+dna(900)
 branch_b_other=seeds['branch']+common+arm_b+'C'+dna(900)
 adapter_left=dna(800);adapter_target=adapter_left+seeds['adapter']+adapter+dna(800)
-sequences=[(straight,4),(true_branch,4),(branch_other,4),(branch_a_other,4),(branch_b_other,4),(adapter_target,4),(seeds['dead_end'],4)]
+sequences=[(straight,4),(true_branch,4),(branch_other,4),(branch_a_other,4),(branch_b_other,4),(adapter_target,4),(seeds['dead_end'],4),(variant_truth,4)]
 reads=out/'construction.fasta'
 with reads.open('w') as f:
  for num,(seq,copies) in enumerate(sequences):
@@ -72,8 +77,8 @@ for source in rows(result/'protospacer_sources.tsv'):
  full=source_sequences[source['source_id']]
  observed=full[int(source['query_begin']):int(source['query_end'])]
  assert (rc(observed) if source['strand']=='-' else observed)==seeds[source['seed_id']], 'source coordinates disagree'
-assert extensions['below_k']['reason']=='shorter_than_graph_k'
-assert extensions['absent']['reason']=='seed_not_mapped'
+assert extensions['below_k']['reason']=='no_supported_variant_extension'
+assert extensions['absent']['reason']=='no_supported_variant_extension'
 assert extensions['unknown_source']['reason']=='source_context_missing'
 assert extensions['dead_end']['extension_status']=='not_extended'
 regions={r['region_id']:r for r in rows(result/'protospacer_regions.tsv')}
@@ -81,7 +86,8 @@ links=rows(result/'protospacer_associations.tsv')
 assert len(links)==len({r['seed_id'] for r in links})
 for link in links:
  r=regions[link['region_id']];seq=r['sequence'];lo,hi=int(link['seed_begin']),int(link['seed_end'])
- assert (rc(seq[lo:hi]) if link['strand']=='-' else seq[lo:hi])==seeds[link['seed_id']]
+ expected=variant_allele if link['seed_id']=='variant' else seeds[link['seed_id']]
+ assert (rc(seq[lo:hi]) if link['strand']=='-' else seq[lo:hi])==expected
  assert lo<=750 and len(seq)-hi<=750 and len(seq)<=1550
  assert len(seq)==len(r['vertices'].split(','))+22
  assert len(r['edges'].split(','))+1==len(r['vertices'].split(','))
@@ -94,6 +100,15 @@ assert all(adapter not in r['sequence'] and rc(adapter) not in r['sequence'] for
 assert int(extensions['branch']['length'])>=1000,extensions['branch']
 branch_sequence=regions[extensions['branch']['region_id']]['sequence']
 assert branch_sequence in true_branch or rc(branch_sequence) in true_branch, 'longer-context ranking chose unstable branch'
+variant=extensions['variant'];assert variant['extension_status'].startswith('extended_variant')
+variant_sequence=regions[variant['region_id']]['sequence']
+assert len(variant_sequence)==1537 and (variant_sequence in variant_truth or rc(variant_sequence) in variant_truth)
+run('exact_only',[*common_args,'--output',out/'exact_only','--target-variant-fallback','false'])
+exact_only={r['seed_id']:r for r in rows(out/'exact_only/protospacer_extensions.tsv')}
+assert exact_only['below_k']['reason']=='shorter_than_graph_k'
+assert exact_only['absent']['reason']=='seed_not_mapped'
+assert exact_only['variant']['reason']=='seed_not_mapped'
+check_outputs(provided,out/'exact_only')
 # Twenty-four threads must yield exactly the same records, paths and diagnostics.
 run('threads24',[*common_args,'--output',out/'threads24','--threads','24'])
 for f in result.iterdir():
@@ -124,6 +139,7 @@ assert graph_hash=={f.name:digest(f) for f in graph.parent.glob('graph.*')}
 summary=dict(supplied_records=len(seeds),retained_records=len(seeds),baseline_records_preserved=81,
  straight_length=int(extensions['straight']['length']),branch_length=int(extensions['branch']['length']),
  old_strict_branch_length=int(strict['branch']['length']),adapter_length=int(extensions['adapter']['length']),
- true_branch_recovered=True,threads_1_24_identical=True,failed_extensions_keep_protospacers=True,
+ true_branch_recovered=True,variant_target_recovered=True,variant_length=len(variant_sequence),
+ exact_only_policy_checked=True,threads_1_24_identical=True,failed_extensions_keep_protospacers=True,
  original_metagenome_graph_tested=False)
 (out/'validation.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary,indent=2))

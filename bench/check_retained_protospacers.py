@@ -39,7 +39,7 @@ def check(baseline, output):
     by_seed = {r['seed_id']: r for r in extensions}
     assert len(by_seed) == len(extensions) == len(original) and set(by_seed) == set(original)
     assert all(r['retention_status'] == 'retained_input' for r in extensions)
-    assert all(r['extension_status'] in {'extended', 'extended_ambiguous', 'not_extended'} for r in extensions)
+    assert all(r['extension_status'] in {'extended', 'extended_ambiguous', 'extended_variant', 'extended_variant_ambiguous', 'not_extended'} for r in extensions)
     contigs = fasta(output / 'ContiguousPaths.fasta')
     regions = table(output / 'protospacer_regions.tsv')
     assert len({r['region_id'] for r in regions}) == len(regions) == len(contigs)
@@ -62,7 +62,18 @@ def check(baseline, output):
         begin, end = int(link['seed_begin']), int(link['seed_end'])
         observed = sequence[begin:end]
         assert 0 <= begin < end <= len(sequence)
-        assert (reverse_complement(observed) if link['strand'] == '-' else observed) == seed
+        oriented = reverse_complement(observed) if link['strand'] == '-' else observed
+        if row['extension_status'].startswith('extended_variant'):
+            assert params['schema'] >= 10 and params['target_variant_fallback']
+            assert oriented == link['observed_target'] and len(oriented) == len(seed)
+            qb, qe = int(link['query_begin']), int(link['query_end'])
+            assert 0 <= qb < qe <= len(seed)
+            matches = sum(a == b for a, b in zip(seed[qb:qe], oriented[qb:qe]))
+            assert matches * 100 >= (qe - qb) * 90 and (qe - qb) * 100 >= len(seed) * 85
+            assert abs(float(link['identity']) - matches / (qe - qb)) < 1e-9
+            assert abs(float(link['query_coverage']) - (qe - qb) / len(seed)) < 1e-9
+        else:
+            assert oriented == seed, 'exact placement silently changed the input'
         assert len(sequence) > len(seed), 'seed-only placeholder counted as an extension'
         left, right = begin, len(sequence) - end
         assert left <= params['max_flank_length'] and right <= params['max_flank_length']
@@ -76,7 +87,8 @@ def check(baseline, output):
             for vertex, visits in Counter(vertices).items():
                 assert visits <= max(1, original_visits[vertex]) + params['max_node_visits'] - 1, 'node visit cap violated'
     for row in extensions:
-        assert int(row['expanded_states']) <= min(params['max_states_per_side'] * 2, params['max_query_states'])
+        budget = params['max_query_states'] if params.get('target_variant_fallback') else min(params['max_states_per_side'] * 2, params['max_query_states'])
+        assert int(row['expanded_states']) <= budget
         if row['extension_status'] == 'not_extended':
             assert row['region_id'] == '-' and int(row['length']) == 0
     assert params['input_records'] == params['retained_records'] == len(original)

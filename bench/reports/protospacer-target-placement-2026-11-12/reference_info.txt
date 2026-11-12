@@ -1,0 +1,9 @@
+Database: all_curated.fna
+	10,021 sequences; 250,720,859 total bases
+
+Date: Dec 4, 2025  10:16 PM	Longest sequence: 266,223 bases
+
+BLASTDB Version: 5
+
+Volumes:
+	/Users/feeka/Desktop/work/workspace/blaster/all_curated_db

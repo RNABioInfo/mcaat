@@ -63,7 +63,7 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
         auto& target=targets[i];
         try {
             if(cancelled)continue;
-            target.extension=extend_retained_target(graph,target.sequence,target.contexts,options,&target.source_cycles);
+            target.extension=extend_target_with_fallback(graph,target.sequence,target.contexts,options,&target.source_cycles);
             if(target.extension.has_extension && retained.fetch_add(target.extension.selected.sequence.size())+target.extension.selected.sequence.size()>max_bases)
                 throw std::runtime_error("retained targets/extensions exceed --max-retained-bases");
         }catch(const std::exception& e){target.error=e.what();cancelled=true;}
@@ -87,10 +87,14 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
         auto regions=output(staging/"protospacer_regions.tsv"),associations=output(staging/"protospacer_associations.tsv");
         auto sources=output(staging/"protospacer_sources.tsv"),branches=output(staging/"protospacer_branch_checks.tsv");
         auto adapters=output(staging/"protospacer_adapter_stops.tsv");
+        auto placements=output(staging/"protospacer_target_placements.tsv");
+        auto placement_checks=output(staging/"protospacer_placement_checks.tsv");
+        placement_checks<<"seed_id\tcore\tphase\treason\textended\tlength\tscore\tquery_offset\tquery_begin\tquery_end\texpanded\tlimited\tselected\tsequence\n";
+        placements<<"seed_id\tplacement_mode\tobserved_target\tquery_begin\tquery_end\tidentity\tquery_coverage\tmismatches\tplacement_candidates\tplacement_work\tplacement_limited\n";
         candidates<<"seed_id\tsequence\tlength\tretention_status\tsource_observations\textension_status\n";
         extensions<<"seed_id\tretention_status\textension_status\treason\tregion_id\tlength\tleft_bp\tright_bp\tleft_stop\tright_stop\tcompared_paths\tscore\trunner_score\tambiguous\tsearch_limited\texpanded_states\tobserved_stops\n";
         regions<<"region_id\tlength\tsequence\tvertices\tedges\tviral_status\n";
-        associations<<"seed_id\tregion_id\tseed_begin\tseed_end\tstrand\textension_status\n";
+        associations<<"seed_id\tregion_id\tseed_begin\tseed_end\tstrand\textension_status\tobserved_target\tquery_begin\tquery_end\tidentity\tquery_coverage\n";
         sources<<"seed_id\tsource_id\tarray_id\tquery_begin\tquery_end\tstrand\n";
         branches<<"seed_id\tside\tvertex\tedge\ttarget\tprobe_steps\tobservations\tscore\tstatus\tchosen\tdecision\n";
         adapters<<"seed_id\tside\tmotif\tclean_flank_bp\toverlaps_seed\tclean_endpoint_vertex\tdetected_vertex\n";
@@ -104,6 +108,9 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
             for(const auto& b:e.diagnostics.branches)branches<<t.id<<'\t'<<(b.backward?"left":"right")<<'\t'<<b.vertex<<'\t'<<b.edge<<'\t'<<b.target<<'\t'<<b.steps<<'\t'<<b.observations<<'\t'<<b.score<<'\t'<<b.status<<'\t'<<b.chosen<<'\t'<<b.decision<<'\n';
             for(const auto& a:e.diagnostics.adapters)adapters<<t.id<<'\t'<<(a.backward?"left":"right")<<'\t'<<a.motif<<'\t'<<a.clean_flank_bp<<'\t'<<a.overlaps_seed<<'\t'<<a.clean_endpoint<<'\t'<<a.detected_node<<'\n';
             if(e.has_extension) {
+                size_t target_begin=c.seed_begin+e.placement.query_offset,target_end=target_begin+t.sequence.size();
+                auto observed=c.sequence.substr(target_begin,t.sequence.size());
+                if(observed!=e.placement.sequence.substr(e.placement.query_offset,t.sequence.size()))throw std::runtime_error("reported target placement disagrees with graph path");
                 ++extended;auto key=canonical(c.sequence);region=identifier(key,"region_");
                 auto [it,added]=written.emplace(region,c.sequence);
                 if(canonical(it->second)!=key)throw std::runtime_error("region hash collision");
@@ -113,11 +120,16 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
                     regions<<region<<'\t'<<c.sequence.size()<<'\t'<<c.sequence<<'\t'<<path_text(c.path)<<'\t'<<path_text(edges)<<"\tnot_assessed\n";
                 }
                 bool flip=it->second!=c.sequence;
-                associations<<t.id<<'\t'<<region<<'\t'<<(flip?c.sequence.size()-c.seed_end:c.seed_begin)<<'\t'<<(flip?c.sequence.size()-c.seed_begin:c.seed_end)<<'\t'<<(flip?'-':'+')<<'\t'<<e.status<<'\n';
+                associations<<t.id<<'\t'<<region<<'\t'<<(flip?c.sequence.size()-target_end:target_begin)<<'\t'<<(flip?c.sequence.size()-target_begin:target_end)<<'\t'<<(flip?'-':'+')<<'\t'<<e.status<<'\t'<<observed<<'\t'<<e.placement.query_begin<<'\t'<<e.placement.query_end<<'\t'<<e.placement.identity<<'\t'<<e.placement.coverage<<'\n';
+                placements<<t.id<<'\t'<<(e.variant_placement?"graph_variant":"exact")<<'\t'<<observed<<'\t'<<e.placement.query_begin<<'\t'<<e.placement.query_end<<'\t'<<e.placement.identity<<'\t'<<e.placement.coverage<<'\t'<<e.placement.mismatches;
+            }else {
+                placements<<t.id<<"\tunplaced\t-\t0\t0\t0\t0\t0";
             }
+            placements<<'\t'<<e.placement_candidates<<'\t'<<e.placement_work<<'\t'<<e.placement_limited<<'\n';
+            for(const auto& check:e.placement_checks)placement_checks<<t.id<<'\t'<<check.core<<'\t'<<check.phase<<'\t'<<check.reason<<'\t'<<check.extended<<'\t'<<check.sequence.size()<<'\t'<<check.score<<'\t'<<check.query_offset<<'\t'<<check.query_begin<<'\t'<<check.query_end<<'\t'<<check.expanded<<'\t'<<check.limited<<'\t'<<(e.has_extension && check.sequence==c.sequence)<<'\t'<<check.sequence<<'\n';
             ambiguous+=e.ambiguous;limited+=e.search_limited;
             extensions<<t.id<<"\tretained_input\t"<<e.status<<'\t'<<e.reason<<'\t'<<region<<'\t'
-                <<(e.has_extension?c.sequence.size():0)<<'\t'<<(e.has_extension?c.left_length:0)<<'\t'<<(e.has_extension?c.right_length:0)<<'\t'
+                <<(e.has_extension?c.sequence.size():0)<<'\t'<<(e.has_extension?c.left_length+e.placement.query_offset:0)<<'\t'<<(e.has_extension?c.right_length+c.seed_end-c.seed_begin-e.placement.query_offset-t.sequence.size():0)<<'\t'
                 <<(e.has_extension?c.left.stop:"-")<<'\t'<<(e.has_extension?c.right.stop:"-")<<'\t'<<e.compared<<'\t';
             if(e.has_extension)extensions<<c.score;else extensions<<"NA";
             extensions<<'\t';if(e.has_runner)extensions<<e.runner_score;else extensions<<"NA";
@@ -126,9 +138,12 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
             extensions<<'\n';
         }
         auto params=output(staging/"protospacer_parameters.json");
-        params<<"{\n  \"schema\": 9,\n  \"extension_algorithm\": \"equal_depth_beam_local_window_v4\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
+        params<<"{\n  \"schema\": 10,\n  \"extension_algorithm\": \"equal_depth_beam_local_window_v4\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
             <<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())<<",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())
             <<",\n  \"graph_k\": "<<graph.k()
+            <<",\n  \"target_variant_fallback\": "<<(options.target_variant_fallback?"true":"false")
+            <<",\n  \"max_target_placement_states\": "<<options.max_target_placement_states
+            <<",\n  \"variant_min_identity\": 0.90,\n  \"variant_min_query_coverage\": 0.85"
             <<",\n  \"input_records\": "<<targets.size()<<",\n  \"retained_records\": "<<targets.size()<<",\n  \"extended_records\": "<<extended
             <<",\n  \"not_extended_records\": "<<targets.size()-extended<<",\n  \"ambiguous_records\": "<<ambiguous<<",\n  \"regions\": "<<written.size()
             <<",\n  \"search_limited_records\": "<<limited<<",\n  \"threads\": "<<threads<<",\n  \"max_length\": "<<options.max_bp<<",\n  \"max_flank_length\": "<<options.max_flank_bp
@@ -144,7 +159,7 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
             <<",\n  \"max_retained_bases\": "<<max_bases<<",\n  \"adapter_patterns\": "<<adapter_json(options)
             <<",\n  \"branch_checks\": "<<branch_count<<",\n  \"adapter_encounters\": "<<adapter_count<<"\n}\n";
         auto mode=output(staging/"retained_protospacer_mode.txt");mode<<marker;
-        fasta.close();contigs.close();candidates.close();extensions.close();regions.close();associations.close();sources.close();branches.close();adapters.close();params.close();mode.close();
+        fasta.close();contigs.close();candidates.close();extensions.close();regions.close();associations.close();sources.close();branches.close();adapters.close();placements.close();placement_checks.close();params.close();mode.close();
         for(const auto& file:fs::directory_iterator(staging))fs::rename(file.path(),destination/file.path().filename());
         fs::remove(staging);
         std::cout<<"Retained "<<targets.size()<<'/'<<targets.size()<<" supplied protospacers unchanged; "<<extended<<" with an extension, "<<targets.size()-extended<<" without an extension\n";

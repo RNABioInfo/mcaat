@@ -30,11 +30,30 @@ it cannot overwrite the input FASTA or mix with a discovery run.
 
 Source-array observations identify the complete spacer and repeat around each
 supplied interval, including reverse orientation and original source coordinates.
-The interval itself maps exactly to the graph; the complete source spacer need
-not map as an external target. Fewer than k bases cannot identify a whole graph
-vertex, so such inputs are retained with `shorter_than_graph_k`, without an invented
-extension. Missing source context, missing graph mapping, adapter-containing
-seeds and work limits likewise receive separate reasons.
+Exact placement is tried first. If it supplies an extension, that prediction is
+kept unchanged. Otherwise, `--target-variant-fallback true` searches the graph
+for related target sequences. Its aligned interval must cover at least 85% of
+the original query at at least 90% substitution identity. Original FASTA records
+remain unchanged; a differing observed target is reported separately, with
+its query coordinates, identity, coverage, and `extended_variant` status.
+
+Short queries of at least 15 bases can be placed inside actual graph k-mers.
+The surrounding bases come from graph labels and edges; they are neither
+invented padding nor counted as matched query sequence. Complete source-array
+context must be available around the chosen core. The BOSS suffix lookup uses
+the existing colexicographic ordering without rebuilding an index or graph.
+
+The fallback first probes up to 75 bases on each side of every candidate, then
+extends the best N placements using the existing multiplicity score and source,
+cycle, adapter and depth guards. It shares the existing per-query work budget.
+`--max-target-placement-states 50000` separately bounds placement work;
+`--max-seeds` caps retained placements. Work limits and unextended alternatives
+are explicit. This is a bounded substitution-aware mapper with exact and
+one-substitution anchors, **not** a complete indel-aware search. It cannot prove
+which organism supplied a short sequence shared by several graph locations.
+Use `--target-variant-fallback false` to retain the earlier exact-placement policy.
+Missing source context, adapter-containing seeds and work limits receive
+separate reasons.
 
 At branches the default bounded beam keeps alternatives, scores the completed
 retained flanks for multiplicity stability and selects at most one extension per
@@ -50,13 +69,16 @@ supplied protospacer. A selected path remains a candidate, not proof of its orig
 | `Protospacers.fasta`, `protospacer_candidates.tsv` | All supplied IDs/sequences with `retained_input` provenance |
 | `ContiguousPaths.fasta`, `protospacer_regions.tsv` | Only selected actual extensions; no seed-only placeholders |
 | `protospacer_extensions.tsv` | One row per input, independent extension status/reason, chosen region, lengths, stops, scores, ambiguity and work |
-| `protospacer_associations.tsv` | Seed-to-region coordinates and strand for successful extensions |
+| `protospacer_associations.tsv` | Target-to-region coordinates and strand; observed allele and query alignment for variant placements |
+| `protospacer_target_placements.tsv` | One row per input, observed target, alignment, placement work and limits |
+| `protospacer_placement_checks.tsv` | Diagnostic probe/extension alternatives and scores; these are not additional final predictions |
 | `protospacer_sources.tsv` | Matching source-array observations and zero-based, half-open coordinates in their original spacers |
 | `protospacer_branch_checks.tsv`, `protospacer_adapter_stops.tsv` | Traversal diagnostics; branch probes are present only if enabled |
 | `protospacer_parameters.json` | Mode, all effective algorithm settings, input/retained/extended counts |
 | `retained_protospacer_mode.txt` | Marker allowing safe reruns in this output directory |
 
-`extension_status` is `extended`, `extended_ambiguous`, or `not_extended`.
+`extension_status` is `extended`, `extended_ambiguous`, `extended_variant`,
+`extended_variant_ambiguous`, or `not_extended`.
 `retained_input` records provenance, not a claim that this run validated a target.
 Duplicate sequences with distinct supplied IDs keep their records; identical
 extension regions can share a FASTA record. No target is silently substituted by
@@ -78,6 +100,20 @@ python3 bench/check_retained_protospacers.py \
 
 This checker verifies retention and output consistency. It does not assess
 reference-match quality of the extended flanks.
+
+### Target-placement correction and full input audit (2026-11-12)
+
+The graph-only retained-input workflow now selects 10 reference-matching
+extensions, compared with 8 before the placement fallback. N=16, 32 and 64
+all preserve the previous eight matches and every one of the 81 FASTA records.
+The additional matches are 1,537 bp and 133 bp. A third demonstrated matching
+path belongs to a short, ambiguous query and still loses the final ranking.
+The code does not claim to select that eleventh known matching continuation.
+
+The [per-input report and reproduction command](../bench/reports/protospacer-target-placement-2026-11-12/README.md)
+cover all 81 inputs and 1,041 reference locations, including absent reference
+alleles, completed negative searches, path witnesses and unresolved alternatives.
+References are not used to generate or rank production predictions.
 
 ### Equal-depth comparison on SRR14017553 (2026-11-11)
 
@@ -890,19 +926,15 @@ local stopping and common-sequence clipping are available only when requested.
 The historical smoke counts above describe the strict version, not the current
 supplied-protospacer workflow.
 
-The production retention fixture keeps all nine supplied records, including
-unmapped, short, source-context-missing, reverse and duplicate-sequence records.
-The straight target extends to 1,535 bp. A target with successive nearby forks
-also extends to its known correct 1,535-bp sequence; the old strict options yield
-785 bp for that target. Confirmed adapter continuation is excluded while a
-766-bp clean fragment remains. One- and 24-thread outputs match, tiny-budget
-reruns clear stale extensions but keep all supplied seeds, and invalid reruns
-leave previous output intact. The fixed 81-record baseline is also preserved
-byte for byte when extension on an unrelated synthetic graph cannot succeed.
-That proves retention under failure, not original-metagenome extension accuracy.
-
-A separate local check supplies the original source-array report for the 81
-records: all 81 source contexts are recovered. The unrelated graph returns
-76 `seed_not_mapped` and five `shorter_than_graph_k` outcomes. All 81 input
-sequences remain unchanged. Testing reconstructed flanks against Shah references
-on the original pooled graph still requires the server run.
+The production retention fixture keeps all ten supplied records, including
+unmapped, short, source-context-missing, reverse, duplicate-sequence and variant
+target records. Straight and branching targets extend to their known 1,535-bp
+sequences; the variant target extends to its known 1,537-bp sequence while the
+original input remains unchanged. Exact-only mode rejects that unmapped original
+query. Strict options reduce the branching target to 785 bp. Adapter continuation
+is excluded while a 785-bp clean fragment remains. One- and 24-thread outputs
+match; tiny-budget reruns remove stale extensions while retaining inputs, and
+invalid reruns leave prior output intact. The 81-record baseline is also preserved
+byte for byte on an unrelated synthetic graph. Separate full-graph measurements
+are linked above; this synthetic fixture tests retention and implementation,
+not accuracy on the original metagenome.

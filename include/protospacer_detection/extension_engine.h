@@ -38,6 +38,8 @@ struct Options {
     size_t max_bp=1550,max_flank_bp=750,beam_width=32,max_states=50000,max_paths=16,max_seeds=128,min_match=0;
     size_t coverage_window=7,max_query_states=200000;
     size_t max_node_visits=3;
+    bool target_variant_fallback=true;
+    size_t max_target_placement_states=50000;
     size_t min_external_flank=0; // 0: k+1, one complete edge outside the seed
     bool joint_flank_check=true;
     bool resolve_graph_ties=false;
@@ -57,7 +59,7 @@ struct Options {
         boundaries.validate();
         if(!max_node_visits || max_node_visits>64)
             throw std::invalid_argument("max-node-visits must be in [1, 64]");
-        if(!max_bp || !max_flank_bp || !branch_lookahead || branch_lookahead>1000 || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
+        if(!max_target_placement_states || !max_bp || !max_flank_bp || !branch_lookahead || branch_lookahead>1000 || !beam_width || !max_states || !max_paths || !max_seeds || !max_query_states || coverage_window<3)
             throw std::invalid_argument("extension sizes must be positive; coverage-window must be >=3");
         if(beam_width>1024 || max_paths>1024 || max_seeds>65536)
             throw std::invalid_argument("beam-width/max-paths must be <=1024; max-seeds <=65536");

@@ -1,12 +1,19 @@
 #ifndef MCAAT_PROTO_RETAINED_TARGET_H
 #define MCAAT_PROTO_RETAINED_TARGET_H
 #include "protospacer_detection/extension_engine.h"
+#include "protospacer_detection/target_placement.h"
 
 namespace mcaat::proto {
 // All strings are oriented like the supplied, immutable protospacer.
 struct TargetContext {
     std::string spacer,repeat;
     size_t begin=0,end=0;
+};
+struct PlacementCheck {
+    std::string core,phase,reason,sequence;
+    double score=0;
+    size_t query_offset=0,query_begin=0,query_end=0,expanded=0;
+    bool extended=false,limited=false;
 };
 struct TargetExtension {
     std::string status="not_extended",reason;
@@ -17,6 +24,10 @@ struct TargetExtension {
     bool has_runner=false;
     SearchDiagnostics diagnostics;
     std::set<std::string> stops;
+    TargetPlacement placement;
+    size_t placement_work=0,placement_candidates=0;
+    bool variant_placement=false,placement_limited=false;
+    std::vector<PlacementCheck> placement_checks;
 };
 // Compare against one fixed best-score threshold. A pairwise "near tie"
 // comparator would be non-transitive and cannot safely be passed to std::sort.
@@ -77,8 +88,9 @@ void refresh_target(Graph& graph,Candidate& c,const std::vector<FlankContext>& l
 template<class Graph>
 TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
                                       const std::vector<TargetContext>& contexts,const Options& options,
-                                      const std::set<std::string>* source_cycles=nullptr) {
+                                      const std::set<std::string>* source_cycles=nullptr,bool exact_source_interval=true) {
     TargetExtension result;
+    result.placement=score_target_placement(sequence,sequence,0);
     if(sequence.size()<graph.k()){result.reason="shorter_than_graph_k";return result;}
     if(sequence.size()>options.max_bp){result.reason="seed_exceeds_length_cap";return result;}
     if(contexts.empty()){result.reason="source_context_missing";return result;}
@@ -89,7 +101,8 @@ TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
     std::set<Node> shared;
     std::vector<FlankContext> left_models,right_models;
     for(const auto& ctx:contexts) {
-        if(ctx.end<ctx.begin || ctx.end>ctx.spacer.size() || ctx.spacer.substr(ctx.begin,ctx.end-ctx.begin)!=sequence)
+        if(ctx.end<ctx.begin || ctx.end>ctx.spacer.size() || ctx.end-ctx.begin!=sequence.size() ||
+                (exact_source_interval && ctx.spacer.substr(ctx.begin,ctx.end-ctx.begin)!=sequence))
             throw std::runtime_error("retained target context does not contain its seed");
         auto edges=graph.array_context(ctx.repeat,ctx.spacer);
         shared.insert(edges.first.begin(),edges.first.end());
@@ -147,6 +160,104 @@ TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
     result.has_extension=true;result.status=result.ambiguous?"extended_ambiguous":"extended";
     result.reason=result.search_limited?"bounded_search":result.ambiguous?"best_candidate_near_tie":"best_candidate";
     return result;
+}
+
+// Keep an existing extension. If exact placement produces none, search nearby
+// graph alleles instead of forcing the query sequence into a viral target.
+// Original input strings and source-array models are never edited.
+template<class Graph>
+TargetExtension extend_target_with_fallback(Graph& graph,const std::string& query,
+        const std::vector<TargetContext>& contexts,const Options& options,const std::set<std::string>* source_cycles=nullptr) {
+    auto exact=extend_retained_target(graph,query,contexts,options,source_cycles);
+    if(exact.has_extension || !options.target_variant_fallback || contexts.empty() || query.size()<15 ||
+            contexts.size()>1024 || query.size()>options.max_bp ||
+            AdapterGuard(options.adapters).contains(query))return exact;
+    size_t extra=graph.k()>query.size()?graph.k()-query.size():0;
+    size_t available_left=std::numeric_limits<size_t>::max(),available_right=available_left;
+    for(const auto& ctx:contexts) {
+        if(ctx.end<ctx.begin || ctx.end>ctx.spacer.size() || ctx.spacer.substr(ctx.begin,ctx.end-ctx.begin)!=query)
+            throw std::runtime_error("variant source context does not contain the original input");
+        available_left=std::min(available_left,ctx.begin);available_right=std::min(available_right,ctx.spacer.size()-ctx.end);
+    }
+    size_t left_padding=extra>available_right?extra-available_right:0;
+    if(left_padding>available_left){exact.reason="short_query_context_insufficient";return exact;}
+    auto placements=place_target(graph,query,left_padding,options.max_target_placement_states,options.max_seeds);
+    exact.placement_work=placements.work;exact.placement_candidates=placements.values.size();exact.placement_limited=placements.limited;
+    auto adjusted=contexts;for(auto& ctx:adjusted){ctx.begin-=left_padding;ctx.end+=extra-left_padding;}
+    size_t remaining=options.max_query_states>exact.expanded?options.max_query_states-exact.expanded:0;
+    std::vector<TargetExtension> alternatives;
+    std::vector<PlacementCheck> checks;
+    auto evaluate=[&](const TargetPlacement& placement,Options local,const std::string& phase) {
+        auto candidate=extend_retained_target(graph,placement.sequence,adjusted,local,source_cycles,false);
+        remaining-=std::min(remaining,candidate.expanded);
+        exact.placement_limited|=candidate.search_limited;
+        candidate.placement=placement;candidate.variant_placement=true;
+        if(candidate.has_extension) {
+            auto penalty=(1-placement.coverage)+(1-placement.identity);
+            candidate.selected.score-=penalty;
+            if(candidate.has_runner)candidate.runner_score-=penalty;
+        }
+        checks.push_back({placement.sequence,phase,candidate.reason,candidate.has_extension?candidate.selected.sequence:"",
+                          candidate.has_extension?candidate.selected.score:0,placement.query_offset,placement.query_begin,placement.query_end,
+                          candidate.expanded,candidate.has_extension,candidate.search_limited});
+        return candidate;
+    };
+    for(size_t i=0;i<placements.values.size();++i) {
+        const auto& placement=placements.values[i];
+        if(placement.sequence==query)continue;
+        if(remaining<2){exact.placement_limited=true;break;}
+        auto local=options;
+        if(extra>=local.max_flank_bp)continue;
+        local.max_flank_bp-=extra;
+        // Give every placement an initial look at both external flanks before
+        // a repetitive early placement can spend the entire query budget.
+        local.max_flank_bp=std::min(size_t(75),local.max_flank_bp);
+        local.max_query_states=std::max(size_t(2),std::min(size_t(1000),remaining/(placements.values.size()-i)));
+        auto candidate=evaluate(placement,local,"probe");
+        if(!candidate.has_extension)continue;
+        alternatives.push_back(std::move(candidate));
+    }
+    auto better=[&](const auto& a,const auto& b){
+        return better_prediction(a.selected,a.placement.query_end-a.placement.query_begin,
+                                 b.selected,b.placement.query_end-b.placement.query_begin,options);
+    };
+    std::sort(alternatives.begin(),alternatives.end(),better);
+    const size_t refine=std::min(options.beam_width,alternatives.size());
+    for(size_t i=0;i<refine;++i) {
+        if(remaining<2){exact.placement_limited=true;break;}
+        auto local=options;local.max_flank_bp-=extra;
+        local.max_query_states=std::max(size_t(2),remaining/(refine-i));
+        auto candidate=evaluate(alternatives[i].placement,local,"extend");
+        if(candidate.has_extension)alternatives[i]=std::move(candidate);
+    }
+    exact.placement_limited|=alternatives.size()>refine;
+    alternatives.resize(refine);
+    exact.expanded=options.max_query_states-remaining;
+    exact.search_limited|=exact.placement_limited;
+    if(alternatives.empty()) {
+        exact.placement_checks=std::move(checks);
+        exact.reason=exact.placement_limited?"variant_search_limit_no_extension":"no_supported_variant_extension";
+        return exact;
+    }
+    std::sort(alternatives.begin(),alternatives.end(),better);
+    auto result=std::move(alternatives.front());
+    if(alternatives.size()>1) {
+        if(!result.has_runner || alternatives[1].selected.score>result.runner_score)result.runner_score=alternatives[1].selected.score;
+        result.has_runner=true;
+        if(alternatives[1].selected.score>=result.selected.score-options.prediction_margin) {
+            result.ambiguous=true;
+            if(options.resolve_graph_ties) {
+                exact.reason="ambiguous_variant_placement_withheld";exact.ambiguous=true;
+                exact.placement_checks=std::move(checks);return exact;
+            }
+        }
+    }
+    result.placement_work=placements.work;result.placement_candidates=placements.values.size();result.placement_limited=exact.placement_limited;
+    result.expanded=options.max_query_states-remaining;
+    result.placement_checks=std::move(checks);
+    result.search_limited|=result.placement_limited;
+    result.status=result.ambiguous?"extended_variant_ambiguous":"extended_variant";
+    result.reason="graph_variant_placement";return result;
 }
 } // namespace mcaat::proto
 #endif

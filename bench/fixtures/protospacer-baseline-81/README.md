@@ -9,9 +9,10 @@ phages or a precision estimate for the caller.
 
 The fixture is input data, never a hardcoded exception in MCAAT. In particular,
 `--protospacers` must retain any supplied FASTA independently of extension success.
-Five records are shorter than k=23: 17, 17, 19, 21 and 22 bases. They are retained
-with `shorter_than_graph_k` if extension on a k=23 graph is requested. No missing
-bases are invented to make an anchor.
+Five records are shorter than k=23: 17, 17, 19, 21 and 22 bases. They remain retained. Exact-only extension reports
+`shorter_than_graph_k`; the optional graph-variant fallback can place a short
+query inside actual graph k-mers and reports the observed target separately.
+No missing bases are invented to make an anchor.
 
 The graph used by `validate_retained_protospacers.py` is deliberately unrelated
 to these 81 records. That portion checks preservation under extension failure,

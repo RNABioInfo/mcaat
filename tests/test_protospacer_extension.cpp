@@ -392,6 +392,13 @@ void test_junction_checks_and_flank_caps() {
 }
 struct TargetGraph:Graph {
     TargetGraph(){k_=23;}
+    Node find(const std::string& sequence)const {auto it=ids.find(sequence);return it==ids.end()?missing:it->second;}
+    Path find_suffix(const std::string& suffix,size_t limit,bool& limited)const {
+        Path result;for(size_t i=0;i<labels.size();++i)if(labels[i].size()>=suffix.size() && labels[i].compare(labels[i].size()-suffix.size(),suffix.size(),suffix)==0) {
+            if(result.size()>=limit){limited=true;break;}result.push_back(i);
+        }
+        return result;
+    }
     Path trace(const std::string& sequence)const {
         Path p;if(sequence.size()<k())return p;
         for(size_t i=0;i+k()<=sequence.size();++i) {
@@ -437,6 +444,43 @@ void test_retained_targets() {
     o.resolve_graph_ties=true;
     auto strict=extend_retained_target(branches,seed,ctx,o);
     check(strict.has_extension && strict.selected.right_length==0 && strict.selected.left_length==300,"optional common-prefix trimming affects extension only");
+}
+void test_variant_placement() {
+    TargetGraph graph;Options options;auto query=dna(37),allele=query,repeat=dna(29),left=dna(120),right=dna(130);
+    for(size_t position:{0,2,25,35})allele[position]="ACGT"[(std::string("ACGT").find(allele[position])+1)%4];
+    auto truth=left+allele+right;graph.add(truth);graph.add(repeat+query+repeat,30);
+    std::vector<TargetContext> contexts{{query,repeat,0,query.size()}};
+    check(!extend_retained_target(graph,query,contexts,options).has_extension,"exact placement cannot jump to a different target allele");
+    auto recovered=extend_target_with_fallback(graph,query,contexts,options);
+    check(recovered.has_extension && recovered.variant_placement && recovered.selected.sequence==truth,"graph-only fallback recovers diverged target without a reference");
+    check(recovered.placement.identity>=.9 && recovered.placement.coverage>=.85 && recovered.placement.sequence==allele,"variant identity and clipped query coordinates are explicit");
+    options.target_variant_fallback=false;
+    check(!extend_target_with_fallback(graph,query,contexts,options).has_extension,"variant fallback can be disabled");
+    options.target_variant_fallback=true;
+    auto limited=place_target(graph,query,0,1,128);check(limited.limited && limited.work<=1,"placement work limit is explicit");
+    for(bool pad_left:{false,true}) {
+        TargetGraph short_graph;auto short_query=dna(17),observed=short_query;
+        observed[0]="ACGT"[(std::string("ACGT").find(observed[0])+1)%4];
+        observed[1]="ACGT"[(std::string("ACGT").find(observed[1])+1)%4];
+        auto source=pad_left?dna(16)+short_query:short_query+dna(16);
+        auto full=left+observed+right;short_graph.add(full);short_graph.add(repeat+source+repeat,30);
+        size_t begin=pad_left?16:0;
+        auto value=extend_target_with_fallback(short_graph,short_query,{{source,repeat,begin,begin+17}},options);
+        check(value.has_extension && value.variant_placement && value.selected.sequence==full,"short-query placement obtains its missing context from graph edges");
+        auto begin_in_result=value.selected.seed_begin+value.placement.query_offset;
+        check(value.selected.sequence.substr(begin_in_result,17)==observed,"short-query coordinates exclude actual graph padding");
+    }
+    TargetGraph exact_graph;exact_graph.add(left+query+right);exact_graph.add(truth);
+    auto before=extend_retained_target(exact_graph,query,contexts,options),after=extend_target_with_fallback(exact_graph,query,contexts,options);
+    check(before.has_extension && after.selected.sequence==before.selected.sequence && !after.variant_placement,"successful exact predictions remain unchanged");
+    TargetGraph tied;auto other=allele;
+    for(char base:std::string("ACGT"))if(base!=query[2] && base!=allele[2]){other[2]=base;break;}
+    tied.add(left+allele+right);tied.add(left+other+right);tied.add(repeat+query+repeat,30);
+    auto permissive=extend_target_with_fallback(tied,query,contexts,options);
+    check(permissive.has_extension && permissive.ambiguous,"two equally supported target alleles retain ambiguity");
+    options.resolve_graph_ties=true;
+    auto strict=extend_target_with_fallback(tied,query,contexts,options);
+    check(!strict.has_extension && strict.reason=="ambiguous_variant_placement_withheld","strict mode does not silently select between different near-tied target alleles");
 }
 void test_local_coverage() {
     Options o;Coverage cov;
@@ -557,7 +601,7 @@ void test_equal_depth_and_bounded_repeats() {
 }
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_variant_placement();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.max_node_visits=0;o.validate();});

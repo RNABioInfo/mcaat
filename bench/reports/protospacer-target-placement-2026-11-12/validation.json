@@ -1,0 +1,62 @@
+{
+  "binary_sha256": "71475f639ec1db9486d1287bcc8da31f3c014de11f7712d4466bb9b889b2f07d",
+  "graph_metadata_sha256": "94ca5ad4422b97de35f7e0d46e165bdfb8efaaabe283166ecd3ea69360e21bce",
+  "arrays_sha256": "996237f15be63221091946ba066e7e501200857e4b7a679984225b2208a32832",
+  "original_graph_unchanged": {
+    "all_input_records_and_coordinates_verified": true,
+    "graph_sizes_and_mtimes_unchanged": true,
+    "reference_used_during_search": false
+  },
+  "input_sha256": "9a7886832f257d1d7e4bc69f0cd64aab9354195dbdad47a456e5c6b1376cff12",
+  "release_ctest": "Internal ctest changing into directory: /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-tests\nTest project /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-tests\n    Start 1: protospacer_extension\n1/3 Test #1: protospacer_extension ............   Passed    1.12 sec\n    Start 2: real_protospacer_fragments\n2/3 Test #2: real_protospacer_fragments .......   Passed    0.55 sec\n    Start 3: reference_graph_oracle\n3/3 Test #3: reference_graph_oracle ...........   Passed    2.14 sec\n\n100% tests passed, 0 tests failed out of 3\n\nTotal Test time (real) =   3.82 sec\n",
+  "sanitizer_ctest": "Internal ctest changing into directory: /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-sanitizers\nTest project /Users/feeka/Documents/Codex/2026-10-25/https-www-uni-stuttgart-de-en/work/mcaat-unitig-jumps/build/protospacer-sanitizers\n    Start 1: protospacer_extension\n1/3 Test #1: protospacer_extension ............   Passed   14.31 sec\n    Start 2: real_protospacer_fragments\n2/3 Test #2: real_protospacer_fragments .......   Passed    2.31 sec\n    Start 3: reference_graph_oracle\n3/3 Test #3: reference_graph_oracle ...........   Passed   16.38 sec\n\n100% tests passed, 0 tests failed out of 3\n\nTotal Test time (real) =  33.00 sec\n",
+  "native_cli_regression": {
+    "supplied_records": 10,
+    "retained_records": 10,
+    "baseline_records_preserved": 81,
+    "straight_length": 1535,
+    "branch_length": 1535,
+    "old_strict_branch_length": 785,
+    "adapter_length": 785,
+    "true_branch_recovered": true,
+    "variant_target_recovered": true,
+    "variant_length": 1537,
+    "exact_only_policy_checked": true,
+    "threads_1_24_identical": true,
+    "failed_extensions_keep_protospacers": true,
+    "original_metagenome_graph_tested": false
+  },
+  "full_graph_runs_threads": 24,
+  "beam_widths": [
+    16,
+    32,
+    64
+  ],
+  "two_and_24_thread_predictions_identical_for_widths": [
+    16,
+    32,
+    64
+  ],
+  "full_graph_predictions_use_reference": false,
+  "suffix_lookup_validated_against_exhaustive_padding": true,
+  "original_anchor_search_stopped_for_already_positive_variant": "seed_7a5827b9089bd147",
+  "fallback_constants": {
+    "min_identity": 0.9,
+    "min_query_coverage": 0.85,
+    "min_query_bp": 15,
+    "anchor_substitutions": 1,
+    "probe_flank_bp": 75,
+    "probe_states": 1000,
+    "max_candidates": 128,
+    "max_placement_states": 50000
+  },
+  "source_sha256": {
+    "include/protospacer_detection/target_placement.h": "c2cd2eed3756475ed94923d54d737cf7727719a93fe9fa0a4d82332b03a3895f",
+    "include/protospacer_detection/retained_target.h": "9aff18ffc73d086955d0f4aea09fda3de5a28dcb1fb3b2fe9ed2ce2eed196d4e",
+    "include/protospacer_detection/extension_engine.h": "e4746f6185626dff7e5ff56d5647d1780e5af443466b8b5f997f40aaa3bcbfff",
+    "include/protospacer_detection/sdbg_extension_graph.h": "d113db4f1870453359e75416dd2813d5ff46f976cd191bfb44b6f2701df311d9",
+    "src/protospacer_detection/retained_targets_io.h": "6f32dfc23061d847b839f072ab82770c0a0a80903ee2ce1d19690bcd32b9ed36",
+    "src/protospacer_detection/extension_module.cpp": "c618d802394c56dc4c994a794cf564bb0a4fbd4c8c65f9fc5f9c3467ba01159f"
+  },
+  "ambiguity_trace_binary_sha256": "0122acc6620a6f589d12b4401976925a56c46e0e3b55bed07041ad5104377562"
+}

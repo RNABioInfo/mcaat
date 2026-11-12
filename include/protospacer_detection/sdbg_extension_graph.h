@@ -22,6 +22,38 @@ public:
         Node v=graph_.IndexBinarySearch(b.data());
         return v==missing || label(v)!=s?missing:v;
     }
+    // BOSS vertices are ordered colexicographically. A suffix therefore forms
+    // one contiguous range; do not enumerate all 4^(k-pattern_length) paddings.
+    Path find_suffix(const std::string& suffix,size_t limit,bool& limited) const {
+        if(suffix.empty() || suffix.size()>k() || suffix.find_first_not_of("ACGT")!=std::string::npos)return {};
+        std::vector<uint8_t> bases(k());
+        auto compare=[&](Node vertex) {
+            graph_.GetLabel(vertex,bases.data());
+            for(size_t j=0;j<suffix.size();++j) {
+                int actual=bases[k()-1-j];int wanted=int(std::string("ACGT").find(suffix[suffix.size()-1-j]))+1;
+                if(actual!=wanted)return actual<wanted?-1:1;
+            }
+            return 0;
+        };
+        Node lo=0,hi=graph_.size();
+        while(lo<hi){Node mid=lo+(hi-lo)/2;if(compare(mid)<0)lo=mid+1;else hi=mid;}
+        std::set<Node> unique;
+        for(Node index=lo;index<graph_.size() && compare(index)==0;) {
+            Node vertex=graph_.GetLastIndex(index);
+            graph_.GetLabel(vertex,bases.data());std::string word;
+            for(auto base:bases){if(base<1 || base>4){word.clear();break;}word+="ACGT"[base-1];}
+            if(!word.empty()) {
+                auto mapped=find(word);
+                if(mapped!=missing && !unique.count(mapped)) {
+                    if(unique.size()>=limit){limited=true;break;}
+                    unique.insert(mapped);
+                }
+            }
+            if(vertex<index)throw std::runtime_error("invalid BOSS vertex range");
+            index=vertex+1;
+        }
+        return Path(unique.begin(),unique.end());
+    }
     std::vector<Arc> neighbors(Node v,bool backward) const {
         std::vector<Arc> result;if(v>=graph_.size())return result;
         auto add=[&](Node e,Node to) {
