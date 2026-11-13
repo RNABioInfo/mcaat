@@ -5,8 +5,8 @@ Run from the repository on the Linux server after rebuilding this branch:
 ```bash
 cd /vol/d/mcaat-protospacer/mcaat-protospacer-full
 git pull --ff-only origin codex/protospacer-extension
-cmake --build build -j24
-nohup bash scripts/run_copsac_protospacers.sh --threads 24 \
+cmake --build build -j28
+nohup bash scripts/run_copsac_protospacers.sh --threads 28 --ram-gb 192 \
   > /vol/d/data/copsac/protospacer_batch.console.log 2>&1 < /dev/null &
 ```
 
@@ -47,15 +47,16 @@ relative to this repository, independent of the current working directory.
    extension counts, and move to the next SRR. Zero detections is a successful
    `NO_DETECTIONS` outcome; the empty FASTA is not submitted for extension.
 
-The batch uses 24 threads within one SRR, never 24 concurrent SRRs. Defaults are
+The batch uses 28 threads within one SRR and processes SRRs sequentially. Defaults are
 beam 128, source-context pool 256, up to 750 added bases per side, and at least
 750 added bases on one side for a filtered extension. Search is bounded at
 200,000 states per side and 800,000 per query. The sequence-retention budget is
 500,000,000 bases per MCAAT invocation; this is not a process memory cap.
 Prediction does not use reference sequences or BLAST.
 
-Graph construction defaults to 70% of available host RAM. Set `--ram-gb 64` to
-give the builder a fixed 64 GiB budget. This setting applies to graph
+Graph construction defaults to 70% of available host RAM. The launch command
+above uses a fixed 192 GiB budget for the user's 256 GB server. Set `--ram-gb`
+to choose another budget. This setting applies to graph
 construction, not extension-process RSS. Use an explicit budget under scheduler
 or container memory limits. The batch checks for 20 GiB of free disk before
 major stages, and stops an active stage if free disk falls below 1 GiB.

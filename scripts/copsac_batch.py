@@ -436,7 +436,7 @@ def main():
     parser.add_argument("srr", nargs="*", help="optional SRR IDs; default: all eligible folders")
     parser.add_argument("--root", type=Path, default=Path("/vol/d/data/copsac"))
     parser.add_argument("--mcaat", type=Path, default=HERE.parent / "build/mcaat")
-    parser.add_argument("--threads", type=int, default=24)
+    parser.add_argument("--threads", type=int, default=28)
     parser.add_argument("--ram-gb", type=float, help="graph builder's memory budget; default 70%% of available RAM")
     parser.add_argument("--min-free-gb", type=float, default=20, help="free-disk reserve before each major stage")
     parser.add_argument("--stage-timeout-hours", type=float, default=0, help="0 disables stage timeout")
