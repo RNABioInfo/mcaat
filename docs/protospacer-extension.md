@@ -1016,7 +1016,7 @@ quality-filter-disabled workflow.
 
 Search still uses a bounded, equal-depth beam. Low-complexity sequence adds a
 soft beam-ranking penalty. A single multiplicity jump no longer terminates the
-branch immediately in quality mode; final checks assess sustained changes.
+branch immediately in quality mode; the final score retains count transitions.
 Source-array passage and node-visit limits remain enforced. Search/work limits
 are reported and do not prove that other paths are absent.
 
@@ -1027,23 +1027,36 @@ and right flanks. Reject a candidate if any existing flank has:
   entropy below 3 bits.
 - More than 20% repeated k-mer occurrences within the flank. Bounded external
   repeats below that fraction remain permitted.
-- Fewer than 64 downstream edge-count observations after excluding the seed
-  overlap and known source-array context.
+- Fewer than 64 downstream edge-count observations beyond the expected entrance
+  interval, excluding the seed overlap and actual source-array edges.
 - More than 50% singleton edge counts.
-- A sustained depth step between adjacent, nonoverlapping 64-edge blocks:
-  median high is at least four times median low (low floored at one), and
-  high minus low is at least `3 * sqrt(high + low)`.
 
 Also require at least `--min-extension-flank` added bases on **one** side
 (default 250; use 750 for a full-750 experiment), and the unchanged full input
 target. Two shorter flanks are not added together to satisfy this requirement.
 
-Rank passing candidates by the worse existing flank's loss: variance of
-`log2(1 + block median)` about the median, plus singleton fraction,
-low-complexity fraction, repeated-k-mer fraction, and `1/(observations + 1)`.
+Quality policy version 3 (parameters schema 15) separates the entrance into a
+continuation from its downstream branch choices. Source/shared edge counts and
+the first k overlapping seed edges are excluded. The expected source-overlap
+interval marks the **entrance**; it no longer deletes outside-source counts.
+Both entrance and downstream changes remain in the local continuity score.
+No transition is invented across a gap of excluded source edges.
+
+For each flank, local continuity loss is the mean squared change between
+consecutive `log2(1 + count)` observations. Downstream branch loss is the mean
+`log2((1 + largest competing count) / (1 + chosen count))`, counting a
+nonbranching edge as zero. Branch loss is not applied inside the entrance:
+a low-count source exit must remain available for a supported continuation.
+The score is a heuristic, not a likelihood or calibrated probability.
+
+Rank passing candidates by the worse existing flank's loss: local continuity
+loss plus downstream branch loss, singleton fraction, low-complexity fraction,
+repeated-k-mer fraction, and `1/(observations + 1)`. Global block variance and
+large block steps remain internal diagnostics, not ranking terms or hard
+rejection criteria; matching continuations can contain substantial depth changes.
 An absent flank contributes no loss. Exact score ties prefer longer sequence,
 then lexical order. If another passing candidate is within the configured
-prediction-score margin (default 0.1) and follows a substantially different
+**relative loss** margin (default 0.1 means at most 10% worse loss) and follows a substantially different
 same-side route, withhold the primary prediction. Compare flanks of at least
 128 bases using their distinct `(k+1)`-mers: less than 80% overlap relative to
 the smaller set indicates a different route. Small bubbles and an opposite
@@ -1057,7 +1070,9 @@ of viral origin or a calibrated correctness probability. No reference sequence,
 BLAST result, or trained reference label is an input to these decisions.
 
 `protospacer_path_quality.tsv` records each assessed candidate, its acceptance,
-selection, measured support, sequence, and rejection reasons. Optional
+selection, measured support, sequence, and rejection reasons. It also records
+entrance/downstream observation counts, their separate transition energies,
+local roughness and downstream branch loss for each flank. Optional
 `ExtensionAlternatives.fasta` remains a diagnostic file containing passing and
 rejected paths, not extra final predictions. `ContiguousPaths.fasta` contains
 only selected passing outputs. Parameters record the quality-policy version

@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import math
 from collections import Counter
 from pathlib import Path
 
@@ -132,6 +133,21 @@ def check(baseline, output):
         chosen = [r for r in quality if r['selected'] == '1']
         assert len(chosen) == len(extended) and {r['seed_id'] for r in chosen} == extended
         assert all(r['accepted'] == '1' and r['reasons'] == 'pass' for r in chosen)
+        if params.get('path_quality_version', 1) >= 3:
+            assert params['path_quality_ambiguity_margin'] == 'relative_loss'
+            for row in quality:
+                for side in ('left', 'right'):
+                    observations=int(row[side+'_observations'])
+                    entering=int(row[side+'_entrance_observations'])
+                    downstream=int(row[side+'_downstream_observations'])
+                    pairs=int(row[side+'_transition_pairs'])
+                    assert observations == entering + downstream
+                    assert 0 <= pairs <= max(0, observations-1)
+                    energy=float(row[side+'_entrance_energy'])+float(row[side+'_downstream_energy'])
+                    roughness=float(row[side+'_local_roughness']); branch=float(row[side+'_branch_loss'])
+                    assert all(math.isfinite(v) and v >= 0 for v in (energy,roughness,branch))
+                    assert math.isclose(roughness,energy/pairs if pairs else 0,rel_tol=1e-9,abs_tol=1e-12)
+                    if row['accepted']=='1' and observations:assert downstream>=64
         if params.get('path_quality_version', 1) >= 2:
             unresolved = fasta(output / 'UnresolvedExtensions.fasta')
             unresolved_rows = table(output / 'protospacer_unresolved.tsv')

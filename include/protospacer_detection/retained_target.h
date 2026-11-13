@@ -349,13 +349,13 @@ void filter_target_extension(Graph& graph,TargetExtension& result,const std::str
     }
     result.selected=std::move(accepted.front());
     for(size_t i=1;i<accepted.size();++i)
-        if(accepted[i].score>=result.selected.score-options.prediction_margin && distinct_extension_routes(result.selected,accepted[i],graph.k()))
+        if(near_quality_score(result.selected.score,accepted[i].score,options.prediction_margin) && distinct_extension_routes(result.selected,accepted[i],graph.k()))
             ++result.competing_quality_routes;
     if(result.competing_quality_routes) {
         result.quality_unresolved=true;result.has_extension=false;result.status="not_extended";
         result.reason="competing_quality_paths";result.ambiguous=true;return;
     }
-    result.ambiguous=result.has_runner && result.runner_score>=result.selected.score-options.prediction_margin;
+    result.ambiguous=result.has_runner && near_quality_score(result.selected.score,result.runner_score,options.prediction_margin);
     result.status=result.variant_placement?(result.ambiguous?"extended_variant_ambiguous":"extended_variant"):
         (result.ambiguous?"extended_ambiguous":"extended");
     result.reason="quality_filter_pass";

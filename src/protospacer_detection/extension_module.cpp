@@ -337,7 +337,7 @@ int run_extension_module(int argc,char** argv) {
                 "--threads 1 --beam-width 32 --max-length 1550 --max-flank-length 750 --max-states 50000\n"
                 "--correct-spacer-boundaries true --boundary-support 0.85 --boundary-min-spacers 5 --boundary-min-bases 6\n"
                 "--junction-check true --branch-guard false --branch-lookahead 75 --branch-score-margin 1\n"
-                "--prediction-score-margin 0.1 (retain common sequence of near-best graph-only predictions)\n"
+                "--prediction-score-margin 0.1 (relative loss in supplied-target quality mode; absolute score otherwise)\n"
                 "--max-paths 16 (internal shortlist per seed; final output is one per spacer)\n"
                 "--max-seeds 128 --max-query-states 200000 --min-match-bp 0 (0 = graph k)\n"
                 "--max-retained-bases 50000000 (abort explicitly before excessive result storage)\n"

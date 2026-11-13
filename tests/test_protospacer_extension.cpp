@@ -761,11 +761,50 @@ void test_path_quality_filter() {
     check(!result.has_extension && result.quality_unresolved && result.reason=="competing_quality_paths","indistinguishable different routes are withheld rather than presented as a resolved prediction");
     check(!result.selected.sequence.empty(),"unresolved best candidate remains available for its separate diagnostic output");
 }
+void test_path_quality_continuity() {
+    TargetGraph graph;auto query=dna(31),common=dna(43);
+    auto make=[&](const std::string& tail) {
+        Candidate c;c.sequence=query+common+tail;c.path=graph.add(c.sequence,1);
+        c.seed_begin=0;c.seed_end=query.size();c.right_length=750;
+        c.right.context_clear_at=78;c.right.source_mask_until=78;return c;
+    };
+    auto good=make("A"+dna(706)),wrong=make("C"+dna(706));
+    std::set<Node> source;const size_t anchor=query.size()-graph.k();
+    for(auto* c:{&good,&wrong})for(size_t i=1;i<=750;++i) {
+        auto& arc=graph.arcs.at({c->path[anchor+i-1],c->path[anchor+i]});
+        if(i<=43){arc.count=506;source.insert(arc.edge);}
+        else if(c==&wrong)arc.count=i<=70?18:4800;
+        else arc.count=i<=50?3:i<=67?1:i<=72?7:49+std::floor(8*std::sin(double(i)/40));
+    }
+    SourceCycleGuard guard(graph.k(),nullptr);
+    auto a=assess_path_quality(graph,good,source,guard,750),b=assess_path_quality(graph,wrong,source,guard,750);
+    check(a.accepted()&&b.accepted(),"entrance jumps are ranked rather than automatically rejected");
+    check(a.right.observations==707 && a.right.downstream_observations==673,"retain entrance counts while excluding actual source edges");
+    check(b.right.entrance_energy>a.right.entrance_energy && a.score>b.score,"a hidden jump into a flat high-depth path must not beat a smooth continuation");
+    check(a.right.branch_loss==0,"weak source exit is not penalized as an ordinary downstream fork");
+    auto wider=wrong;wider.right.source_mask_until=100;
+    auto widened=assess_path_quality(graph,wider,source,guard,750);
+    check(std::abs(widened.score-b.score)<1e-12,"widening expected source overlap cannot erase outside-source count transitions");
+    std::vector<double> counts(727,20),competition=counts;std::vector<bool> entrance(727,false);
+    entrance[0]=true;competition[0]=2000;
+    auto weak_exit=flank_quality(dna(750),23,counts,{},entrance,competition);
+    competition[100]=2000;auto weak_later=flank_quality(dna(750),23,counts,{},entrance,competition);
+    check(weak_exit.branch_loss==0 && weak_later.branch_loss>0,"branch support distinguishes a source exit from a later weak fork");
+    std::vector<size_t> positions(128);std::vector<double> separated(128,100);
+    for(size_t i=0;i<128;++i){positions[i]=i+(i<64?0:20);if(i<64)separated[i]=5;}
+    check(flank_quality(dna(151),23,separated,positions).local_roughness==0,"masked source gaps cannot create fictitious adjacent count changes");
+    std::vector<double> drift(727),steps(727);
+    for(size_t i=0;i<727;++i){drift[i]=20+double(i)/20;steps[i]=(i/4)%2?20:22;}
+    check(flank_quality(dna(750),23,drift).loss<flank_quality(dna(750),23,steps).loss,"smooth abundance drift beats frequent small discontinuities despite larger global variance");
+    check(near_quality_score(-.02,-.021,.1)&&!near_quality_score(-.02,-.024,.1),"quality ties use relative loss rather than the former absolute score units");
+    check(near_quality_score(-20,-21,.1)&&!near_quality_score(-20,-24,.1),"relative quality ambiguity is scale invariant");
+}
 int main() {
     try {
         test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_source_crossing_once();test_unscored_source_pool();test_variant_placement();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
         test_low_depth_continuation();
         test_path_quality_filter();
+        test_path_quality_continuity();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.source_context_width=0;o.validate();});

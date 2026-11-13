@@ -8,11 +8,19 @@ namespace mcaat::proto {
 // correctness. Adjacent k-mer counts are correlated; no independence is assumed.
 struct FlankQuality {
     size_t bases=0,observations=0,windows=0,low_windows=0,revisited=0,kmers=0;
+    size_t entrance_observations=0,downstream_observations=0,transition_pairs=0;
     double singleton_fraction=0,median_count=0,block_variation=0,largest_step=0,loss=0;
+    double entrance_energy=0,downstream_energy=0,local_roughness=0,branch_loss=0;
     bool depth_break=false;
     std::vector<std::string> reasons;
 };
-inline FlankQuality flank_quality(const std::string& sequence,size_t k,const std::vector<double>& counts) {
+inline FlankQuality flank_quality(const std::string& sequence,size_t k,const std::vector<double>& counts,
+        const std::vector<size_t>& positions={},const std::vector<bool>& entrance={},
+        const std::vector<double>& competing_max={}) {
+    if((!positions.empty()&&positions.size()!=counts.size()) ||
+       (!entrance.empty()&&entrance.size()!=counts.size()) ||
+       (!competing_max.empty()&&competing_max.size()!=counts.size()))
+        throw std::runtime_error("inconsistent path-quality observations");
     FlankQuality q;q.bases=sequence.size();q.observations=counts.size();
     for(size_t i=0;i+64<=sequence.size();i+=16) {
         ++q.windows;q.low_windows+=triplet_entropy(sequence,i,64)<3.;
@@ -22,9 +30,8 @@ inline FlankQuality flank_quality(const std::string& sequence,size_t k,const std
     q.median_count=median(counts);
     for(auto c:counts)q.singleton_fraction+=c<=1;
     if(!counts.empty())q.singleton_fraction/=counts.size();
-    // Nonoverlapping 64-edge blocks reduce the influence of an isolated count
-    // spike. A sustained, >=4-fold depth step with a large absolute change is
-    // flagged; the source repeat and seed overlap are masked by the caller.
+    // Keep the former block summaries as diagnostics. Global flatness does not
+    // distinguish a smooth abundance trend from a wrong, flat continuation.
     std::vector<double> blocks;
     for(size_t i=0;i+64<=counts.size();i+=64)
         blocks.push_back(median(std::vector<double>(counts.begin()+i,counts.begin()+i+64)));
@@ -38,14 +45,35 @@ inline FlankQuality flank_quality(const std::string& sequence,size_t k,const std
         }
     }
     if(!blocks.empty())q.block_variation/=blocks.size();
+    // The expected source-overlap interval marks the entrance, but no longer
+    // deletes observations outside the actual source path. Do not fabricate
+    // an adjacent transition across omitted source edges.
+    for(size_t i=0;i<counts.size();++i) {
+        bool entering=!entrance.empty()&&entrance[i];
+        if(entering)++q.entrance_observations;
+        else {
+            ++q.downstream_observations;
+            if(!competing_max.empty())q.branch_loss+=std::log2(
+                (1+std::max(counts[i],competing_max[i]))/(1+counts[i]));
+        }
+        if(!i || (!positions.empty()&&positions[i]!=positions[i-1]+1))continue;
+        double delta=std::log2((1+counts[i])/(1+counts[i-1]));
+        ++q.transition_pairs;
+        if(entering || (!entrance.empty()&&entrance[i-1]))q.entrance_energy+=delta*delta;
+        else q.downstream_energy+=delta*delta;
+    }
+    if(q.transition_pairs)q.local_roughness=(q.entrance_energy+q.downstream_energy)/q.transition_pairs;
+    if(q.downstream_observations)q.branch_loss/=q.downstream_observations;
     if(q.windows && double(q.low_windows)/q.windows>.2)q.reasons.push_back("low_complexity");
     if(q.kmers && double(q.revisited)/q.kmers>.2)q.reasons.push_back("repeat_dominated");
-    if(counts.size()<64)q.reasons.push_back("insufficient_downstream_evidence");
+    if(q.downstream_observations<64)q.reasons.push_back("insufficient_downstream_evidence");
     if(q.singleton_fraction>.5)q.reasons.push_back("singleton_dominated");
-    if(q.depth_break)q.reasons.push_back("sustained_depth_change");
+    // A jump is evidence to rank, not a hard rejection: valid source exits can
+    // contain large changes and low-count bridges. Exact source counts never
+    // contribute to this score or its baseline.
     // Do not penalize an absent second flank as though it were observed bad
     // sequence. Score each existing flank, then use the worse flank below.
-    q.loss=q.block_variation+q.singleton_fraction+
+    q.loss=q.local_roughness+q.branch_loss+q.singleton_fraction+
         (q.windows?double(q.low_windows)/q.windows:0)+(q.kmers?double(q.revisited)/q.kmers:0)+1./(1+counts.size());
     return q;
 }
@@ -58,6 +86,11 @@ struct PathQuality {
         std::string s;for(const auto& r:reasons){if(!s.empty())s+=',';s+=r;}return s.empty()?"pass":s;
     }
 };
+// Scores now measure local changes, on a different scale from block variance.
+// A margin of .1 means at most 10% worse loss, not an absolute .1 score gap.
+inline bool near_quality_score(double best,double candidate,double relative_margin) {
+    return candidate>=best-relative_margin*std::max(1e-12,-best)-1e-12;
+}
 // Compare branches on the same flank. Opposite flanks and shorter prefixes do
 // not by themselves conflict. Shared (k+1)-mers allow small bubbles/indels to
 // count as the same route; this is not a nucleotide-identity calculation.
@@ -85,16 +118,23 @@ PathQuality assess_path_quality(Graph& graph,const Candidate& c,const std::set<N
         auto& side=back?c.left:c.right;
         Path path=back?Path(c.path.begin(),c.path.begin()+c.seed_begin+1):Path(c.path.begin()+c.seed_end-graph.k(),c.path.end());
         if(back){std::reverse(sequence.begin(),sequence.end());std::reverse(path.begin(),path.end());}
-        std::vector<double> counts;
-        size_t skip=std::max({graph.k()+1,side.context_clear_at,side.source_mask_until});
+        std::vector<double> counts,competing;
+        std::vector<size_t> positions;
+        std::vector<bool> entrance;
+        const size_t entrance_end=std::max({graph.k()+1,side.context_clear_at,side.source_mask_until});
         for(size_t i=1;i<path.size();++i) {
-            if(i<skip)continue;
-            for(const auto& arc:graph.neighbors(path[i-1],back))if(arc.to==path[i]) {
-                if(!shared.count(arc.edge) && !source_guard.contains(graph,path[i-1],arc,back))counts.push_back(arc.count);
+            if(i<graph.k()+1)continue;
+            const auto choices=graph.neighbors(path[i-1],back);
+            double maximum=0;for(const auto& arc:choices)maximum=std::max(maximum,arc.count);
+            for(const auto& arc:choices)if(arc.to==path[i]) {
+                if(!shared.count(arc.edge) && !source_guard.contains(graph,path[i-1],arc,back)) {
+                    counts.push_back(arc.count);positions.push_back(i);
+                    entrance.push_back(i<entrance_end);competing.push_back(maximum);
+                }
                 break;
             }
         }
-        auto& out=back?q.left:q.right;out=flank_quality(sequence,graph.k(),counts);
+        auto& out=back?q.left:q.right;out=flank_quality(sequence,graph.k(),counts,positions,entrance,competing);
         for(const auto& reason:out.reasons)q.reasons.push_back(std::string(back?"left:":"right:")+reason);
     }
     q.score=-std::max(q.left.loss,q.right.loss);return q;

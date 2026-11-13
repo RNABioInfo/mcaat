@@ -98,7 +98,9 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
         auto quality=output(staging/"protospacer_path_quality.tsv");
         auto unresolved=output(staging/"UnresolvedExtensions.fasta"),unresolved_table=output(staging/"protospacer_unresolved.tsv");
         unresolved_table<<"seed_id\treason\tcompeting_candidates\tlength\tleft_bp\tright_bp\tscore\tsequence\n";
-        quality<<"seed_id\tcandidate\taccepted\tselected\treasons\tscore\tlength\tleft_bp\tright_bp\tleft_observations\tright_observations\tleft_singletons\tright_singletons\tleft_depth\tright_depth\tsequence\n";
+        quality<<"seed_id\tcandidate\taccepted\tselected\treasons\tscore\tlength\tleft_bp\tright_bp\tleft_observations\tright_observations\tleft_singletons\tright_singletons\tleft_depth\tright_depth"
+               <<"\tleft_entrance_observations\tleft_downstream_observations\tleft_transition_pairs\tleft_entrance_energy\tleft_downstream_energy\tleft_local_roughness\tleft_branch_loss"
+               <<"\tright_entrance_observations\tright_downstream_observations\tright_transition_pairs\tright_entrance_energy\tright_downstream_energy\tright_local_roughness\tright_branch_loss\tsequence\n";
         alternatives<<"candidate_id\tseed_id\trank\tselected\tlength\tscore\tseed_begin\tseed_end\tleft_crosses_source_array\tright_crosses_source_array\tleft_stop\tright_stop\tsequence\n";
         auto placements=output(staging/"protospacer_target_placements.tsv");
         auto placement_checks=output(staging/"protospacer_placement_checks.tsv");
@@ -152,7 +154,11 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
                 quality<<t.id<<'\t'<<i+1<<'\t'<<q.accepted()<<'\t'<<(e.has_extension && check.sequence==c.sequence)<<'\t'<<q.reason_text()<<'\t'<<q.score<<'\t'
                     <<check.sequence.size()<<'\t'<<check.seed_begin<<'\t'<<check.sequence.size()-check.seed_end<<'\t'
                     <<q.left.observations<<'\t'<<q.right.observations<<'\t'<<q.left.singleton_fraction<<'\t'<<q.right.singleton_fraction<<'\t'
-                    <<q.left.median_count<<'\t'<<q.right.median_count<<'\t'<<check.sequence<<'\n';
+                    <<q.left.median_count<<'\t'<<q.right.median_count;
+                for(const auto* side:{&q.left,&q.right})quality<<'\t'<<side->entrance_observations<<'\t'<<side->downstream_observations
+                    <<'\t'<<side->transition_pairs<<'\t'<<side->entrance_energy<<'\t'<<side->downstream_energy
+                    <<'\t'<<side->local_roughness<<'\t'<<side->branch_loss;
+                quality<<'\t'<<check.sequence<<'\n';
             }
             for(const auto& check:e.placement_checks)placement_checks<<t.id<<'\t'<<check.core<<'\t'<<check.phase<<'\t'<<check.reason<<'\t'<<check.extended<<'\t'<<check.sequence.size()<<'\t'<<check.score<<'\t'<<check.query_offset<<'\t'<<check.query_begin<<'\t'<<check.query_end<<'\t'<<check.expanded<<'\t'<<check.limited<<'\t'<<(e.has_extension && check.sequence==c.sequence)<<'\t'<<check.sequence<<'\n';
             for(size_t rank=0;rank<e.alternatives.size();++rank) {
@@ -176,8 +182,11 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
                 <<'\t'<<c.left.coverage.profile.samples<<'\t'<<c.right.coverage.profile.samples<<'\n';
         }
         auto params=output(staging/"protospacer_parameters.json");
-        params<<"{\n  \"schema\": 14,\n  \"extension_algorithm\": \"equal_depth_beam_source_crossing_v5\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
-            <<",\n  \"path_quality_filter\": "<<(options.path_quality_filter?"true":"false")<<",\n  \"path_quality_version\": 2"
+        params<<"{\n  \"schema\": 15,\n  \"extension_algorithm\": \"equal_depth_beam_source_crossing_v5\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
+            <<",\n  \"path_quality_filter\": "<<(options.path_quality_filter?"true":"false")<<",\n  \"path_quality_version\": 3"
+            <<",\n  \"path_quality_ranking\": \"local_continuity_and_downstream_branch_support\""
+            <<",\n  \"path_quality_entrance_policy\": \"retain_non_source_counts_separate_entrance_energy\""
+            <<",\n  \"path_quality_ambiguity_margin\": \"relative_loss\""
             <<",\n  \"min_extension_flank\": "<<options.min_extension_flank
             <<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())<<",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())
             <<",\n  \"graph_k\": "<<graph.k()
