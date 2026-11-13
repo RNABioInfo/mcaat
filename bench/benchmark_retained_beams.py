@@ -27,7 +27,8 @@ def write_table(path, rows):
         path.write_text('')
         return
     with path.open('w', newline='') as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]), delimiter='\t')
+        fields = list(dict.fromkeys(key for row in rows for key in row))
+        w = csv.DictWriter(f, fieldnames=fields, delimiter='\t')
         w.writeheader()
         w.writerows(rows)
 
@@ -42,6 +43,7 @@ def main():
     p.add_argument('--widths', type=int, nargs='+', default=[16, 32, 64])
     p.add_argument('--max-node-visits', type=int, default=3)
     p.add_argument('--max-states', type=int, default=50000)
+    p.add_argument('--report-alternatives', action='store_true')
     p.add_argument('--analyze-only', action='store_true')
     a = p.parse_args()
     a.output.mkdir(parents=True, exist_ok=True)
@@ -65,6 +67,7 @@ def main():
                    '--protospacers', str(a.protospacers), '--output', str(out), '--threads', str(a.threads),
                    '--beam-width', str(n), '--max-node-visits', str(a.max_node_visits),
                    '--max-length', '1550', '--max-flank-length', '750', '--max-states', str(a.max_states)]
+            if a.report_alternatives:cmd += ['--report-alternatives','true']
             (a.output / f'N{n}.command.txt').write_text(shlex.join(cmd) + '\n')
             print(f'Starting N={n}', flush=True)
             start = time.monotonic()

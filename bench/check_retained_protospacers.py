@@ -89,8 +89,40 @@ def check(baseline, output):
     for row in extensions:
         budget = params['max_query_states'] if params.get('target_variant_fallback') else min(params['max_states_per_side'] * 2, params['max_query_states'])
         assert int(row['expanded_states']) <= budget
+        if params.get('allow_source_array_crossing'):
+            flags = [int(row[side + '_crosses_source_array']) for side in ('left', 'right')]
+            assert all(flag in (0, 1) for flag in flags) and sum(flags) <= 1, 'multiple source-array passages in one output'
         if row['extension_status'] == 'not_extended':
             assert row['region_id'] == '-' and int(row['length']) == 0
+    if params.get('report_alternatives'):
+        alternatives = table(output / 'protospacer_alternatives.tsv')
+        alternative_sequences = fasta(output / 'ExtensionAlternatives.fasta')
+        assert len(alternatives) == len(alternative_sequences)
+        assert {r['candidate_id'] for r in alternatives} == set(alternative_sequences)
+        placements = {r['seed_id']: r for r in table(output / 'protospacer_target_placements.tsv')}
+        counts = Counter()
+        selected = Counter()
+        for row in alternatives:
+            seed_id = row['seed_id']
+            assert seed_id in original
+            counts[seed_id] += 1
+            assert int(row['rank']) == counts[seed_id] <= 2 * params['beam_width']
+            sequence = alternative_sequences[row['candidate_id']]
+            assert sequence == row['sequence'] and len(sequence) == int(row['length']) <= params['max_length']
+            begin, end = int(row['seed_begin']), int(row['seed_end'])
+            assert 0 <= begin < end <= len(sequence)
+            assert max(begin, len(sequence) - end) <= params['max_flank_length']
+            observed = placements[seed_id]['observed_target']
+            assert sequence[begin:end] == (original[seed_id] if observed == '-' else observed)
+            if params.get('allow_source_array_crossing'):
+                flags = [int(row[side + '_crosses_source_array']) for side in ('left', 'right')]
+                assert all(flag in (0, 1) for flag in flags) and sum(flags) <= 1
+            assert row['selected'] in ('0', '1')
+            if row['selected'] == '1':
+                selected[seed_id] += 1
+                assert selected[seed_id] == 1 and seed_id in extended
+                emitted = contigs[by_seed[seed_id]['region_id']]
+                assert sequence in (emitted, reverse_complement(emitted)), 'selected alternative differs from primary output'
     assert params['input_records'] == params['retained_records'] == len(original)
     assert params['extended_records'] == len(links)
     assert params['not_extended_records'] == len(original) - len(links)

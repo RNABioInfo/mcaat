@@ -77,8 +77,8 @@ separate reasons.
 At branches the default bounded beam keeps alternatives, scores the completed
 retained flanks for multiplicity stability and selects at most one extension per
 supplied record. Similar scores mark `extended_ambiguous`; they do not delete the
-protospacer or automatically clip the best path. The adapter, repeat-context,
-coverage, cycle, incompatible-flank and work-budget checks remain active.
+protospacer or automatically clip the best path. The adapter, coverage, cycle,
+incompatible-flank and work-budget checks remain active. Source-repeat crossings are flagged by default, as described below.
 Optional `--branch-guard true` and `--resolve-graph-ties true` restore the strict
 stopping/clipping policies for explicit comparisons. They still cannot remove a
 supplied protospacer. A selected path remains a candidate, not proof of its origin.
@@ -119,6 +119,54 @@ python3 bench/check_retained_protospacers.py \
 
 This checker verifies retention and output consistency. It does not assess
 reference-match quality of the extended flanks.
+
+### One passage through source-array context
+
+The default `--source-array-crossing true` keeps a branch after its source
+repeat is recognized. The path is marked `crosses_source_array`, rather than
+rejected at that boundary. A source-array vertex may not be revisited outside
+the immutable seed, including across the joined left/right flanks. A second
+approximate source-repeat copy is also rejected at the existing
+`--array-repeat-identity` threshold: slightly different copies must not evade
+the one-passage rule simply by using different k-mer vertices. External repeats
+still use `--max-node-visits`. If both flanks cross a source repeat, or their
+join would revisit a source vertex, they remain separate one-sided candidates.
+The one-passage rule applies to the complete emitted sequence, not separately to
+each half.
+
+Source-cycle edges do not contribute to the coverage baseline or beam stability.
+The baseline restarts after leaving that region; final rescoring uses the same
+mask. This prevents repeat abundance from determining the downstream depth. The
+equal-depth beam still keeps `--beam-width` competing paths (default 32), with
+750 added bases per side and explicit work limits. A separate
+`--source-context-width 256` pool keeps paths that have not yet accumulated k+1
+unmasked downstream edges; they cannot be ranked by downstream stability while
+still inside the array. That pool is also bounded and reports truncation. Among
+scored paths, one best representative of each source-array exit is considered
+before filling remaining beam slots with alternatives from the same exit. Once
+enough external sequence is established, a return into source-cycle edges stops
+that branch. A beam is bounded, so preserving a boundary crossing does not
+guarantee every downstream route survives pruning or wins the final score.
+References are never used for ranking.
+
+Supplied-target reports include `left_crosses_source_array`,
+`right_crosses_source_array`, and the number of scored edges on each side.
+Discovery-mode associations include the same crossing flags. A flag records the
+path's traversal, not a validation of viral origin. All supplied protospacers
+remain unchanged regardless of which extension wins. Set
+`--source-array-crossing false` for the previous boundary-rejection policy.
+Parameters record `equal_depth_beam_source_crossing_v5` and the chosen policy.
+
+For an explicit audit, add `--report-alternatives true` in supplied-target mode.
+`ExtensionAlternatives.fasta` and `protospacer_alternatives.tsv` contain at most
+twice `--beam-width` candidates per selected target placement (a left/right
+conflict can split one joined candidate into two one-sided candidates), with
+ranks, scores, coordinates, selection status and crossing flags. These are
+diagnostic alternatives, not additional final predictions.
+`ContiguousPaths.fasta` still contains at most one selected extension per
+supplied record. The option is off by default and its sequence storage counts
+against `--max-retained-bases`. A matching alternative does not imply that the
+graph-only score selected it; evaluate and report those two outcomes separately.
 
 ### Target-placement correction and full input audit (2026-11-12)
 

@@ -18,6 +18,7 @@ struct PlacementCheck {
 struct TargetExtension {
     std::string status="not_extended",reason;
     Candidate selected;
+    std::vector<Candidate> alternatives; // one placement, at most twice the beam width after flank splitting
     bool has_extension=false,ambiguous=false,search_limited=false;
     size_t compared=0,expanded=0;
     double runner_score=0;
@@ -62,7 +63,7 @@ void refresh_target(Graph& graph,Candidate& c,const std::vector<FlankContext>& l
     auto check_side=[&](const std::string& seq,const auto& models,bool backward) {
         if(seq.empty())return;
         auto state=context_state(seq,models,options.array_repeat_identity);
-        if(state!=ContextState::external || seq.size()<minimum) {
+        if((state!=ContextState::external && !(options.allow_source_array_crossing && state==ContextState::array)) || seq.size()<minimum) {
             if(backward)trim_left(c);else trim_right(c,graph.k());
             auto& side=backward?c.left:c.right;
             side.context=state==ContextState::array?"array":"incomplete";
@@ -71,18 +72,27 @@ void refresh_target(Graph& graph,Candidate& c,const std::vector<FlankContext>& l
         }
     };
     check_side(left,left_models,true);check_side(right,right_models,false);
+    std::vector<FlankContext> models=left_models;models.insert(models.end(),right_models.begin(),right_models.end());
+    SourceCycleGuard source_guard(graph.k(),&models);
     c.external_left=c.external_right=0;
     for(size_t i=1;i<c.path.size();++i) {
-        if(shared.count(graph.edge(c.path[i-1],c.path[i])))continue;
-        if(i<=c.seed_begin)++c.external_left;
-        if(i>c.seed_end-graph.k())++c.external_right;
+        if(shared.count(graph.edge(c.path[i-1],c.path[i])) ||
+           (options.allow_source_array_crossing && source_guard.contains(graph,c.path[i-1],c.path[i],false)))continue;
+        if(i<=c.seed_begin && c.seed_begin-i+1>=c.left.context_clear_at)++c.external_left;
+        if(i>c.seed_end-graph.k() && i-(c.seed_end-graph.k())>=c.right.context_clear_at)++c.external_right;
     }
-    if(!c.external_left && c.left_length){trim_left(c);c.left.stop="array_context_only";}
-    if(!c.external_right && c.right_length){trim_right(c,graph.k());c.right.stop="array_context_only";}
+    if(c.left_length && (!c.external_left || (c.left.crosses_source_array && c.external_left<minimum))) {
+        auto reason=c.external_left?"insufficient_external_sequence":"array_context_only";
+        trim_left(c);c.left.stop=reason;
+    }
+    if(c.right_length && (!c.external_right || (c.right.crosses_source_array && c.external_right<minimum))) {
+        auto reason=c.external_right?"insufficient_external_sequence":"array_context_only";
+        trim_right(c,graph.k());c.right.stop=reason;
+    }
     Path l(c.path.begin(),c.path.begin()+c.seed_begin+1);std::reverse(l.begin(),l.end());
     Path r(c.path.begin()+c.seed_end-graph.k(),c.path.end());
-    c.left.coverage=path_coverage(graph,l,l.size()-1,true,c.left.context_clear_at,&shared,options);
-    c.right.coverage=path_coverage(graph,r,r.size()-1,false,c.right.context_clear_at,&shared,options);
+    c.left.coverage=path_coverage(graph,l,l.size()-1,true,c.left.context_clear_at,&shared,options,&source_guard);
+    c.right.coverage=path_coverage(graph,r,r.size()-1,false,c.right.context_clear_at,&shared,options,&source_guard);
     c.score=stability(c.left.coverage,c.right.coverage).score();
 }
 template<class Graph>
@@ -147,6 +157,7 @@ TargetExtension extend_retained_target(Graph& graph,const std::string& sequence,
             keep_left=std::min(keep_left,common.left);keep_right=std::min(keep_right,common.right);
         }
     }
+    if(options.report_alternatives)result.alternatives=candidates;
     result.selected=std::move(candidates.front());
     if(options.resolve_graph_ties && (keep_left<result.selected.seed_begin || keep_right<result.selected.sequence.size()-result.selected.seed_end)) {
         retain_flanks(result.selected,keep_left,keep_right,graph.k());result.selected.ambiguity_trimmed=true;

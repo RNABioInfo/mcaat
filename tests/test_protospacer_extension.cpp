@@ -146,7 +146,7 @@ void test_array_context() {
     auto backwards=flank_contexts("ACGT",2,4,{repeat},true);
     auto reversed=left;std::reverse(reversed.begin(),reversed.end());
     check(context_state("CA"+reversed,backwards,.85)==ContextState::array,"backward context reverses bases without complementing twice");
-    Graph graph;graph.k_=23;Options o;o.max_bp=500;
+    Graph graph;graph.k_=23;Options o;o.allow_source_array_crossing=false;o.max_bp=500;
     auto spacer=std::string("ACTACTTCGCTGGAAACGCTAGAGGTGCGTTTT");
     auto host=graph.add(dna(70)+left+spacer+right+dna(70));
     Path path;for(size_t i=0;i+graph.k()<=spacer.size();++i)path.push_back(graph.ids.at(spacer.substr(i,graph.k())));
@@ -426,7 +426,7 @@ struct TargetGraph:Graph {
     }
 };
 void test_retained_targets() {
-    TargetGraph g;Options o;auto seed=dna(35),repeat=dna(27),left=dna(300),right=dna(310);
+    TargetGraph g;Options o;o.allow_source_array_crossing=false;auto seed=dna(35),repeat=dna(27),left=dna(300),right=dna(310);
     auto truth=left+seed+right;g.add(truth);
     std::vector<TargetContext> ctx{{seed,repeat,0,seed.size()}};
     auto result=extend_retained_target(g,seed,ctx,o);
@@ -452,8 +452,78 @@ void test_retained_targets() {
     auto strict=extend_retained_target(branches,seed,ctx,o);
     check(strict.has_extension && strict.selected.right_length==0 && strict.selected.left_length==300,"optional common-prefix trimming affects extension only");
 }
+void test_source_crossing_once() {
+    SourceRepeatScan scan("ACGTCAGGTCAGTCCGATACGG",.85);
+    std::string variant="GGGACGTCAGGACAGTCCGATACGG";bool detected=false;
+    for(char base:variant)detected|=scan.append(base);
+    check(detected,"second source-repeat scan catches substitutions without identical k-mer nodes");
+    TargetGraph graph;Options options;options.adapters.clear();options.max_bp=1600;
+    options.max_flank_bp=750;options.beam_width=32;options.max_states=100000;
+    auto seed=dna(35),repeat=dna(27),other=dna(39),flank=dna(750);
+    graph.add(repeat+seed+repeat+other+repeat,120);
+    graph.add(other+flank,10);
+    const std::set<std::string> cycles={seed+repeat,other+repeat};
+    std::vector<FlankContext> models=flank_contexts(seed,0,seed.size(),{repeat},false);
+    for(const auto& cycle:cycles)models.push_back({"","",cycle});
+    auto path=graph.trace(seed);Seed start{path,0,seed.size(),{},graph.neighbors(path.back(),false)};
+    auto expected=seed+(repeat+other+flank).substr(0,750);
+    auto walks=extend(graph,start,false,750,{},options,nullptr,&models);
+    bool found=false;
+    for(const auto& side:walks.paths) {
+        Path full=path;full.insert(full.end(),side.nodes.begin()+1,side.nodes.end());
+        if(graph.spell(full)!=expected)continue;
+        found=true;
+        check(side.crosses_source_array,"crossed repeat is flagged rather than rejected");
+        check(side.nodes.size()==751,"crossing branch reaches full 750-base budget");
+        check(side.coverage.mean()==10,"source repeat depth does not set downstream baseline");
+        check(side.beam_profile.level()>9.99 && side.beam_profile.level()<10.01,"beam ranks only downstream depth");
+        check(side.coverage.profile.samples<750 && side.coverage.profile.samples>600,"source edges excluded, downstream observations retained");
+        check(std::set<Node>(full.begin(),full.end()).size()==full.size(),"source crossing needs no node revisit");
+    }
+    check(found,"beam preserves the complete one-pass source crossing");
+    check(std::any_of(walks.paths.begin(),walks.paths.end(),[](const Side& side){return side.stop=="source_array_node_revisit";}),"looping source return is stopped explicitly");
+    auto strict=options;strict.allow_source_array_crossing=false;
+    auto rejected=extend(graph,start,false,750,{},strict,nullptr,&models);
+    check(std::none_of(rejected.paths.begin(),rejected.paths.end(),[](const Side& side){return side.nodes.size()>1;}),"strict mode retains the previous rejection behavior");
+    std::vector<TargetContext> contexts{{seed,repeat,0,seed.size()}};
+    options.report_alternatives=true;
+    auto result=extend_retained_target(graph,seed,contexts,options,&cycles);
+    check(result.has_extension && result.selected.sequence==expected,"joining and final output checks retain the one-pass extension");
+    check(result.selected.right.crosses_source_array,"final selected candidate keeps crossing flag");
+    check(!result.alternatives.empty() && result.alternatives.size()<=options.beam_width,"reported alternatives are bounded and retain complete candidates");
+    auto short_budget=options;short_budget.max_flank_bp=repeat.size()+other.size()+5;
+    auto short_result=extend_retained_target(graph,seed,contexts,short_budget,&cycles);
+    check(!short_result.has_extension,"array crossing needs a full external k+1 edge before emission");
+    TargetGraph two_sides;auto variant_repeat=repeat;variant_repeat[12]=variant_repeat[12]=='A'?'C':'A';
+    two_sides.add(dna(100)+variant_repeat+seed+repeat+dna(100),10);
+    auto both=extend_retained_target(two_sides,seed,contexts,options,&cycles);
+    check(both.has_extension && (both.selected.left.crosses_source_array!=both.selected.right.crosses_source_array),"one passage across the complete output excludes two separate source-repeat crossings");
+    auto rc=reverse_complement(expected);TargetGraph reversed;reversed.add(rc,10);
+    reversed.add(reverse_complement(repeat+seed+repeat+other+repeat),120);
+    auto rseed=reverse_complement(seed),rrepeat=reverse_complement(repeat);
+    std::set<std::string> rcycles;for(const auto& cycle:cycles)rcycles.insert(reverse_complement(cycle));
+    auto back=extend_retained_target(reversed,rseed,{{rseed,rrepeat,0,rseed.size()}},options,&rcycles);
+    check(back.has_extension && back.selected.sequence==rc && back.selected.left.crosses_source_array,"backward crossing preserves orientation and flag");
+}
+void test_unscored_source_pool() {
+    TargetGraph g;Options o;o.adapters.clear();o.beam_width=1;o.source_context_width=256;
+    auto seed=dna(35),repeat=dna(27),bad=dna(39),good=dna(39),tail=dna(750),bad_tail=dna(750);
+    g.add(repeat+seed+repeat+bad+repeat,100); // earlier node IDs, no downstream evidence yet
+    g.add(repeat+seed+repeat+good+repeat,100);
+    g.add(bad+bad_tail,10);g.add(good+tail,10);
+    auto bad_path=g.trace(bad+bad_tail);
+    for(size_t i=bad.size();i<bad_path.size();++i)g.arcs.at({bad_path[i-1],bad_path[i]}).count=i%2?10:80;
+    auto models=flank_contexts(seed,0,seed.size(),{repeat},false);
+    models.push_back({"","",bad+repeat});models.push_back({"","",good+repeat});
+    auto path=g.trace(seed);Seed start{path,0,seed.size(),{},g.neighbors(path.back(),false)};
+    auto expected=seed+(repeat+good+tail).substr(0,750);
+    auto contains=[&](const WalkResult& walk){for(const auto& side:walk.paths){auto full=path;full.insert(full.end(),side.nodes.begin()+1,side.nodes.end());if(g.spell(full)==expected)return true;}return false;};
+    check(contains(extend(g,start,false,750,{},o,nullptr,&models)),"unscored source alternatives survive until downstream stability can choose");
+    auto narrow=o;narrow.source_context_width=1;
+    check(!contains(extend(g,start,false,750,{},narrow,nullptr,&models)),"fixture reproduces loss from pruning unscored node-ID ties");
+}
 void test_variant_placement() {
-    TargetGraph graph;Options options;auto query=dna(37),allele=query,repeat=dna(29),left=dna(120),right=dna(130);
+    TargetGraph graph;Options options;options.allow_source_array_crossing=false;auto query=dna(37),allele=query,repeat=dna(29),left=dna(120),right=dna(130);
     for(size_t position:{0,2,25,35})allele[position]="ACGT"[(std::string("ACGT").find(allele[position])+1)%4];
     auto truth=left+allele+right;graph.add(truth);graph.add(repeat+query+repeat,30);
     std::vector<TargetContext> contexts{{query,repeat,0,query.size()}};
@@ -557,7 +627,7 @@ void test_supported_near_tie() {
 }
 
 void test_equal_depth_and_bounded_repeats() {
-    Options o;o.adapters.clear();o.max_bp=600;o.max_flank_bp=500;o.max_states=10000;o.beam_width=16;
+    Options o;o.allow_source_array_crossing=false;o.adapters.clear();o.max_bp=600;o.max_flank_bp=500;o.max_states=10000;o.beam_width=16;
     Graph g;auto seed_seq=dna(35),loop=dna(32),tail=dna(65);
     auto sequence=seed_seq+loop+loop+loop+tail;
     auto full=g.add(sequence);for(auto& entry:g.arcs)entry.second.count=12;
@@ -644,10 +714,12 @@ void test_low_depth_continuation() {
 }
 int main() {
     try {
-        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_variant_placement();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
+        test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_source_crossing_once();test_unscored_source_pool();test_variant_placement();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
         test_low_depth_continuation();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
+        invalid([]{Options o;o.source_context_width=0;o.validate();});
+        invalid([]{Options o;o.source_context_width=4097;o.validate();});
         invalid([]{Options o;o.max_node_visits=0;o.validate();});
         invalid([]{Options o;o.max_node_visits=65;o.validate();});
         invalid([]{Options o;o.max_coverage_penalty=std::nan("");o.validate();});

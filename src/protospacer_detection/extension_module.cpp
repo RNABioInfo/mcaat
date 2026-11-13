@@ -92,27 +92,12 @@ static void refresh_retained_flanks(ExtensionGraph& graph,const Query& q,const E
     std::vector<std::string> repeats(repeat_set.begin(),repeat_set.end());
     auto lc=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,true);
     auto rc=flank_contexts(q.sequence,entry.seed.begin,entry.seed.end,repeats,false);
-    auto left=c.sequence.substr(0,c.seed_begin);std::reverse(left.begin(),left.end());
-    auto right=c.sequence.substr(c.seed_end);
-    size_t minimum=options.min_external_flank?options.min_external_flank:graph.k()+1;
-    if(!left.empty() && (left.size()<minimum || context_state(left,lc,options.array_repeat_identity)!=ContextState::external)) {
-        trim_left(c);c.left.context="incomplete";
+    for(const auto& cycle:q.source_cycles) {
+        lc.push_back({"","",cycle});rc.push_back({"","",cycle});
     }
-    if(!right.empty() && (right.size()<minimum || context_state(right,rc,options.array_repeat_identity)!=ContextState::external)) {
-        trim_right(c,graph.k());c.right.context="incomplete";
-    }
-    c.external_left=c.external_right=0;
-    for(size_t pos=1;pos<c.path.size();++pos) {
-        if(q.array_edges.count(graph.edge(c.path[pos-1],c.path[pos])))continue;
-        if(pos<=c.seed_begin)++c.external_left;
-        if(pos>c.seed_end-graph.k())++c.external_right;
-    }
-    if(!c.external_left && c.left_length)trim_left(c);
-    if(!c.external_right && c.right_length)trim_right(c,graph.k());
-    Path l(c.path.begin(),c.path.begin()+c.seed_begin+1);std::reverse(l.begin(),l.end());
-    Path r(c.path.begin()+c.seed_end-graph.k(),c.path.end());
-    c.left.coverage=path_coverage(graph,l,l.size()-1,true,c.left.context_clear_at,&q.array_edges,options);
-    c.right.coverage=path_coverage(graph,r,r.size()-1,false,c.right.context_clear_at,&q.array_edges,options);
+    // Use the same source mask and crossing policy after optional tie clipping
+    // as in supplied-target mode; rescoring must not restore boundary rejection.
+    refresh_target(graph,c,lc,rc,q.array_edges,options);
     c.score=stability(c.left.coverage,c.right.coverage).score()-(1.-double(entry.seed.end-entry.seed.begin)/q.sequence.size());
 }
 static void select_prediction(Query& q,const Options& options,ExtensionGraph& graph,bool graph_only) {
@@ -358,6 +343,9 @@ int run_extension_module(int argc,char** argv) {
                 "--max-retained-bases 50000000 (abort explicitly before excessive result storage)\n"
                 "--max-node-visits 3 (bounded revisits outside source-array cycles; 1 forbids new revisits)\n"
                 "--coverage-model auto|poisson|negative-binomial --coverage-window 7\n"
+                "--report-alternatives false (--protospacers only; separate bounded ranked candidate files)\n"
+                "--source-context-width 256 (separate bounded pool before downstream stability can be scored)\n"
+                "--source-array-crossing true (flag a single passage; source-array nodes cannot be revisited)\n"
                 "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
                 "--min-external-flank 0 (0 = k+1 bases wholly outside the seed; 1 restores short-tail behavior)\n"
                 "--joint-flank-check true (split incompatible left/right multiplicities before selection)\n"
@@ -379,6 +367,7 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--output" || flag=="--output-folder")destination=value;
         else if(flag=="--threads")threads=integer(flag,value);
         else if(flag=="--beam-width")options.beam_width=integer(flag,value);
+        else if(flag=="--source-context-width")options.source_context_width=integer(flag,value);
         else if(flag=="--max-node-visits")options.max_node_visits=integer(flag,value);
         else if(flag=="--max-length")options.max_bp=integer(flag,value);
         else if(flag=="--max-flank-length")options.max_flank_bp=integer(flag,value);
@@ -395,6 +384,14 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--min-match-bp")options.min_match=integer(flag,value,true);
         else if(flag=="--coverage-window")options.coverage_window=integer(flag,value);
         else if(flag=="--coverage-model")options.coverage_model=value;
+        else if(flag=="--report-alternatives") {
+            if(value!="true" && value!="false")throw std::invalid_argument(flag+" needs true or false");
+            options.report_alternatives=value=="true";
+        }
+        else if(flag=="--source-array-crossing") {
+            if(value!="true" && value!="false")throw std::invalid_argument(flag+" needs true or false");
+            options.allow_source_array_crossing=value=="true";
+        }
         else if(flag=="--array-repeat-identity")options.array_repeat_identity=number(flag,value);
         else if(flag=="--boundary-support")options.boundaries.support=number(flag,value);
         else if(flag=="--boundary-min-spacers")options.boundaries.min_spacers=integer(flag,value);
@@ -457,6 +454,7 @@ int run_extension_module(int argc,char** argv) {
     if(!fs::is_regular_file(graph_path.string()+".sdbg_info"))throw std::invalid_argument("missing graph metadata: "+graph_path.string());
     SDBG sdbg;std::cout<<"Loading graph...\n";sdbg.LoadFromFile(graph_path.string().c_str());ExtensionGraph graph(sdbg);
     auto queries=load_queries(arrays,graph.k(),options);
+    if(options.report_alternatives && supplied_targets.empty())throw std::invalid_argument("--report-alternatives requires --protospacers");
     if(!supplied_targets.empty())return run_retained_targets(graph,queries,supplied_targets,arrays,graph_path,destination,threads,max_retained_bases,options);
     for(const auto& q:queries)if(q.sequence.size()>options.max_bp)throw std::invalid_argument("--max-length must accommodate every complete search spacer");
     if(options.max_bp<graph.k())throw std::invalid_argument("--max-length is shorter than graph k");
@@ -509,7 +507,7 @@ int run_extension_module(int argc,char** argv) {
                     auto left=c.sequence.substr(0,c.seed_begin);std::reverse(left.begin(),left.end());
                     if(!left.empty()) {
                         auto state=context_state(left,left_context,options.array_repeat_identity);
-                        if(state!=ContextState::external) {
+                        if(state!=ContextState::external && !(options.allow_source_array_crossing && state==ContextState::array)) {
                             c.left.context=state==ContextState::array?"array":"incomplete";
                             if(state==ContextState::array)c.left.stop="source_array_context";
                             trim_left(c);
@@ -518,25 +516,31 @@ int run_extension_module(int argc,char** argv) {
                     auto right=c.sequence.substr(c.seed_end);
                     if(!right.empty()) {
                         auto state=context_state(right,right_context,options.array_repeat_identity);
-                        if(state!=ContextState::external) {
+                        if(state!=ContextState::external && !(options.allow_source_array_crossing && state==ContextState::array)) {
                             c.right.context=state==ContextState::array?"array":"incomplete";
                             if(state==ContextState::array)c.right.stop="source_array_context";
                             trim_right(c,graph.k());
                         }
                     }
                 }
+                std::vector<FlankContext> source_models=left_context;
+                source_models.insert(source_models.end(),right_context.begin(),right_context.end());
+                SourceCycleGuard source_guard(graph.k(),&source_models);
                 for(auto& c:entry.paths)for(size_t pos=1;pos<c.path.size();++pos) {
-                    if(q.array_edges.count(graph.edge(c.path[pos-1],c.path[pos])))continue;
-                    if(pos<=c.seed_begin)++c.external_left;
-                    if(pos>c.seed_end-graph.k())++c.external_right;
+                    if(q.array_edges.count(graph.edge(c.path[pos-1],c.path[pos])) ||
+                       (options.allow_source_array_crossing && source_guard.contains(graph,c.path[pos-1],c.path[pos],false)))continue;
+                    if(pos<=c.seed_begin && c.seed_begin-pos+1>=c.left.context_clear_at)++c.external_left;
+                    if(pos>c.seed_end-graph.k() && pos-(c.seed_end-graph.k())>=c.right.context_clear_at)++c.external_right;
                 }
                 for(auto& c:entry.paths) {
                     // An array-only prefix/suffix is not a reconstructed target
                     // flank. Keep the seed and independently supported side.
-                    if(!c.external_left && c.left_length) {
+                    if(c.left_length && (!c.external_left || (c.left.crosses_source_array &&
+                       c.external_left<(options.min_external_flank?options.min_external_flank:graph.k()+1)))) {
                         trim_left(c);c.left.context="array";c.left.stop="array_context_only";
                     }
-                    if(!c.external_right && c.right_length) {
+                    if(c.right_length && (!c.external_right || (c.right.crosses_source_array &&
+                       c.external_right<(options.min_external_flank?options.min_external_flank:graph.k()+1)))) {
                         trim_right(c,graph.k());c.right.context="array";c.right.stop="array_context_only";
                     }
                     c.score=stability(c.left.coverage,c.right.coverage).score();
@@ -635,7 +639,7 @@ int run_extension_module(int argc,char** argv) {
         regions_out<<"region_id\tlength\tsequence\tvertices\tedges\tviral_status\n";
         auto fasta=output(staging/"ContiguousPaths.fasta");
         auto associations=output(staging/"protospacer_associations.tsv");
-        associations<<"source_id\tarray_id\tseed_id\tregion_id\tquery_begin\tquery_end\tseed_begin\tseed_end\tstrand\tstatus\tleft_stop\tright_stop\tleft_coverage\tright_coverage\tleft_dispersion\tright_dispersion\tcoverage_samples\tcoverage_score\ttotal_score\talternative_rank\tsearch_limited\texpanded_states\tread_evidence\tsupported_junctions\tjunctions\tread_support\tpair_support\tunique_pair_support\tpam_status\tsubtype\texternal_left_edges\texternal_right_edges\tambiguity\tleft_context\tright_context\n";
+        associations<<"source_id\tarray_id\tseed_id\tregion_id\tquery_begin\tquery_end\tseed_begin\tseed_end\tstrand\tstatus\tleft_stop\tright_stop\tleft_coverage\tright_coverage\tleft_dispersion\tright_dispersion\tcoverage_samples\tcoverage_score\ttotal_score\talternative_rank\tsearch_limited\texpanded_states\tread_evidence\tsupported_junctions\tjunctions\tread_support\tpair_support\tunique_pair_support\tpam_status\tsubtype\texternal_left_edges\texternal_right_edges\tambiguity\tleft_context\tright_context\tleft_crosses_source_array\tright_crosses_source_array\n";
         std::map<std::string,std::pair<std::string,std::string>> regions;size_t seeds=0,links=0,sources=0;
         size_t matched_queries=0,extended_queries=0,full_matched_queries=0,unresolved_queries=0,unresolved_seeds=0,rejected_context_seeds=0,redundant_paths=0;
         size_t adapter_branches=0,adapter_rows=0,adapter_queries=0,branch_checks=0,branch_rows=0,boundary_changes=0;
@@ -725,15 +729,16 @@ int run_extension_module(int argc,char** argv) {
                             <<(l&&r?"two_sided":"one_sided")<<'\t'<<(flip?c.right.stop:c.left.stop)<<'\t'<<(flip?c.left.stop:c.right.stop)<<'\t'
                             <<(flip?c.right.coverage:c.left.coverage).mean()<<'\t'<<(flip?c.left.coverage:c.right.coverage).mean()<<'\t'<<(flip?c.right.coverage:c.left.coverage).dispersion()<<'\t'<<(flip?c.left.coverage:c.right.coverage).dispersion()<<'\t'
                             <<c.left.coverage.scored+c.right.coverage.scored<<'\t'<<c.left.coverage.score()+c.right.coverage.score()<<'\t'<<(c.score-c.pam_bonus+(pam.first=="match"?options.pam_weight:0))<<'\t'<<rank<<'\t'<<(c.search_limited||q.truncated)<<'\t'<<c.expanded<<'\t'
-                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(c.ambiguity_trimmed?"shared_sequence_of_near_best_predictions":q.score_tie?"selected_score_tie":q.compared_regions>1?"selected_best_of_alternatives":(c.search_limited||q.truncated)?"search_limited":"single_candidate")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\n';
+                            <<(reads1.empty()?"not_provided":"exact_retained_candidates")<<'\t'<<c.supported_junctions<<'\t'<<c.junctions<<'\t'<<c.read_support<<'\t'<<c.pair_support<<'\t'<<c.unique_pairs<<'\t'<<pam.first<<'\t'<<pam.second<<'\t'<<(flip?c.external_right:c.external_left)<<'\t'<<(flip?c.external_left:c.external_right)<<'\t'<<(c.ambiguity_trimmed?"shared_sequence_of_near_best_predictions":q.score_tie?"selected_score_tie":q.compared_regions>1?"selected_best_of_alternatives":(c.search_limited||q.truncated)?"search_limited":"single_candidate")<<'\t'<<(flip?c.right.context:c.left.context)<<'\t'<<(flip?c.left.context:c.right.context)<<'\t'<<(flip?c.right.crosses_source_array:c.left.crosses_source_array)<<'\t'<<(flip?c.left.crosses_source_array:c.right.crosses_source_array)<<'\n';
                     }
                 }
             }
         }
         auto parameters=output(staging/"protospacer_parameters.json");
         auto adapters_json=adapter_json(options);
-        parameters<<"{\n  \"schema\": 9,\n  \"extension_algorithm\": \"equal_depth_beam_local_window_v4\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
-            <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"max_node_visits\": "<<options.max_node_visits<<",\n  \"max_states_per_side\": "<<options.max_states
+        parameters<<"{\n  \"schema\": 10,\n  \"extension_algorithm\": \"equal_depth_beam_source_crossing_v5\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
+            <<",\n  \"allow_source_array_crossing\": "<<(options.allow_source_array_crossing?"true":"false")
+            <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"source_context_width\": "<<options.source_context_width<<",\n  \"max_node_visits\": "<<options.max_node_visits<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases
             <<",\n  \"coverage_model\": "<<json_string(options.coverage_model)<<",\n  \"coverage_window\": "<<options.coverage_window<<",\n  \"max_coverage_penalty\": "<<options.max_coverage_penalty
