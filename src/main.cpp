@@ -339,6 +339,9 @@ Settings parse_arguments(int argc, char* argv[]) {
                  << "Usage:\n"
                  << "  mcaat --input-files <file1> [file2] [options]\n"
                  << "  mcaat --graph <path> [options]\n"
+                 << "  mcaat buildlib --help            Build a read library only\n"
+                 << "  mcaat read2sdbg --help           Build and retain a graph only\n"
+                 << "  mcaat phage-curate --help        Detect/extend protospacers on an existing graph\n"
                  << "\nInput (one required):\n"
                  << "  --input-files <file1> [file2]   One or two FASTA/FASTQ files (plain or gzipped)\n"
                  << "  --graph <path>                  Pre-built SDBG graph folder (skips construction)\n"
@@ -797,8 +800,29 @@ int main(int argc, char** argv) {
 }
 
 #else
+// Expose the bundled graph-building tools without entering array/cycle search
+// or its cleanup path. Their original command-line interfaces are preserved.
+int main_build_lib(int argc, char **argv);
+int main_read2sdbg(int argc, char **argv);
 int main(int argc, char** argv) {
     // ── Subcommand routing ───────────────────────────────────────────────────
+    if (argc >= 2 && std::string(argv[1]) == "buildlib") {
+        if (argc == 2 || (argc == 3 && std::string(argv[2]) == "--help")) {
+            std::cout << "Usage: mcaat buildlib <read-library-config> <output-prefix>\n"
+                         "Build the bundled MEGAHIT read library only; preserve all outputs.\n";
+            return argc == 2 ? 1 : 0;
+        }
+        return main_build_lib(argc - 1, argv + 1);
+    }
+    if (argc >= 2 && std::string(argv[1]) == "read2sdbg") {
+        if (argc == 2 || (argc == 3 && std::string(argv[2]) == "--help")) {
+            std::cout << "Usage: mcaat read2sdbg --read_lib_file <prefix> --output_prefix <prefix>\n"
+                         "  --host_mem <bytes> --num_cpu_threads <n> -k 23 -m 1\n"
+                         "Build the graph only; no array search or graph cleanup.\n";
+            return argc == 2 ? 1 : 0;
+        }
+        return main_read2sdbg(argc - 1, argv + 1);
+    }
     if (argc >= 2 && std::string(argv[1]) == "detect-cas-genes") {
         try {
             return run_detect_cas_genes(argc - 1, argv + 1);
