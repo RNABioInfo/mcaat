@@ -16,7 +16,7 @@ build/protospacer/mcaat phage-curate \
   --graph /path/to/previous-run/graph/graph \
   --protospacers /path/to/accepted/Protospacers.fasta \
   --output /path/to/separate-extension-results \
-  --threads 24 --max-flank-length 750 --max-length 1550
+  --threads 24 --max-flank-length 750 --min-extension-flank 750 --max-length 1550
 ```
 
 Every supplied ID and sequence is retained in `Protospacers.fasta`, including
@@ -30,8 +30,14 @@ it cannot overwrite the input FASTA or mix with a discovery run.
 
 Source-array observations identify the complete spacer and repeat around each
 supplied interval, including reverse orientation and original source coordinates.
-Exact placement is tried first. If it supplies an extension, that prediction is
-kept unchanged. Otherwise, `--target-variant-fallback true` searches the graph
+The default quality filter requires the entire input sequence exactly, reranks
+the resulting paths, and withholds unresolved competing routes. The
+[quality rules below](#reference-free-quality-filtering-of-supplied-protospacers)
+describe the current acceptance policy.
+
+With `--path-quality-filter false`, the former workflow tries exact placement
+first and preserves its selected extension. Otherwise,
+`--target-variant-fallback true` searches the graph
 for related target sequences. Its aligned interval must cover at least 85% of
 the original query at at least 90% substitution identity. Original FASTA records
 remain unchanged; a differing observed target is reported separately, with
@@ -43,12 +49,12 @@ invented padding nor counted as matched query sequence. Complete source-array
 context must be available around the chosen core. The BOSS suffix lookup uses
 the existing colexicographic ordering without rebuilding an index or graph.
 
-The fallback first probes up to 75 bases on each side of every candidate, then
+Short-target placement first probes up to 75 bases on each side of every candidate, then
 extends the best N placements using the existing multiplicity score and source,
 cycle, adapter and depth guards. It shares the existing per-query work budget.
 `--max-target-placement-states 50000` separately bounds placement work;
 `--max-seeds` caps retained placements. Work limits and unextended alternatives
-are explicit. If these anchors produce no extension and budget remains, queries
+are explicit. With the quality filter disabled, if these anchors produce no extension and budget remains, queries
 of at least k bases receive a masked BOSS lookup. This searches beyond the
 one-substitution anchor restriction: a valid 90%/85% target may have two
 substitutions in every complete k-mer. Candidates must still pass the full
@@ -74,10 +80,11 @@ Use `--target-variant-fallback false` to retain the earlier exact-placement poli
 Missing source context, adapter-containing seeds and work limits receive
 separate reasons.
 
-At branches the default bounded beam keeps alternatives, scores the completed
-retained flanks for multiplicity stability and selects at most one extension per
-supplied record. Similar scores mark `extended_ambiguous`; they do not delete the
-protospacer or automatically clip the best path. The adapter, coverage, cycle,
+At branches the bounded beam keeps alternatives and selects at most one extension
+per supplied record after the quality checks. Similar scores on substantially
+different routes now produce a separate unresolved candidate. Similar variants
+of the same saved route can still mark a selected result `extended_ambiguous`.
+Neither outcome deletes the protospacer. The adapter, coverage, cycle,
 incompatible-flank and work-budget checks remain active. Source-repeat crossings are flagged by default, as described below.
 Optional `--branch-guard true` and `--resolve-graph-ties true` restore the strict
 stopping/clipping policies for explicit comparisons. They still cannot remove a
@@ -91,6 +98,8 @@ supplied protospacer. A selected path remains a candidate, not proof of its orig
 | `protospacer_associations.tsv` | Target-to-region coordinates and strand; observed allele and query alignment for variant placements |
 | `protospacer_target_placements.tsv` | One row per input, observed target, alignment, placement work and limits |
 | `protospacer_placement_checks.tsv` | Diagnostic probe/extension alternatives and scores; these are not additional final predictions |
+| `protospacer_path_quality.tsv` | Candidate quality measurements, acceptance, selection and rejection reasons |
+| `UnresolvedExtensions.fasta`, `protospacer_unresolved.tsv` | Best provisional path when substantially different routes remain near-tied; excluded from primary predictions |
 | `protospacer_sources.tsv` | Matching source-array observations and zero-based, half-open coordinates in their original spacers |
 | `protospacer_branch_checks.tsv`, `protospacer_adapter_stops.tsv` | Traversal diagnostics; branch probes are present only if enabled |
 | `protospacer_parameters.json` | Mode, all effective algorithm settings, input/retained/extended counts |
@@ -991,8 +1000,72 @@ server graph before interpreting a reduced count as an improvement.
 
 ## Retention regression and current policy
 
-The 719632c strict defaults caused a large drop in retained predictions. Current
-defaults restore bounded beam traversal and one-best-path selection. Strict
+### Reference-free quality filtering of supplied protospacers
+
+The supplied-target CLI now defaults to `--path-quality-filter true`. This is
+applied to `--protospacers` runs, not array discovery. Every supplied ID and DNA
+sequence remains in `Protospacers.fasta`; a rejected extension is reported as
+`not_extended`, with no sequence fabricated to meet a length target. The former
+selection behavior is available with `--path-quality-filter false`.
+
+In quality mode, the whole supplied target must occur exactly in the graph.
+Targets shorter than graph k are embedded in observed graph k-mers without
+changing or clipping their bases. The approximate-allele and masked-k-mer rescue
+are not used in this mode. The historical variant tests below describe the
+quality-filter-disabled workflow.
+
+Search still uses a bounded, equal-depth beam. Low-complexity sequence adds a
+soft beam-ranking penalty. A single multiplicity jump no longer terminates the
+branch immediately in quality mode; final checks assess sustained changes.
+Source-array passage and node-visit limits remain enforced. Search/work limits
+are reported and do not prove that other paths are absent.
+
+After searching, inspect each retained complete path and its individual left
+and right flanks. Reject a candidate if any existing flank has:
+
+- More than 20% low-complexity windows: 64 bases per window, step 16, triplet
+  entropy below 3 bits.
+- More than 20% repeated k-mer occurrences within the flank. Bounded external
+  repeats below that fraction remain permitted.
+- Fewer than 64 downstream edge-count observations after excluding the seed
+  overlap and known source-array context.
+- More than 50% singleton edge counts.
+- A sustained depth step between adjacent, nonoverlapping 64-edge blocks:
+  median high is at least four times median low (low floored at one), and
+  high minus low is at least `3 * sqrt(high + low)`.
+
+Also require at least `--min-extension-flank` added bases on **one** side
+(default 250; use 750 for a full-750 experiment), and the unchanged full input
+target. Two shorter flanks are not added together to satisfy this requirement.
+
+Rank passing candidates by the worse existing flank's loss: variance of
+`log2(1 + block median)` about the median, plus singleton fraction,
+low-complexity fraction, repeated-k-mer fraction, and `1/(observations + 1)`.
+An absent flank contributes no loss. Exact score ties prefer longer sequence,
+then lexical order. If another passing candidate is within the configured
+prediction-score margin (default 0.1) and follows a substantially different
+same-side route, withhold the primary prediction. Compare flanks of at least
+128 bases using their distinct `(k+1)`-mers: less than 80% overlap relative to
+the smaller set indicates a different route. Small bubbles and an opposite
+flank alone do not trigger this rule. The best unresolved candidate is retained
+in `UnresolvedExtensions.fasta` with reasons in `protospacer_unresolved.tsv`.
+This is ambiguity within the saved beam, not proof of uniqueness in the graph.
+
+Output at most one primary extension per input. Near-score variants of the same
+route remain marked ambiguous; passing these heuristics is not proof
+of viral origin or a calibrated correctness probability. No reference sequence,
+BLAST result, or trained reference label is an input to these decisions.
+
+`protospacer_path_quality.tsv` records each assessed candidate, its acceptance,
+selection, measured support, sequence, and rejection reasons. Optional
+`ExtensionAlternatives.fasta` remains a diagnostic file containing passing and
+rejected paths, not extra final predictions. `ContiguousPaths.fasta` contains
+only selected passing outputs. Parameters record the quality-policy version
+and minimum requested flank. Use `protospacer_extensions.tsv` to account for
+every original input, including those for which nothing passed.
+
+The 719632c strict defaults caused a large drop in retained predictions. The
+subsequent source-crossing release restored bounded beam traversal and one-best-path selection. Strict
 local stopping and common-sequence clipping are available only when requested.
 The historical smoke counts above describe the strict version, not the current
 supplied-protospacer workflow.

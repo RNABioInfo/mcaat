@@ -321,7 +321,7 @@ static double number(const std::string& flag,const std::string& value) {
 #include "retained_targets_io.h"
 
 int run_extension_module(int argc,char** argv) {
-    Options options;fs::path arrays,graph_path,destination,reads1,reads2,pam_file,supplied_targets;
+    Options options;options.path_quality_filter=true;fs::path arrays,graph_path,destination,reads1,reads2,pam_file,supplied_targets;
     size_t threads=1,min_insert=0,max_insert=1000,max_index=5000000,max_read_work=1000000,max_retained_bases=50000000;
     for(int i=1;i<argc;++i) {
         std::string flag=argv[i];
@@ -344,6 +344,9 @@ int run_extension_module(int argc,char** argv) {
                 "--max-node-visits 3 (bounded revisits outside source-array cycles; 1 forbids new revisits)\n"
                 "--coverage-model auto|poisson|negative-binomial --coverage-window 7\n"
                 "--report-alternatives false (--protospacers only; separate bounded ranked candidate files)\n"
+                "--path-quality-filter true (--protospacers only; withhold unsupported paths, preserve every input)\n"
+                "Quality mode requires the entire supplied target exactly; short targets use exact graph embeddings, not changed bases.\n"
+                "--min-extension-flank 250 (minimum added bases on one side for quality-filtered output)\n"
                 "--source-context-width 256 (separate bounded pool before downstream stability can be scored)\n"
                 "--source-array-crossing true (flag a single passage; source-array nodes cannot be revisited)\n"
                 "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
@@ -371,6 +374,11 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--max-node-visits")options.max_node_visits=integer(flag,value);
         else if(flag=="--max-length")options.max_bp=integer(flag,value);
         else if(flag=="--max-flank-length")options.max_flank_bp=integer(flag,value);
+        else if(flag=="--min-extension-flank")options.min_extension_flank=integer(flag,value);
+        else if(flag=="--path-quality-filter") {
+            if(value!="true" && value!="false")throw std::invalid_argument(flag+" needs true or false");
+            options.path_quality_filter=value=="true";
+        }
         else if(flag=="--max-states")options.max_states=integer(flag,value);
         else if(flag=="--max-query-states")options.max_query_states=integer(flag,value);
         else if(flag=="--max-target-placement-states")options.max_target_placement_states=integer(flag,value);
@@ -456,6 +464,7 @@ int run_extension_module(int argc,char** argv) {
     auto queries=load_queries(arrays,graph.k(),options);
     if(options.report_alternatives && supplied_targets.empty())throw std::invalid_argument("--report-alternatives requires --protospacers");
     if(!supplied_targets.empty())return run_retained_targets(graph,queries,supplied_targets,arrays,graph_path,destination,threads,max_retained_bases,options);
+    options.path_quality_filter=false; // supplied-target filter is not applied to discovery mode
     for(const auto& q:queries)if(q.sequence.size()>options.max_bp)throw std::invalid_argument("--max-length must accommodate every complete search spacer");
     if(options.max_bp<graph.k())throw std::invalid_argument("--max-length is shorter than graph k");
     std::cout<<"Processing "<<queries.size()<<" distinct spacer sequences with "<<threads<<" threads\n";

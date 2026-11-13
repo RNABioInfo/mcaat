@@ -35,17 +35,17 @@ inline TargetPlacement score_target_placement(const std::string& query,const std
 // >=90% identity. No reference bases are supplied or synthesized into a path.
 // The bounded search is explicitly not a complete indel-aware mapper.
 template<class Graph> TargetPlacements place_target(Graph& graph,const std::string& query,size_t left_padding,
-                                                    size_t max_work=50000,size_t max_candidates=128) {
+                                                    size_t max_work=50000,size_t max_candidates=128,bool exact_only=false) {
     TargetPlacements result;if(query.size()<15)return result;
     const size_t k=graph.k(),core=std::max(k,query.size());
     if(left_padding>core-query.size())throw std::runtime_error("invalid target padding");
-    const size_t allowed=query.size()-size_t(std::ceil(.85*query.size()-1e-9))+size_t(std::floor(.10*query.size()+1e-9));
+    const size_t allowed=exact_only?0:query.size()-size_t(std::ceil(.85*query.size()-1e-9))+size_t(std::floor(.10*query.size()+1e-9));
     std::set<std::string> seen;std::set<std::pair<Node,size_t>> anchors;
     auto work=[&](){if(result.work>=max_work){result.limited=true;return false;}++result.work;return true;};
     auto accept=[&](const Path& path) {
         auto sequence=graph.spell(path);if(sequence.size()!=core)throw std::runtime_error("target placement length mismatch");
         if(!seen.insert(sequence).second)return;
-        auto scored=score_target_placement(query,sequence,left_padding);
+        auto scored=score_target_placement(query,sequence,left_padding,exact_only?1.:.90,exact_only?1.:.85);
         if(!scored.query_end)return;
         if(result.values.size()>=max_candidates){result.limited=true;return;}
         result.values.push_back(std::move(scored));
@@ -89,9 +89,9 @@ template<class Graph> TargetPlacements place_target(Graph& graph,const std::stri
         };
         left(path,anchor_pos,errors(anchor,int64_t(anchor_pos)));
     };
-    const size_t anchor_length=query.size()<k?size_t(std::ceil(.85*query.size()-1e-9)):k;
+    const size_t anchor_length=query.size()<k?(exact_only?query.size():size_t(std::ceil(.85*query.size()-1e-9))):k;
     // Examine exact anchors before substitutions, across all query positions.
-    for(size_t edits=0;edits<=1 && !result.limited;++edits)
+    for(size_t edits=0;edits<=(exact_only?0:1) && !result.limited;++edits)
       for(size_t position=0;position+anchor_length<=query.size() && !result.limited;++position) {
         auto anchor=query.substr(position,anchor_length);
         auto lookup=[&](const std::string& word) {

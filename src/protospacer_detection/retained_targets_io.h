@@ -63,9 +63,13 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
         auto& target=targets[i];
         try {
             if(cancelled)continue;
-            target.extension=extend_target_with_fallback(graph,target.sequence,target.contexts,options,&target.source_cycles);
-            size_t kept=target.extension.has_extension?target.extension.selected.sequence.size():0;
+            auto search_options=options;
+            if(options.path_quality_filter)search_options.report_alternatives=true;
+            target.extension=extend_target_with_fallback(graph,target.sequence,target.contexts,search_options,&target.source_cycles);
+            filter_target_extension(graph,target.extension,target.sequence,target.contexts,target.source_cycles,options);
+            size_t kept=(target.extension.has_extension || target.extension.quality_unresolved)?target.extension.selected.sequence.size():0;
             for(const auto& candidate:target.extension.alternatives)kept+=candidate.sequence.size();
+            for(const auto& check:target.extension.quality_checks)kept+=check.sequence.size();
             if(retained.fetch_add(kept)+kept>max_bases)
                 throw std::runtime_error("retained targets/extensions exceed --max-retained-bases");
         }catch(const std::exception& e){target.error=e.what();cancelled=true;}
@@ -91,6 +95,10 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
         auto adapters=output(staging/"protospacer_adapter_stops.tsv");
         auto alternatives=output(staging/"protospacer_alternatives.tsv");
         auto alternative_fasta=output(staging/"ExtensionAlternatives.fasta");
+        auto quality=output(staging/"protospacer_path_quality.tsv");
+        auto unresolved=output(staging/"UnresolvedExtensions.fasta"),unresolved_table=output(staging/"protospacer_unresolved.tsv");
+        unresolved_table<<"seed_id\treason\tcompeting_candidates\tlength\tleft_bp\tright_bp\tscore\tsequence\n";
+        quality<<"seed_id\tcandidate\taccepted\tselected\treasons\tscore\tlength\tleft_bp\tright_bp\tleft_observations\tright_observations\tleft_singletons\tright_singletons\tleft_depth\tright_depth\tsequence\n";
         alternatives<<"candidate_id\tseed_id\trank\tselected\tlength\tscore\tseed_begin\tseed_end\tleft_crosses_source_array\tright_crosses_source_array\tleft_stop\tright_stop\tsequence\n";
         auto placements=output(staging/"protospacer_target_placements.tsv");
         auto placement_checks=output(staging/"protospacer_placement_checks.tsv");
@@ -127,10 +135,25 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
                 bool flip=it->second!=c.sequence;
                 associations<<t.id<<'\t'<<region<<'\t'<<(flip?c.sequence.size()-target_end:target_begin)<<'\t'<<(flip?c.sequence.size()-target_begin:target_end)<<'\t'<<(flip?'-':'+')<<'\t'<<e.status<<'\t'<<observed<<'\t'<<e.placement.query_begin<<'\t'<<e.placement.query_end<<'\t'<<e.placement.identity<<'\t'<<e.placement.coverage<<'\n';
                 placements<<t.id<<'\t'<<(e.variant_placement?"graph_variant":"exact")<<'\t'<<observed<<'\t'<<e.placement.query_begin<<'\t'<<e.placement.query_end<<'\t'<<e.placement.identity<<'\t'<<e.placement.coverage<<'\t'<<e.placement.mismatches;
+            }else if(!e.quality_checks.empty() && !e.placement.sequence.empty()) {
+                auto observed=e.placement.sequence.substr(e.placement.query_offset,t.sequence.size());
+                placements<<t.id<<"\tfiltered\t"<<observed<<'\t'<<e.placement.query_begin<<'\t'<<e.placement.query_end<<'\t'<<e.placement.identity<<'\t'<<e.placement.coverage<<'\t'<<e.placement.mismatches;
             }else {
                 placements<<t.id<<"\tunplaced\t-\t0\t0\t0\t0\t0";
             }
             placements<<'\t'<<e.placement_candidates<<'\t'<<e.placement_work<<'\t'<<e.placement_limited<<'\n';
+            if(e.quality_unresolved) {
+                size_t begin=c.seed_begin+e.placement.query_offset,end=begin+t.sequence.size();
+                unresolved<<'>'<<t.id<<'\n'<<c.sequence<<'\n';
+                unresolved_table<<t.id<<'\t'<<e.reason<<'\t'<<e.competing_quality_routes<<'\t'<<c.sequence.size()<<'\t'<<begin<<'\t'<<c.sequence.size()-end<<'\t'<<c.score<<'\t'<<c.sequence<<'\n';
+            }
+            for(size_t i=0;i<e.quality_checks.size();++i) {
+                const auto& check=e.quality_checks[i];const auto& q=check.quality;
+                quality<<t.id<<'\t'<<i+1<<'\t'<<q.accepted()<<'\t'<<(e.has_extension && check.sequence==c.sequence)<<'\t'<<q.reason_text()<<'\t'<<q.score<<'\t'
+                    <<check.sequence.size()<<'\t'<<check.seed_begin<<'\t'<<check.sequence.size()-check.seed_end<<'\t'
+                    <<q.left.observations<<'\t'<<q.right.observations<<'\t'<<q.left.singleton_fraction<<'\t'<<q.right.singleton_fraction<<'\t'
+                    <<q.left.median_count<<'\t'<<q.right.median_count<<'\t'<<check.sequence<<'\n';
+            }
             for(const auto& check:e.placement_checks)placement_checks<<t.id<<'\t'<<check.core<<'\t'<<check.phase<<'\t'<<check.reason<<'\t'<<check.extended<<'\t'<<check.sequence.size()<<'\t'<<check.score<<'\t'<<check.query_offset<<'\t'<<check.query_begin<<'\t'<<check.query_end<<'\t'<<check.expanded<<'\t'<<check.limited<<'\t'<<(e.has_extension && check.sequence==c.sequence)<<'\t'<<check.sequence<<'\n';
             for(size_t rank=0;rank<e.alternatives.size();++rank) {
                 const auto& a=e.alternatives[rank];
@@ -153,14 +176,17 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
                 <<'\t'<<c.left.coverage.profile.samples<<'\t'<<c.right.coverage.profile.samples<<'\n';
         }
         auto params=output(staging/"protospacer_parameters.json");
-        params<<"{\n  \"schema\": 13,\n  \"extension_algorithm\": \"equal_depth_beam_source_crossing_v5\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
+        params<<"{\n  \"schema\": 14,\n  \"extension_algorithm\": \"equal_depth_beam_source_crossing_v5\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"mode\": \"extend_supplied_protospacers\",\n  \"protospacers\": "<<json_string(fs::absolute(input).string())
+            <<",\n  \"path_quality_filter\": "<<(options.path_quality_filter?"true":"false")<<",\n  \"path_quality_version\": 2"
+            <<",\n  \"min_extension_flank\": "<<options.min_extension_flank
             <<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())<<",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())
             <<",\n  \"graph_k\": "<<graph.k()
             <<",\n  \"report_alternatives\": "<<(options.report_alternatives?"true":"false")
             <<",\n  \"allow_source_array_crossing\": "<<(options.allow_source_array_crossing?"true":"false")
             <<",\n  \"target_variant_fallback\": "<<(options.target_variant_fallback?"true":"false")
             <<",\n  \"max_target_placement_states\": "<<options.max_target_placement_states
-            <<",\n  \"target_anchor_policy\": \"one_substitution_then_masked_kmer_if_unextended\",\n  \"masked_rescue_stability\": \"zero_truncated_poisson_noise_adjusted\",\n  \"variant_min_identity\": 0.90,\n  \"variant_min_query_coverage\": 0.85"
+            <<",\n  \"target_anchor_policy\": "<<json_string(options.path_quality_filter?"exact_full_query_in_graph":"one_substitution_then_masked_kmer_if_unextended")
+            <<",\n  \"masked_rescue_stability\": \"zero_truncated_poisson_noise_adjusted\",\n  \"variant_min_identity\": "<<(options.path_quality_filter?1.:.90)<<",\n  \"variant_min_query_coverage\": "<<(options.path_quality_filter?1.:.85)
             <<",\n  \"input_records\": "<<targets.size()<<",\n  \"retained_records\": "<<targets.size()<<",\n  \"extended_records\": "<<extended
             <<",\n  \"not_extended_records\": "<<targets.size()-extended<<",\n  \"ambiguous_records\": "<<ambiguous<<",\n  \"regions\": "<<written.size()
             <<",\n  \"search_limited_records\": "<<limited<<",\n  \"threads\": "<<threads<<",\n  \"max_length\": "<<options.max_bp<<",\n  \"max_flank_length\": "<<options.max_flank_bp
@@ -176,7 +202,7 @@ static int run_retained_targets(ExtensionGraph& graph,const std::vector<Query>& 
             <<",\n  \"max_retained_bases\": "<<max_bases<<",\n  \"adapter_patterns\": "<<adapter_json(options)
             <<",\n  \"branch_checks\": "<<branch_count<<",\n  \"adapter_encounters\": "<<adapter_count<<"\n}\n";
         auto mode=output(staging/"retained_protospacer_mode.txt");mode<<marker;
-        alternatives.close();alternative_fasta.close();fasta.close();contigs.close();candidates.close();extensions.close();regions.close();associations.close();sources.close();branches.close();adapters.close();placements.close();placement_checks.close();params.close();mode.close();
+        unresolved.close();unresolved_table.close();quality.close();alternatives.close();alternative_fasta.close();fasta.close();contigs.close();candidates.close();extensions.close();regions.close();associations.close();sources.close();branches.close();adapters.close();placements.close();placement_checks.close();params.close();mode.close();
         for(const auto& file:fs::directory_iterator(staging))fs::rename(file.path(),destination/file.path().filename());
         fs::remove(staging);
         std::cout<<"Retained "<<targets.size()<<'/'<<targets.size()<<" supplied protospacers unchanged; "<<extended<<" with an extension, "<<targets.size()-extended<<" without an extension\n";

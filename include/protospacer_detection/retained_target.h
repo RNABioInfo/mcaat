@@ -2,6 +2,7 @@
 #define MCAAT_PROTO_RETAINED_TARGET_H
 #include "protospacer_detection/extension_engine.h"
 #include "protospacer_detection/target_placement.h"
+#include "protospacer_detection/path_quality.h"
 
 namespace mcaat::proto {
 // All strings are oriented like the supplied, immutable protospacer.
@@ -14,6 +15,11 @@ struct PlacementCheck {
     double score=0;
     size_t query_offset=0,query_begin=0,query_end=0,expanded=0;
     bool extended=false,limited=false;
+};
+struct QualityCheck {
+    std::string sequence;
+    size_t seed_begin=0,seed_end=0;
+    PathQuality quality;
 };
 struct TargetExtension {
     std::string status="not_extended",reason;
@@ -29,6 +35,9 @@ struct TargetExtension {
     size_t placement_work=0,placement_candidates=0;
     bool variant_placement=false,placement_limited=false;
     std::vector<PlacementCheck> placement_checks;
+    std::vector<QualityCheck> quality_checks;
+    bool quality_unresolved=false;
+    size_t competing_quality_routes=0;
 };
 // Compare against one fixed best-score threshold. A pairwise "near tie"
 // comparator would be non-transitive and cannot safely be passed to std::sort.
@@ -195,7 +204,7 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
     if(left_padding>available_left){exact.reason="short_query_context_insufficient";return exact;}
     auto placements=previous_attempt?
         place_target_masked(graph,query,options.max_target_placement_states-exact.placement_work,options.max_seeds):
-        place_target(graph,query,left_padding,options.max_target_placement_states,options.max_seeds);
+        place_target(graph,query,left_padding,options.max_target_placement_states,options.max_seeds,options.path_quality_filter);
     if(previous_attempt) {
         std::set<std::string> checked{query};for(const auto& check:exact.placement_checks)checked.insert(check.core);
         placements.values.erase(std::remove_if(placements.values.begin(),placements.values.end(),[&](const auto& p){return checked.count(p.sequence);}),placements.values.end());
@@ -206,6 +215,8 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
     std::vector<TargetExtension> alternatives;
     std::vector<PlacementCheck> checks=exact.placement_checks;
     auto evaluate=[&](const TargetPlacement& placement,Options local,const std::string& phase) {
+        local.left_seed_padding=placement.query_offset;
+        local.right_seed_padding=placement.sequence.size()-placement.query_offset-query.size();
         auto candidate=extend_retained_target(graph,placement.sequence,adjusted,local,source_cycles,false);
         remaining-=std::min(remaining,candidate.expanded);
         exact.placement_limited|=candidate.search_limited;
@@ -226,7 +237,6 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
         if(remaining<2){exact.placement_limited=true;break;}
         auto local=options;
         if(extra>=local.max_flank_bp)continue;
-        local.max_flank_bp-=extra;
         // Give every placement an initial look at both external flanks before
         // a repetitive early placement can spend the entire query budget.
         local.max_flank_bp=std::min(size_t(75),local.max_flank_bp);
@@ -243,7 +253,7 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
     const size_t refine=std::min(options.beam_width,alternatives.size());
     for(size_t i=0;i<refine;++i) {
         if(remaining<2){exact.placement_limited=true;break;}
-        auto local=options;local.max_flank_bp-=extra;
+        auto local=options;
         local.max_query_states=std::max(size_t(2),remaining/(refine-i));
         auto candidate=evaluate(alternatives[i].placement,local,previous_attempt?"masked_extend":"extend");
         if(candidate.has_extension)alternatives[i]=std::move(candidate);
@@ -255,7 +265,7 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
     if(alternatives.empty()) {
         exact.placement_checks=std::move(checks);
         exact.reason=exact.placement_limited?"variant_search_limit_no_extension":"no_supported_variant_extension";
-        if(!previous_attempt&&query.size()>=graph.k()&&remaining>=2&&exact.placement_work<options.max_target_placement_states) {
+        if(!options.path_quality_filter&&!previous_attempt&&query.size()>=graph.k()&&remaining>=2&&exact.placement_work<options.max_target_placement_states) {
             auto rescue=options;rescue.noise_adjusted_stability=true;
             return extend_target_with_fallback(graph,query,contexts,rescue,source_cycles,&exact);
         }
@@ -280,6 +290,75 @@ TargetExtension extend_target_with_fallback(Graph& graph,const std::string& quer
     result.search_limited|=result.placement_limited;
     result.status=result.ambiguous?"extended_variant_ambiguous":"extended_variant";
     result.reason="graph_variant_placement";return result;
+}
+// Apply after placement/search, never during short placement probes. The input
+// sequence stays in Protospacers.fasta even when every extension is withheld.
+template<class Graph>
+void filter_target_extension(Graph& graph,TargetExtension& result,const std::string& query,
+        const std::vector<TargetContext>& contexts,const std::set<std::string>& cycles,const Options& options) {
+    if(!options.path_quality_filter || !result.has_extension)return;
+    std::set<Node> shared;
+    std::vector<FlankContext> source_models;
+    for(const auto& ctx:contexts) {
+        auto edges=graph.array_context(ctx.repeat,ctx.spacer);shared.insert(edges.first.begin(),edges.first.end());
+    }
+    for(const auto& cycle:cycles)source_models.push_back({"","",cycle});
+    SourceCycleGuard guard(graph.k(),&source_models);
+    auto candidates=std::move(result.alternatives);
+    if(candidates.empty())candidates.push_back(result.selected);
+    std::vector<Candidate> accepted,diagnostic;
+    std::set<std::tuple<std::string,size_t,size_t>> seen;
+    auto assess=[&](Candidate c) {
+        size_t begin=c.seed_begin+result.placement.query_offset,end=begin+query.size();
+        if(!seen.emplace(c.sequence,begin,end).second)return;
+        auto q=assess_path_quality(graph,c,shared,guard,0);
+        if(end<=c.sequence.size() && std::max(begin,c.sequence.size()-end)<options.min_extension_flank)
+            q.reasons.push_back("requested_flank_not_reached");
+        if(end>c.sequence.size() || c.sequence.substr(begin,query.size())!=query)
+            q.reasons.push_back("target_sequence_differs");
+        result.quality_checks.push_back({c.sequence,begin,end,q});
+        c.score=q.score;
+        if(q.accepted())accepted.push_back(c);
+        if(options.report_alternatives)diagnostic.push_back(std::move(c));
+    };
+    for(auto& c:candidates) {
+        // A bad flank cannot conceal a usable other side, nor can a good flank
+        // make a bad concatenated region pass. Test the one-sided paths too.
+        if(c.seed_begin && c.sequence.size()>c.seed_end) {
+            auto left=c;trim_right(left,graph.k());left.right.stop="quality_single_flank";assess(std::move(left));
+            auto right=c;trim_left(right);right.left.stop="quality_single_flank";assess(std::move(right));
+        }
+        assess(std::move(c));
+    }
+    auto better=[](const Candidate& a,const Candidate& b) {
+        if(a.score!=b.score)return a.score>b.score;
+        if(a.sequence.size()!=b.sequence.size())return a.sequence.size()>b.sequence.size();
+        return a.sequence<b.sequence;
+    };
+    std::sort(accepted.begin(),accepted.end(),better);
+    std::set<std::string> passing;for(const auto& c:accepted)passing.insert(c.sequence);
+    std::stable_sort(diagnostic.begin(),diagnostic.end(),[&](const auto& a,const auto& b) {
+        if(passing.count(a.sequence)!=passing.count(b.sequence))return passing.count(a.sequence)>passing.count(b.sequence);
+        return better(a,b);
+    });
+    result.alternatives=std::move(diagnostic);
+    result.has_runner=accepted.size()>1;result.runner_score=result.has_runner?accepted[1].score:0;
+    result.has_extension=!accepted.empty();
+    if(accepted.empty()) {
+        result.selected={};result.status="not_extended";result.reason="no_path_passed_quality_filter";result.ambiguous=false;return;
+    }
+    result.selected=std::move(accepted.front());
+    for(size_t i=1;i<accepted.size();++i)
+        if(accepted[i].score>=result.selected.score-options.prediction_margin && distinct_extension_routes(result.selected,accepted[i],graph.k()))
+            ++result.competing_quality_routes;
+    if(result.competing_quality_routes) {
+        result.quality_unresolved=true;result.has_extension=false;result.status="not_extended";
+        result.reason="competing_quality_paths";result.ambiguous=true;return;
+    }
+    result.ambiguous=result.has_runner && result.runner_score>=result.selected.score-options.prediction_margin;
+    result.status=result.variant_placement?(result.ambiguous?"extended_variant_ambiguous":"extended_variant"):
+        (result.ambiguous?"extended_ambiguous":"extended");
+    result.reason="quality_filter_pass";
 }
 } // namespace mcaat::proto
 #endif

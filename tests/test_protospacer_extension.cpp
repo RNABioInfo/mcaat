@@ -712,10 +712,60 @@ void test_low_depth_continuation() {
         check(result.has_extension&&result.selected.sequence==left+query+right,"ordinary low-count fluctuations must not replace a longer supported flank with a short flat dead end");
     }
 }
+void test_path_quality_filter() {
+    TargetGraph short_graph;short_graph.k_=23;
+    auto short_query=dna(17),changed=short_query;changed[2]=changed[2]=='A'?'C':'A';
+    short_graph.add(dna(40)+short_query+dna(50),6);short_graph.add(dna(40)+changed+dna(50),600);
+    auto placements=place_target(short_graph,short_query,0,50000,128,true);
+    check(!placements.values.empty(),"short exact spacer is embedded in real graph k-mers");
+    for(const auto& p:placements.values)check(p.sequence.substr(p.query_offset,short_query.size())==short_query && p.identity==1 && p.coverage==1,"exact mode excludes changed short targets regardless of depth");
+    TargetGraph padded;padded.k_=23;auto long_path=padded.add(dna(800)+short_query+dna(800),6);
+    Path core{long_path[796]};Seed embedding{core,0,23,padded.neighbors(core[0],true),padded.neighbors(core[0],false)};
+    Options padded_options;padded_options.left_seed_padding=4;padded_options.right_seed_padding=2;
+    auto padded_result=reconstruct(padded,embedding,{},padded_options);
+    check(std::any_of(padded_result.begin(),padded_result.end(),[](const auto& c){return c.seed_begin+4==750 && c.sequence.size()-c.seed_end+2==750;}),"short-target padding is charged to its own flank, allowing exactly 750 added bases on each side");
+    auto sequence=dna(750);
+    auto good=flank_quality(sequence,23,std::vector<double>(727,6));
+    check(good.reasons.empty(),"supported complex flank passes quality checks");
+    auto single=flank_quality(sequence,23,std::vector<double>(727,1));
+    check(std::find(single.reasons.begin(),single.reasons.end(),"singleton_dominated")!=single.reasons.end(),"flat count one is not strong extension evidence");
+    auto simple=flank_quality(std::string(750,'A'),23,std::vector<double>(727,6));
+    check(std::find(simple.reasons.begin(),simple.reasons.end(),"low_complexity")!=simple.reasons.end(),"uniform multiplicity cannot rescue low sequence complexity");
+    std::vector<double> jump(384,6);jump.insert(jump.end(),384,60);
+    check(flank_quality(dna(791),23,jump).depth_break,"sustained multiplicity jump is flagged");
+    auto repeat=dna(60);auto bounded=dna(300)+repeat+repeat+dna(330);
+    check(flank_quality(bounded,23,std::vector<double>(727,6)).reasons.empty(),"a bounded external repeat is permitted");
+    TargetGraph graph;graph.k_=23;auto query=dna(31),left=dna(750),right=std::string(750,'A');
+    auto path=graph.add(left+query+right,6);
+    Candidate c;c.sequence=left+query+right;c.path=path;c.seed_begin=750;c.seed_end=781;c.left_length=c.right_length=750;
+    TargetExtension result;result.has_extension=true;result.selected=c;result.alternatives={c};result.placement=score_target_placement(query,query,0);
+    Options o;o.path_quality_filter=true;o.min_extension_flank=750;o.report_alternatives=true;
+    filter_target_extension(graph,result,query,{}, {},o);
+    check(result.has_extension && result.selected.sequence==left+query,"bad right flank is discarded while good 750-base left flank survives");
+    check(result.quality_checks.size()==3,"all full and one-sided decisions recorded");
+    auto original=result;auto altered=query;altered[0]=altered[0]=='A'?'C':'A';
+    filter_target_extension(graph,result,altered,{}, {},o);
+    check(!result.has_extension && result.reason=="no_path_passed_quality_filter","changed target is withheld, never silently substituted");
+    result=original;o.min_extension_flank=751;
+    filter_target_extension(graph,result,query,{}, {},o);
+    check(!result.has_extension,"750 maximum is not counted as reaching a requested 751 bases");
+    Candidate first=original.selected,alternative=first;
+    alternative.sequence=dna(750)+query;alternative.path=graph.add(alternative.sequence,6);
+    check(distinct_extension_routes(first,alternative,23),"different same-side routes conflict");
+    auto bubble=first;bubble.sequence[200]=bubble.sequence[200]=='A'?'C':'A';
+    check(!distinct_extension_routes(first,bubble,23),"one-base bubble does not make a distinct long route");
+    auto opposite=first;opposite.sequence=query+dna(750);opposite.seed_begin=0;opposite.seed_end=query.size();
+    check(!distinct_extension_routes(first,opposite,23),"opposite flanks are not competing same-side routes");
+    result=original;result.alternatives={first,alternative};o.min_extension_flank=750;
+    filter_target_extension(graph,result,query,{}, {},o);
+    check(!result.has_extension && result.quality_unresolved && result.reason=="competing_quality_paths","indistinguishable different routes are withheld rather than presented as a resolved prediction");
+    check(!result.selected.sequence.empty(),"unresolved best candidate remains available for its separate diagnostic output");
+}
 int main() {
     try {
         test_extension();test_branches();test_coverage();test_reads_and_pam();test_join_and_repeated_seed();test_array_context();test_interval_compaction();test_stability_selection();test_adapter_branches();test_graph_only_acceptance();test_boundary_correction();test_junction_checks_and_flank_caps();test_retained_targets();test_source_crossing_once();test_unscored_source_pool();test_variant_placement();test_local_coverage();test_supported_near_tie();test_equal_depth_and_bounded_repeats();
         test_low_depth_continuation();
+        test_path_quality_filter();
         for(auto model:{"auto","poisson","negative-binomial"}){Options o;o.coverage_model=model;o.validate();}
         invalid([]{Options o;o.beam_width=0;o.validate();});
         invalid([]{Options o;o.source_context_width=0;o.validate();});

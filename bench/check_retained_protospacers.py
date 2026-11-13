@@ -63,6 +63,9 @@ def check(baseline, output):
         observed = sequence[begin:end]
         assert 0 <= begin < end <= len(sequence)
         oriented = reverse_complement(observed) if link['strand'] == '-' else observed
+        if params.get('path_quality_filter'):
+            assert oriented == seed, 'quality-filtered output changed the original target'
+            assert max(begin, len(sequence) - end) >= params['min_extension_flank']
         if row['extension_status'].startswith('extended_variant'):
             assert params['schema'] >= 10 and params['target_variant_fallback']
             assert oriented == link['observed_target'] and len(oriented) == len(seed)
@@ -106,7 +109,7 @@ def check(baseline, output):
             seed_id = row['seed_id']
             assert seed_id in original
             counts[seed_id] += 1
-            assert int(row['rank']) == counts[seed_id] <= 2 * params['beam_width']
+            assert int(row['rank']) == counts[seed_id] <= (6 if params.get('path_quality_filter') else 2) * params['beam_width']
             sequence = alternative_sequences[row['candidate_id']]
             assert sequence == row['sequence'] and len(sequence) == int(row['length']) <= params['max_length']
             begin, end = int(row['seed_begin']), int(row['seed_end'])
@@ -124,6 +127,22 @@ def check(baseline, output):
                 emitted = contigs[by_seed[seed_id]['region_id']]
                 assert sequence in (emitted, reverse_complement(emitted)), 'selected alternative differs from primary output'
     assert params['input_records'] == params['retained_records'] == len(original)
+    if params.get('path_quality_filter'):
+        quality = table(output / 'protospacer_path_quality.tsv')
+        chosen = [r for r in quality if r['selected'] == '1']
+        assert len(chosen) == len(extended) and {r['seed_id'] for r in chosen} == extended
+        assert all(r['accepted'] == '1' and r['reasons'] == 'pass' for r in chosen)
+        if params.get('path_quality_version', 1) >= 2:
+            unresolved = fasta(output / 'UnresolvedExtensions.fasta')
+            unresolved_rows = table(output / 'protospacer_unresolved.tsv')
+            expected = {r['seed_id'] for r in extensions if r['reason'] == 'competing_quality_paths'}
+            assert set(unresolved) == expected == {r['seed_id'] for r in unresolved_rows}
+            assert not expected & extended
+            for row in unresolved_rows:
+                seq = unresolved[row['seed_id']]
+                begin = int(row['left_bp']); end = len(seq) - int(row['right_bp'])
+                assert seq[begin:end] == original[row['seed_id']]
+                assert max(begin, len(seq) - end) >= params['min_extension_flank']
     assert params['extended_records'] == len(links)
     assert params['not_extended_records'] == len(original) - len(links)
     return dict(input_records=len(original), retained_unchanged=len(retained),

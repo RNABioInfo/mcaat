@@ -69,7 +69,7 @@ provided=out/'supplied.fasta';provided.write_text(''.join('>'+n+'\n'+s+'\n' for 
 input_hash=digest(provided);array_hash=digest(arrays/'CRISPR_Arrays_1.txt')
 run('build',['--input-files',reads,'--output-folder',out/'graph_build','--threads','2','--ram','2G','--threshold-multiplicity','1000000','--autoclean','false'])
 graph=out/'graph_build/graph/graph';graph_hash={f.name:digest(f) for f in graph.parent.glob('graph.*')}
-common_args=['phage-curate','--arrays',arrays,'--graph',graph,'--protospacers',provided]
+common_args=['phage-curate','--arrays',arrays,'--graph',graph,'--protospacers',provided,'--path-quality-filter','false']
 run('default',[*common_args,'--output',out/'default'])
 result=out/'default';extensions={r['seed_id']:r for r in rows(result/'protospacer_extensions.tsv')}
 check_outputs(provided,result)
@@ -143,6 +143,24 @@ run('baseline',[*common_args,'--protospacers',baseline,'--output',out/'baseline8
 assert len(fasta(out/'baseline81/Protospacers.fasta'))==81
 assert (out/'baseline81/Protospacers.fasta').read_bytes()==baseline.read_bytes()
 check_outputs(baseline,out/'baseline81')
+# Exercise the new production filter separately from historical allele-rescue
+# behavior. Synthetic truth is checked afterward, never passed to MCAAT.
+for threads in (1,24):
+ name='quality'+str(threads)
+ run(name,[*common_args,'--path-quality-filter','true','--min-extension-flank','750','--report-alternatives','true','--threads',str(threads),'--output',out/name])
+ check_outputs(provided,out/name)
+ quality_rows=rows(out/name/'protospacer_path_quality.tsv')
+ accepted={r['seed_id']:r for r in quality_rows if r['selected']=='1'}
+ assert all(r['accepted']=='1' and max(int(r['left_bp']),int(r['right_bp']))>=750 for r in accepted.values())
+ for seed_id in ('straight','reverse','alias','branch','adapter'):
+  assert seed_id in accepted, (seed_id,accepted)
+  sequence=accepted[seed_id]['sequence']
+  truth=true_branch if seed_id=='branch' else adapter_target if seed_id=='adapter' else straight
+  assert sequence in truth or rc(sequence) in truth
+ assert 'variant' not in accepted and 'masked_variant' not in accepted
+ assert fasta(out/name/'Protospacers.fasta')==seeds
+for file in (out/'quality1').iterdir():
+ if file.name!='protospacer_parameters.json':assert file.read_bytes()==(out/'quality24'/file.name).read_bytes(),file.name
 assert digest(provided)==input_hash and digest(arrays/'CRISPR_Arrays_1.txt')==array_hash
 assert graph_hash=={f.name:digest(f) for f in graph.parent.glob('graph.*')}
 summary=dict(supplied_records=len(seeds),retained_records=len(seeds),baseline_records_preserved=81,
@@ -151,5 +169,5 @@ summary=dict(supplied_records=len(seeds),retained_records=len(seeds),baseline_re
  true_branch_recovered=True,variant_target_recovered=True,variant_length=len(variant_sequence),
  masked_target_recovered=True,masked_length=len(masked_sequence),
  exact_only_policy_checked=True,threads_1_24_identical=True,failed_extensions_keep_protospacers=True,
- original_metagenome_graph_tested=False)
+ quality_filter_tested=True,quality_threads_1_24_identical=True,original_metagenome_graph_tested=False)
 (out/'validation.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary,indent=2))

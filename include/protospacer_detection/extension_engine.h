@@ -1,6 +1,7 @@
 #ifndef MCAAT_PROTO_EXTENSION_ENGINE_H
 #define MCAAT_PROTO_EXTENSION_ENGINE_H
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -25,6 +26,16 @@ inline std::string reverse_complement(std::string s) {
     return s;
 }
 inline std::string canonical(const std::string& s) {return std::min(s,reverse_complement(s));}
+inline double triplet_entropy(const std::string& s,size_t begin,size_t length) {
+    if(length<3)return 0;
+    std::array<size_t,64> counts{};size_t code=0;
+    for(size_t i=0;i<length;++i) {
+        auto base=std::string("ACGT").find(s[begin+i]);
+        if(base==std::string::npos)throw std::invalid_argument("non-DNA quality window");
+        code=((code<<2)|base)&63;if(i>=2)++counts[code];
+    }
+    double h=0;for(auto n:counts)if(n){double p=double(n)/(length-2);h-=p*std::log2(p);}return h;
+}
 inline double median(std::vector<double> x) {
     if(x.empty())return 0;
     std::sort(x.begin(),x.end());return x.size()%2?x[x.size()/2]:(x[x.size()/2-1]+x[x.size()/2])/2;
@@ -41,6 +52,9 @@ struct Options {
     size_t source_context_width=256; // unscored boundary paths; separate from the downstream beam
     bool target_variant_fallback=true;
     bool report_alternatives=false; // diagnostic shortlist; primary output remains one per input
+    bool path_quality_filter=false; // enabled by the CLI for supplied targets
+    size_t min_extension_flank=250;
+    size_t left_seed_padding=0,right_seed_padding=0; // internal, short-target graph embedding
     bool allow_source_array_crossing=true; // flag one passage; never revisit a source-array vertex
     bool noise_adjusted_stability=false; // enabled only for the masked-target rescue
     size_t max_target_placement_states=50000;
@@ -338,6 +352,10 @@ struct Side {
     size_t context_clear_at=0;
     std::string adapter_tail;
     bool adapter_overlaps_seed=false;
+    std::string quality_tail;
+    size_t quality_bases=0,quality_windows=0,low_quality_windows=0;
+    bool quality_mode=false;
+    double complexity_loss()const{return quality_windows?double(low_quality_windows)/quality_windows:0;}
 };
 struct AdapterStop {
     bool backward=false,overlaps_seed=false;
@@ -416,9 +434,11 @@ Coverage path_coverage(Graph& graph,const Path& nodes,size_t length,bool backwar
 }
 struct WalkResult {std::vector<Side> paths;size_t expanded=0;bool beam_pruned=false,work_limited=false;};
 inline bool better_side(const Side& a,const Side& b) {
+    if(a.quality_mode && b.quality_mode && (a.stop=="length_limit")!=(b.stop=="length_limit"))return a.stop=="length_limit";
     if(a.adapter_overlaps_seed!=b.adapter_overlaps_seed)return !a.adapter_overlaps_seed;
     if((a.nodes.size()>1)!=(b.nodes.size()>1))return a.nodes.size()>1;
-    if(a.coverage.profile.loss()!=b.coverage.profile.loss())return a.coverage.profile.loss()<b.coverage.profile.loss();
+    double al=a.coverage.profile.loss()+a.complexity_loss(),bl=b.coverage.profile.loss()+b.complexity_loss();
+    if(al!=bl)return al<bl;
     if(a.nodes.size()!=b.nodes.size())return a.nodes.size()>b.nodes.size();
     return a.nodes<b.nodes;
 }
@@ -568,7 +588,7 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
     WalkResult result;
     const auto& first=backward?seed.left:seed.right;
     Node endpoint=backward?seed.path.front():seed.path.back();
-    Side initial;initial.nodes={endpoint};
+    Side initial;initial.nodes={endpoint};initial.quality_mode=options.path_quality_filter;
     Path oriented_seed=seed.path;if(backward)std::reverse(oriented_seed.begin(),oriented_seed.end());
     SourceCycleGuard source_guard(graph.k(),contexts);
     for(size_t i=1;i<oriented_seed.size();++i)
@@ -665,7 +685,7 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                 next.source_run=source_guard.contains(graph,next.nodes.back(),a,backward)?next.source_run+1:0;
                 bool source_edge=options.allow_source_array_crossing && source_guard.contains(graph,next.nodes.back(),a,backward);
                 char base=0;
-                if(!adapter_guard.empty() || next.context=="pending" || next.crosses_source_array)base=graph.extension_base(a,backward);
+                if(options.path_quality_filter || !adapter_guard.empty() || next.context=="pending" || next.crosses_source_array)base=graph.extension_base(a,backward);
                 auto adapter=adapter_guard.append(next.adapter_tail,base);
                 if(!adapter.empty()) {
                     // The completing base has not been appended to nodes yet.
@@ -697,9 +717,18 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
                     (junction || next.coverage.baseline.empty() || next.since_sample>=graph.k()+1);
                 auto before=next.coverage;
                 bool evidence=next.context!="pending" && next.context!="crosses_source_array" && !source_edge && (!shared_context || !shared_context->count(a.edge));
+                if(options.path_quality_filter) {
+                    if(evidence) {
+                        next.quality_tail+=base;if(next.quality_tail.size()>64)next.quality_tail.erase(0,1);
+                        ++next.quality_bases;
+                        if(next.quality_tail.size()==64 && next.quality_bases%16==0) {
+                            ++next.quality_windows;next.low_quality_windows+=triplet_entropy(next.quality_tail,0,64)<3.;
+                        }
+                    }else next.quality_tail.clear();
+                }
                 double penalty=evidence?next.coverage.observe(a.count,options,sample):0;
                 if(sample)next.since_sample=0;else ++next.since_sample;
-                if(penalty>options.max_coverage_penalty) {next.coverage=std::move(before);rejected.emplace_back(std::move(next),"coverage_break");continue;}
+                if(penalty>options.max_coverage_penalty && !options.path_quality_filter) {next.coverage=std::move(before);rejected.emplace_back(std::move(next),"coverage_break");continue;}
                 next.nodes.push_back(a.to);children.push_back(std::move(next));
             }
             // Rejected siblings cannot manufacture a short winning prefix.
@@ -728,7 +757,8 @@ WalkResult extend(Graph& graph,const Seed& seed,bool backward,size_t budget,
         }
         if(next_frontier.size()>options.beam_width) {
             std::sort(next_frontier.begin(),next_frontier.end(),[](const Side& a,const Side& b){
-                if(a.beam_profile.loss()!=b.beam_profile.loss())return a.beam_profile.loss()<b.beam_profile.loss();
+                double al=a.beam_profile.loss()+a.complexity_loss(),bl=b.beam_profile.loss()+b.complexity_loss();
+                if(al!=bl)return al<bl;
                 return a.nodes<b.nodes;
             });
             if(options.allow_source_array_crossing) {
@@ -862,9 +892,10 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
         Candidate c;c.path=seed.path;c.sequence=graph.spell(seed.path);c.seed_end=seed_bp;
         c.left.stop=c.right.stop="adapter_in_seed";return {c};
     }
-    auto side_budget=std::min(budget,options.max_flank_bp);
-    auto left=extend(graph,seed,true,side_budget,array_edges,options,shared_context,left_context,diagnostics);
-    auto right=extend(graph,seed,false,side_budget,array_edges,options,shared_context,right_context,diagnostics);
+    auto left_budget=std::min(budget,options.max_flank_bp-std::min(options.max_flank_bp,options.left_seed_padding));
+    auto right_budget=std::min(budget,options.max_flank_bp-std::min(options.max_flank_bp,options.right_seed_padding));
+    auto left=extend(graph,seed,true,left_budget,array_edges,options,shared_context,left_context,diagnostics);
+    auto right=extend(graph,seed,false,right_budget,array_edges,options,shared_context,right_context,diagnostics);
     std::vector<FlankContext> cycle_models;
     if(left_context)cycle_models.insert(cycle_models.end(),left_context->begin(),left_context->end());
     if(right_context)cycle_models.insert(cycle_models.end(),right_context->begin(),right_context->end());
@@ -927,6 +958,10 @@ std::vector<Candidate> reconstruct(Graph& graph,const Seed& seed,const std::set<
     }
     if(results.size()>options.beam_width) {
         std::sort(results.begin(),results.end(),[&](const auto& a,const auto& b){
+            if(options.path_quality_filter) {
+                auto full=[&](const auto& c){return std::max(c.seed_begin+options.left_seed_padding,c.sequence.size()-c.seed_end+options.right_seed_padding)>=options.max_flank_bp;};
+                if(full(a)!=full(b))return full(a);
+            }
             if((a.sequence.size()>seed_bp)!=(b.sequence.size()>seed_bp))return a.sequence.size()>seed_bp;
             if(a.score!=b.score)return a.score>b.score;
             return a.sequence.size()!=b.sequence.size()?a.sequence.size()>b.sequence.size():a.sequence<b.sequence;
