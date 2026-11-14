@@ -55,6 +55,8 @@ for name,genomes in [('negative',hosts),('positive',[hosts[0],target])]:
     result=out/name
     active_arrays=arrays if name=='negative' else positive_arrays
     elapsed=run(name,['phage-curate','--arrays',active_arrays,'--graph',graph_run/'graph/graph','--output',result,'--threads','2'])
+    parameters=json.loads((result/'protospacer_parameters.json').read_text())
+    assert parameters['allow_source_array_crossing'] is False,'discovery must exclude source-array contexts by default'
     queries=table(result/'protospacer_queries.tsv');links=table(result/'protospacer_associations.tsv')
     regions=table(result/'protospacer_regions.tsv');seeds=table(result/'protospacer_candidates.tsv')
     assert all(q['mapping_status']!='not_fully_mapped' for q in queries),'control input missing from graph'
@@ -63,6 +65,14 @@ for name,genomes in [('negative',hosts),('positive',[hosts[0],target])]:
         assert all(q['mapping_status']=='no_external_flank' for q in queries)
         assert not (result/'Protospacers.fasta').read_text()
         assert any(r['reason']=='source_array_context' for r in table(result/'protospacer_decisions.tsv'))
+        # An old batch command must fail before search rather than silently turn
+        # source-array escape routes into newly detected protospacers.
+        unsafe=out/'unsafe_discovery'
+        rejected=subprocess.run([str(binary),'phage-curate','--arrays',str(arrays),
+            '--graph',str(graph_run/'graph/graph'),'--output',str(unsafe),
+            '--source-array-crossing','true'],text=True,capture_output=True)
+        assert rejected.returncode!=0 and 'requires --protospacers' in rejected.stderr
+        assert not (unsafe/'Protospacers.fasta').exists()
         # Raising identity to 1 disables approximate exclusion and must reproduce
         # the original leak for variant copies. Exact copies stay excluded.
         strict=out/'exact_only'

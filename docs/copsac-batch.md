@@ -20,6 +20,11 @@ To restrict the batch, append IDs, for example `SRR14017550 SRR14017552`.
 `--root` defaults to `/vol/d/data/copsac`; `--mcaat` defaults to `build/mcaat`
 relative to this repository, independent of the current working directory.
 
+After the discovery correction, rerun with the rebuilt binary and updated script.
+Old jobs are preserved for comparison; their detections must not be reused as
+supplied targets. The changed code creates a fresh results job and reuses complete
+saved graphs. Downloads and graph construction are skipped for those samples.
+
 ## What happens for each SRR
 
 1. Select immediate `SRR[digits]` folders containing a nonempty
@@ -39,10 +44,15 @@ relative to this repository, independent of the current working directory.
 4. Build the read library and k=23, minimum-edge-frequency=1 graph. These are
    graph-only commands: array detection and cycle search are not rerun.
    Keep graphs, downloaded reads, library files, logs and failed partial work.
-5. Discover protospacers using the saved arrays. Then feed its
+5. Discover protospacers using the saved arrays with `--source-array-crossing false`.
+   A path through the source repeat does not establish a separate target, even
+   if it subsequently reaches a long, stable flank. Then feed its
    `Protospacers.fasta` into a separate `--protospacers` invocation using quality
-   filter version 3. This second pass is necessary because array-discovery mode
-   does not apply the supplied-target quality filter.
+   filter version 3 and `--source-array-crossing true`. Only this supplied-target
+   extension pass permits a single source-array passage. The CLI rejects crossing
+   in discovery mode. This second pass is necessary because array-discovery mode
+   does not apply the supplied-target quality filter. Retaining supplied IDs is
+   not itself evidence that they are separate targets.
 6. Verify that every detected ID and sequence survives the second pass, report
    extension counts, and move to the next SRR. Zero detections is a successful
    `NO_DETECTIONS` outcome; the empty FASTA is not submitted for extension.
@@ -133,4 +143,6 @@ unpaired library construction, completion hashes and process accounting.
 builds a small native graph and exercises both prediction stages, a failed first
 sample followed by a successful one, rerun/resume, existing-graph reuse and an
 unnumbered legacy array report. Its FASTQs are synthetic and cached locally;
-no real metagenomic reads are downloaded by this test.
+no real metagenomic reads are downloaded by this test. It also requires exactly
+one detection from three source spacers: only one has a separate synthetic target.
+The other two must be rejected despite having traversable source-array flanks.

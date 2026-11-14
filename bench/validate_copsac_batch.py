@@ -61,8 +61,13 @@ assert rows[bad.name]["status"] == "FAILED" and rows[good.name]["status"] == "DO
 assert skip.name not in rows
 job = Path(rows[good.name]["results"])
 detected = batch.read_fasta(job / "discovery/Protospacers.fasta")
-assert len(detected) > 0 and batch.read_fasta(job / "extensions/Protospacers.fasta") == detected
-assert len(batch.read_fasta(job / "extensions/ContiguousPaths.fasta")) > 0
+def canonical(s): return min(s, s.translate(str.maketrans("ACGT", "TGCA"))[::-1])
+assert {canonical(s) for s in detected.values()} == {canonical(spacers[0])}, \
+    "only the spacer with a separate target may be detected; source-array spacers are negative controls"
+assert len(detected) == 1 and batch.read_fasta(job / "extensions/Protospacers.fasta") == detected
+assert len(batch.read_fasta(job / "extensions/ContiguousPaths.fasta")) == 1
+assert json.loads((job / "discovery/protospacer_parameters.json").read_text())["allow_source_array_crossing"] is False
+assert json.loads((job / "extensions/protospacer_parameters.json").read_text())["allow_source_array_crossing"] is True
 assert not list(root.rglob("cycles.txt")), "graph-only build must not run cycle search"
 graph_dir = good / "protospacer_batch/graph"
 before = {f.name: batch.digest(f) for f in graph_dir.glob("graph.*")}
@@ -90,7 +95,7 @@ assert {r["stage"] for r in metrics if r["srr"] == good.name} == {
     "download_reads", "build_read_library", "build_graph", "discover_protospacers", "filter_extensions"}
 result = dict(status="passed", detected=len(detected),
     extensions=len(batch.read_fasta(job / "extensions/ContiguousPaths.fasta")),
-    checks=["graph-only construction", "two-pass native prediction", "all detections retained",
+    checks=["graph-only construction", "two-pass native prediction", "one separate target detected; two array-only spacers rejected", "all detections retained",
             "failed sample does not stop next sample", "checksum-verified cached download",
             "restart skips unchanged completed outputs", "existing graph skips download/build",
             "unnumbered legacy array report", "old FAILED marker retried", "graph bytes unchanged",

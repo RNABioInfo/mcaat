@@ -362,7 +362,8 @@ def process(sample, arrays, a, runner, binary_hash):
             "reads": json.loads((reads / "reads.json").read_text()), "ram_gb": a.ram_gb, "threads": a.threads})
     # File identity, settings and exact array contents identify a resumable job.
     inputs = {p.name: digest(p) for p in arrays}
-    config = {"version": 1, "arrays": inputs, "binary_sha256": binary_hash, "helper_sha256": digest(__file__),
+    config = {"version": 2, "arrays": inputs, "binary_sha256": binary_hash, "helper_sha256": digest(__file__),
+              "discovery_source_array_crossing": False, "extension_source_array_crossing": True,
               "graph": graph, "threads": a.threads, "beam_width": a.beam_width,
               "max_states": a.max_states, "max_query_states": a.max_query_states,
               "max_retained_bases": a.max_retained_bases, "max_flank_length": 750, "min_extension_flank": 750}
@@ -387,14 +388,18 @@ def process(sample, arrays, a, runner, binary_hash):
         "--threads", a.threads, "--beam-width", a.beam_width, "--source-context-width", 256,
         "--max-node-visits", 3, "--max-length", 1550, "--max-flank-length", 750,
         "--max-states", a.max_states, "--max-query-states", a.max_query_states,
-        "--max-retained-bases", a.max_retained_bases, "--source-array-crossing", "true",
+        "--max-retained-bases", a.max_retained_bases,
         "--correct-spacer-boundaries", "true", "--resolve-graph-ties", "false"]
     discovery, filtered = job / "discovery", job / "extensions"
     if not completed(discovery):
         free_space(base, a.min_free_gb * GIB)
         archive_incomplete(discovery)
-        runner.run(srr, "discover_protospacers", common + ["--output", discovery])
+        runner.run(srr, "discover_protospacers", common + ["--output", discovery,
+            "--source-array-crossing", "false"])
         read_fasta(discovery / "Protospacers.fasta")
+        params = json.loads((discovery / "protospacer_parameters.json").read_text())
+        if params.get("allow_source_array_crossing") is not False:
+            raise RuntimeError("discovery must exclude source-array contexts before calling protospacers")
         checkpoint(discovery, ["Protospacers.fasta", "protospacer_parameters.json", "protospacer_queries.tsv"])
     else:
         runner.say(f"{srr}: resuming after completed discovery")
@@ -407,6 +412,7 @@ def process(sample, arrays, a, runner, binary_hash):
             free_space(base, a.min_free_gb * GIB)
             archive_incomplete(filtered)
             runner.run(srr, "filter_extensions", common + ["--output", filtered,
+                "--source-array-crossing", "true",
                 "--protospacers", discovery / "Protospacers.fasta", "--path-quality-filter", "true",
                 "--min-extension-flank", 750, "--prediction-score-margin", 0.1])
             if read_fasta(filtered / "Protospacers.fasta") != detected:

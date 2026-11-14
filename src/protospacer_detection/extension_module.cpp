@@ -322,6 +322,7 @@ static double number(const std::string& flag,const std::string& value) {
 
 int run_extension_module(int argc,char** argv) {
     Options options;options.path_quality_filter=true;fs::path arrays,graph_path,destination,reads1,reads2,pam_file,supplied_targets;
+    bool source_crossing_explicit=false;
     size_t threads=1,min_insert=0,max_insert=1000,max_index=5000000,max_read_work=1000000,max_retained_bases=50000000;
     for(int i=1;i<argc;++i) {
         std::string flag=argv[i];
@@ -348,7 +349,8 @@ int run_extension_module(int argc,char** argv) {
                 "Quality mode requires the entire supplied target exactly; short targets use exact graph embeddings, not changed bases.\n"
                 "--min-extension-flank 250 (minimum added bases on one side for quality-filtered output)\n"
                 "--source-context-width 256 (separate bounded pool before downstream stability can be scored)\n"
-                "--source-array-crossing true (flag a single passage; source-array nodes cannot be revisited)\n"
+                "--source-array-crossing true (--protospacers only; flag one passage without source-node revisits)\n"
+                "Discovery always excludes source-array repeat contexts; crossing cannot establish a new target.\n"
                 "--array-repeat-identity 0.85 (edit similarity for source-array repeat copies)\n"
                 "--min-external-flank 0 (0 = k+1 bases wholly outside the seed; 1 restores short-tail behavior)\n"
                 "--joint-flank-check true (split incompatible left/right multiplicities before selection)\n"
@@ -398,6 +400,7 @@ int run_extension_module(int argc,char** argv) {
         }
         else if(flag=="--source-array-crossing") {
             if(value!="true" && value!="false")throw std::invalid_argument(flag+" needs true or false");
+            source_crossing_explicit=true;
             options.allow_source_array_crossing=value=="true";
         }
         else if(flag=="--array-repeat-identity")options.array_repeat_identity=number(flag,value);
@@ -444,6 +447,14 @@ int run_extension_module(int argc,char** argv) {
         else if(flag=="--pam-rules")pam_file=value;
         else if(flag=="--pam-weight")options.pam_weight=number(flag,value);
         else throw std::invalid_argument("unknown phage-curate option: "+flag);
+    }
+    // A route through the source repeat can leave the array and acquire a long,
+    // stable flank without providing any evidence of a separate spacer copy.
+    // Crossing is a recovery option for supplied targets, never discovery evidence.
+    if(supplied_targets.empty()) {
+        if(source_crossing_explicit && options.allow_source_array_crossing)
+            throw std::invalid_argument("--source-array-crossing true requires --protospacers: a source-array route cannot establish a new protospacer; use false for discovery");
+        options.allow_source_array_crossing=false;
     }
     options.validate();
     if(arrays.empty() || graph_path.empty())throw std::invalid_argument("phage-curate requires --arrays and --graph");
@@ -747,6 +758,7 @@ int run_extension_module(int argc,char** argv) {
         auto adapters_json=adapter_json(options);
         parameters<<"{\n  \"schema\": 10,\n  \"extension_algorithm\": \"equal_depth_beam_source_crossing_v5\",\n  \"source_cycle_scope\": \"all_observations_from_source_arrays\",\n  \"stability_observations\": \"all_external_edges\",\n  \"coverage_local_window\": \"all_external_edges\",\n  \"length_tie_policy\": \"fixed_margin_and_within_flank_stability\",\n  \"weak_edge_fraction_weight\": 1,\n  \"selection\": \"one_prediction_per_distinct_spacer\",\n  \"ranking\": \"log2_multiplicity_stability\",\n  \"graph\": "<<json_string(fs::absolute(graph_path).string())<<",\n  \"arrays\": "<<json_string(fs::absolute(arrays).string())
             <<",\n  \"allow_source_array_crossing\": "<<(options.allow_source_array_crossing?"true":"false")
+            <<",\n  \"mode\": \"discover_protospacers\",\n  \"discovery_context_policy\": \"exclude_source_array_repeat_contexts\""
             <<",\n  \"max_length\": "<<options.max_bp<<",\n  \"beam_width\": "<<options.beam_width<<",\n  \"source_context_width\": "<<options.source_context_width<<",\n  \"max_node_visits\": "<<options.max_node_visits<<",\n  \"max_states_per_side\": "<<options.max_states
             <<",\n  \"max_paths_per_seed\": "<<options.max_paths<<",\n  \"max_seeds_per_query\": "<<options.max_seeds<<",\n  \"max_query_states\": "<<options.max_query_states<<",\n  \"min_match_bp\": "<<std::max(graph.k(),options.min_match)
             <<",\n  \"max_retained_bases\": "<<max_retained_bases

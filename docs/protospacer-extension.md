@@ -131,8 +131,14 @@ reference-match quality of the extended flanks.
 
 ### One passage through source-array context
 
-The default `--source-array-crossing true` keeps a branch after its source
-repeat is recognized. The path is marked `crosses_source_array`, rather than
+In supplied-target mode (`--protospacers`), the default
+`--source-array-crossing true` keeps a branch after its source repeat is
+recognized. Discovery always excludes these source-repeat contexts and rejects
+an explicit request to enable crossing: escaping from the source array does
+not establish that the spacer has a separate target. Only extend targets that
+have passed discovery or have been established independently in supplied mode.
+
+In supplied-target mode the path is marked `crosses_source_array`, rather than
 rejected at that boundary. A source-array vertex may not be revisited outside
 the immutable seed, including across the joined left/right flanks. A second
 approximate source-repeat copy is also rejected at the existing
@@ -160,10 +166,11 @@ References are never used for ranking.
 
 Supplied-target reports include `left_crosses_source_array`,
 `right_crosses_source_array`, and the number of scored edges on each side.
-Discovery-mode associations include the same crossing flags. A flag records the
+Discovery-mode associations retain the same columns, with crossing disabled. A flag records the
 path's traversal, not a validation of viral origin. All supplied protospacers
 remain unchanged regardless of which extension wins. Set
-`--source-array-crossing false` for the previous boundary-rejection policy.
+`--source-array-crossing false` to also reject source-repeat contexts during
+supplied-target extension.
 Parameters record `equal_depth_beam_source_crossing_v5` and the chosen policy.
 
 For an explicit audit, add `--report-alternatives true` in supplied-target mode.
