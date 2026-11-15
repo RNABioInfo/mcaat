@@ -140,33 +140,14 @@ autoclean=true
 `input-files` accepts one or two paths separated by spaces, commas, or semicolons.
 
 ## v2.0.0 (planned)
-- **CAS detection**: identify and annotate CAS genes flanking detected CRISPR arrays
-- **Protospacer detection (development branch)**: exact graph-based seeds and
-  bounded bidirectional target extension, with optional read-pair and PAM evidence.
-  See [usage, scoring, output fields and validation](docs/protospacer-extension.md).
-
-```bash
-build/mcaat phage-curate \
-  --arrays /path/to/array-results \
-  --graph /path/to/previous-run/graph/graph \
-  --output /path/to/protospacer-results \
-  --threads 24
-```
-
-This uses the existing graph without rerunning cycle search. It compares candidate
-extensions by multiplicity stability within and between their flanks and selects
-**one final prediction per distinct spacer**, across all seed intervals. Short or
-one-sided regions remain eligible. Use `phage-curate --help` for limits and optional
-evidence inputs. Selection is a ranking heuristic, not proof of viral origin.
-
-Source-array repeat variants are excluded using configurable edit similarity
-(`--array-repeat-identity 0.85`). Unresolved seeds, including searches stopped
-by work limits without an external flank, are written to `UnresolvedSeeds.fasta`
-and diagnostic TSVs, separately from detections.
-`MatchedSpacers.fasta` and the JSON summary report distinct matched input spacers;
-`Protospacers.fasta` contains the one selected interval for each matched spacer.
-`protospacer_selection.tsv` reports score components, comparison counts and ties.
-A partial match is not promoted to a full-spacer match.
+- **CAS detection**: identify and annotate CAS genes flanking detected CRISPR arrays.
+- **Protospacer workflow (experimental)**: one native class performs connected
+  spacer alignment, local-unitig extension, filtering and output without an added
+  assembler, aligner or solver. The full SRR14017553 test produced 144 target intervals
+  and 58 extensions; 48 targets and 5 extensions met the reference criteria. Extension
+  quality remains inadequate for a reliable replacement. Read the
+  [measured evaluation](docs/protospacer-evaluation-SRR14017553.md) before batch use,
+  and the [workflow and function reference](docs/protospacer-extension.md).
 
 ## Citation
 

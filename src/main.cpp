@@ -33,7 +33,7 @@
 #include "core/sdbg_build.h"
 #include "core/settings.h"
 #include "protospacer_detection/phage_curator.h"
-#include "protospacer_detection/sdbg_extension_graph.h"
+#include "protospacer_detection/workflow.h"
 #include "protospacer_detection/isolate_protospacers.h"
 #include "cas/cas_workflow.h"
 #include "cas/cas_writer.h"
@@ -260,7 +260,7 @@ static int run_detect_cas_genes(int argc, char** argv) {
 // ── phage-curate subcommand ───────────────────────────────────────────────────
 
 static int run_phage_curate(int argc, char** argv) {
-    return mcaat::proto::run_extension_module(argc, argv);
+    return mcaat::proto::ProtospacerWorkflow::main(argc, argv);
 }
 
 // ── standard MCAAT helpers (unchanged) ───────────────────────────────────────
