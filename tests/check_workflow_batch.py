@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 def main():
@@ -41,6 +43,36 @@ def main():
         else:
             raise AssertionError("stage failure must propagate")
         assert len(metrics.read_text().splitlines()) == 3, "both successful and failed stages need measurements"
+        missing = root / "SRR_missing"
+        partial = missing / "protospacer_batch/reads/read.fastq.gz.part"
+        partial.parent.mkdir(parents=True)
+        partial.write_bytes(b"incomplete old download")
+        with patch.object(batch, "run_stage", side_effect=AssertionError("skipped sample started a stage")), \
+             patch.object(batch, "free_space", side_effect=AssertionError("skipped sample checked build space")):
+            result = batch.process(missing, [], SimpleNamespace(existing_only=True), root, "unused")
+        assert result["status"] == "SKIPPED_NO_GRAPH"
+        assert not (missing / "protospacer_workflow").exists(), "skip created a spurious sample run"
+        assert partial.read_bytes() == b"incomplete old download", "old partial download was changed"
+        for index, relative in enumerate(("graph/graph", "protospacer_workflow/graph/graph", "protospacer_batch/graph/graph")):
+            sample = root / f"SRR_layout_{index}"
+            prefix = sample / relative
+            metadata = Path(str(prefix) + ".sdbg_info")
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text("fixture metadata\n")
+            assert batch.existing_graph_prefix(sample) == prefix
+            with patch.object(batch, "graph_info", return_value={"prefix": str(prefix)}) as validate, \
+                 patch.object(batch, "run_stage", side_effect=AssertionError("existing graph triggered a rebuild")):
+                graph = batch.prepare_graph(sample, root, SimpleNamespace(existing_only=True), metrics)
+                assert graph["prefix"] == str(prefix)
+                validate.assert_called_once_with(prefix)
+            with patch.object(batch, "graph_info", side_effect=ValueError("invalid graph")), \
+                 patch.object(batch, "run_stage", side_effect=AssertionError("invalid graph triggered a rebuild")):
+                try:
+                    batch.prepare_graph(sample, root, SimpleNamespace(existing_only=True), metrics)
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError("invalid existing graph was silently skipped")
         predictions = root / "predictions"
         predictions.mkdir()
         summary = dict(status="complete", implementation="protospacer-workflow-v9",

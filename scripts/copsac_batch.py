@@ -266,12 +266,20 @@ def run_stage(command, folder, metrics, srr, stage):
         raise RuntimeError(f"{stage} exited {child.returncode}; see {log_path}")
 
 
+def existing_graph_prefix(sample):
+    """Locate graph metadata in original, current-workflow or legacy-batch storage."""
+    for prefix in (sample/"graph/graph", sample/"protospacer_workflow/graph/graph", sample/"protospacer_batch/graph/graph"):
+        if Path(str(prefix)+".sdbg_info").exists():
+            return prefix
+    return None
+
+
 def prepare_graph(sample, job, options, metrics):
     """Reuse a validated graph, or download reads and build one with bundled MCAAT code."""
     base = sample / "protospacer_workflow"
-    for prefix in (sample/"graph/graph", base/"graph/graph", sample/"protospacer_batch/graph/graph"):
-        if Path(str(prefix)+".sdbg_info").exists():
-            return graph_info(prefix)
+    prefix = existing_graph_prefix(sample)
+    if prefix is not None:
+        return graph_info(prefix)
     if options.existing_only:
         raise ValueError("no existing graph for " + sample.name)
     reads = base/"reads"
@@ -326,6 +334,10 @@ def validate_predictions(folder):
 
 def process(sample, arrays, options, logdir, binary_hash):
     """Snapshot arrays and execute exactly one native detection/extension/filtering invocation."""
+    if options.existing_only and existing_graph_prefix(sample) is None:
+        return dict(srr=sample.name, status="SKIPPED_NO_GRAPH", results="",
+                    detail="No existing graph; downloading and building are disabled.")
+    free_space(options.root, options.min_free_gb*GIB)
     base = sample/"protospacer_workflow"
     base.mkdir(exist_ok=True)
     job = base/dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
@@ -401,7 +413,7 @@ def main():
     parser.add_argument("--read-length", type=int, default=150)
     parser.add_argument("--max-coverage-fold", type=float, default=2.,
                         help="maximum ratio of read-span coverage medians; 0 disables")
-    parser.add_argument("--existing-only", action="store_true", help="require graphs; do not download or build")
+    parser.add_argument("--existing-only", action="store_true", help="reuse graphs and skip samples without one; do not download or build")
     parser.add_argument("--rerun", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -446,7 +458,6 @@ def main():
         for sample, arrays in eligible:
             print("Processing " + sample.name, flush=True)
             try:
-                free_space(args.root, args.min_free_gb*GIB)
                 row = process(sample, arrays, args, logdir, binary_hash)
             except KeyboardInterrupt:
                 append_tsv(logdir/"summary.tsv", SUMMARY, dict(srr=sample.name, status="INTERRUPTED", detail="partial outputs preserved"))

@@ -34,6 +34,8 @@ bash scripts/run_copsac_protospacers.sh \
 
 The runner processes SRR folders containing array reports one by one, retains the graphs and earlier results, and has no wall-clock timeout. Its summary distinguishes candidate regions, final protospacers, candidate-only regions and accepted extensions. `NO_ACCEPTED_EXTENSIONS` means candidates were found but none passed extension filtering; `NO_DETECTIONS` means no candidate was detected. Both are completed outcomes, not failed runs. A changed binary or settings starts a new run rather than reusing an older completed result.
 
+With `--existing-only`, samples without graph metadata are recorded as `SKIPPED_NO_GRAPH`, without creating a sample run, downloading, building or treating the skip as a batch failure. An existing graph with invalid metadata or missing/truncated components still fails validation. Old `protospacer_batch/run_*/discovery` and `extensions` outputs, top-level `ContiguousPaths.fasta`, downloaded reads and `.part` files are not inputs to the new prediction workflow; they remain untouched. Only the selected array report and validated graph are reused.
+
 ## Inputs and two distinct modes
 
 In ordinary discovery mode, read the array reports and retain every source-spacer observation. Conservative boundary correction can move shared spacer-end motifs into the repeat: the default requires 85% support among at least five distinct spacers, a motif of at least six bases, and agreement across duplicate and reverse-complement observations. Group corrected sequences with their reverse complements into internal queries while retaining the original source associations.
@@ -235,6 +237,8 @@ All prediction functions belong to one class. The former unitig-median scoring h
 | `self_test` | Exercise arithmetic, context, ranking, ambiguity and output invariants without loading a dataset. |
 
 The batch helper's `validate_predictions` checks completion, final and candidate FASTA counts, the target subset, complete final associations, and the exact target coordinates inside every saved extension. `process` calls it for both new and resumed results before marking a sample complete. Empty final outputs are valid; a final target without a saved extension is an error.
+
+`existing_graph_prefix` searches the original, current-workflow and legacy-batch graph locations in that order. `prepare_graph` validates an existing graph before reuse. `process` records missing-graph skips before creating a run directory when `--existing-only` is set.
 
 ## Mathematical background and its limits
 
