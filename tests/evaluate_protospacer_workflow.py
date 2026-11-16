@@ -57,12 +57,23 @@ def write_json(path, data):
 def validate(folder):
     """Check all source/query outcomes, sequence identities, and association coordinates."""
     summary = json.loads((folder / "run_summary.json").read_text())
-    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2", "protospacer-workflow-v3", "protospacer-workflow-v4", "protospacer-workflow-v5", "protospacer-workflow-v6", "protospacer-workflow-v7", "protospacer-workflow-v8") or summary["status"] != "complete":
+    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2", "protospacer-workflow-v3", "protospacer-workflow-v4", "protospacer-workflow-v5", "protospacer-workflow-v6", "protospacer-workflow-v7", "protospacer-workflow-v8", "protospacer-workflow-v9") or summary["status"] != "complete":
         raise ValueError("evaluation requires a complete workflow run")
     sources = {r["source_id"]: r for r in table(folder / "sources.tsv")}
     queries = {r["query_id"]: r for r in table(folder / "queries.tsv")}
     targets, extensions = fasta(folder / "Protospacers.fasta"), fasta(folder / "ContiguousPaths.fasta")
     links = table(folder / "associations.tsv")
+    candidate_targets = targets
+    if summary.get("protospacer_output_policy") == "accepted_extensions_only":
+        candidate_targets = fasta(folder / "CandidateProtospacers.fasta")
+        candidate_links = table(folder / "candidate_associations.tsv")
+        assert len(candidate_targets) == summary["candidate_protospacer_regions"]
+        assert len(candidate_targets) - len(targets) == summary["candidate_only_regions"]
+        assert all(candidate_targets.get(key) == sequence for key, sequence in targets.items())
+        assert links == [r for r in candidate_links if r["extension_id"]]
+        assert {r["target_id"] for r in links} == set(targets)
+        assert {r["extension_id"] for r in links} == set(extensions)
+        links = candidate_links
     candidates = table(folder / "candidates.tsv")
     accepted = {r["query_id"]: r for r in candidates if r["status"] in ("detected", "extended")}
     contexts = table(folder / "target_context.tsv")
@@ -76,7 +87,8 @@ def validate(folder):
     assert len(extensions) == summary["unique_extensions"]
     assert len(accepted) == summary["detected_queries"] == len(contexts) == len(paths)
     assert len({r["query_id"] for r in links if r["extension_id"]}) == summary["extended_queries"]
-    for sequences in (targets, extensions):
+    assert {r["target_id"] for r in links} == set(candidate_targets)
+    for sequences in (targets, candidate_targets, extensions):
         assert len({min(s, reverse_complement(s)) for s in sequences.values()}) == len(sequences)
     for r in links:
         source, query = sources[r["source_id"]], queries[r["query_id"]]
@@ -91,7 +103,7 @@ def validate(folder):
             assert min(target, reverse_complement(target)) == targets[r["target_id"]]
             assert fragment_end-fragment_begin == len(target)+int(r["left_bp"])+int(r["right_bp"])
         else:
-            target = targets[r["target_id"]]
+            target = candidate_targets[r["target_id"]]
             assert not any(r[k] for k in ("seed_begin", "seed_end", "supported_fragment_begin", "supported_fragment_end"))
         oriented = reverse_complement(target) if r["target_strand"] == "-" else target
         assert len(aligned) == len(oriented)
@@ -143,6 +155,7 @@ def validate(folder):
     lengths = sorted(map(len, extensions.values()))
     return {"validation": "passed", "source_observations": len(sources), "distinct_corrected_spacers": len(queries),
             "detected_queries": len(accepted), "protospacer_regions": len(targets), "unique_extensions": len(extensions),
+            "candidate_protospacer_regions": len(candidate_targets),
             "extension_lengths": {"minimum": min(lengths, default=0), "median": statistics.median(lengths) if lengths else 0,
                                   "maximum": max(lengths, default=0)},
             "query_outcomes": dict(Counter(q["status"] for q in queries.values())),
@@ -247,6 +260,8 @@ def main():
         candidates = table(args.results/"candidates.tsv")
         accepted = {r["query_id"] for r in candidates if r["status"] in ("detected", "extended")}
         inputs["reference_matching_queries_detected"] = len(known & accepted)
+        final = {r["query_id"] for r in table(args.results / "associations.tsv")}
+        inputs["reference_matching_queries_in_final_output"] = len(known & final)
         inputs["reference_matching_query_outcomes"] = dict(Counter(q["status"] for q in queries if q["query_id"] in known))
         report["input_spacers"] = inputs
     if args.baseline:

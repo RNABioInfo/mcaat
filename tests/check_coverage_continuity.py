@@ -68,13 +68,19 @@ def main():
         assert canonical(sequence[int(link["seed_begin"]):int(link["seed_end"])]) == canonical(target)
     guarded = output / "guarded"
     assert fasta(guarded / "SuppliedProtospacers.fasta") == {"known_target": target}
-    assert set(fasta(guarded / "Protospacers.fasta").values()) == {canonical(target)}
+    assert set(fasta(guarded / "CandidateProtospacers.fasta").values()) == {canonical(target)}
+    assert not fasta(guarded / "Protospacers.fasta"), "unextended candidate leaked into final targets"
     assert not fasta(guarded / "ContiguousPaths.fasta"), "unstable route was replaced by a permissive fallback"
     withheld = table(guarded / "withheld_extensions.tsv")
     assert len(withheld) == 1 and canonical(withheld[0]["sequence"]) == expected
     assert float(withheld[0]["block_max"]) / float(withheld[0]["block_min"]) == 8
     assert len(withheld[0]["counts"].split(",")) >= 700
-    assert all(not row["extension_id"] for row in table(guarded / "associations.tsv"))
+    assert not table(guarded / "associations.tsv")
+    candidate_links = table(guarded / "candidate_associations.tsv")
+    assert candidate_links and all(not row["extension_id"] for row in candidate_links)
+    summary = json.loads((guarded / "run_summary.json").read_text())
+    assert summary["protospacer_regions"] == summary["unique_extensions"] == 0
+    assert summary["candidate_protospacer_regions"] == summary["candidate_only_regions"] == 1
     assert (disabled / "target_context.tsv").read_bytes() == (guarded / "target_context.tsv").read_bytes()
     assert graph_hashes and all(digest(Path(p)) == value for p, value in graph_hashes.items())
     result = dict(passed=True, supplied_target_retained=True, disabled_selects_coverage_jump=True,

@@ -221,11 +221,11 @@ def canonical_fragment(link, query, sequences):
 
 
 def check_exact_supplied_associations(run, supplied):
-    """Every exported target association covers its complete unchanged input."""
-    targets = fasta(run / "Protospacers.fasta")
+    """Every diagnostic association preserves the complete input, even if unextended."""
+    targets = fasta(run / "CandidateProtospacers.fasta")
     sequences = fasta(run / "ContiguousPaths.fasta")
     seen = set()
-    for link in table(run / "associations.tsv"):
+    for link in table(run / "candidate_associations.tsv"):
         input_id = link["source_id"].rsplit(":", 1)[0]
         original = supplied[input_id]
         assert int(link["query_begin"]) == 0
@@ -406,7 +406,7 @@ def check_outputs(output, fixture):
                         stops[row["stop"]] += 1
             audit_records[str(path.relative_to(output))] = len(path_ids)
     disabled = output / "discovery_adapter_filter_disabled"
-    disabled_targets = {canonical(value) for value in fasta(disabled / "Protospacers.fasta").values()}
+    disabled_targets = {canonical(value) for value in fasta(disabled / "CandidateProtospacers.fasta").values()}
     expected = canonical(fixture["cases"]["single_pass"]["spacer"])
     assert expected in disabled_targets, (
         "adapter branch did not exercise independent-context detection in the disabled control")

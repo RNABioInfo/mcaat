@@ -152,11 +152,17 @@ autoclean=true
   well as longer adapter cores, preventing technical branches from establishing
   false outside-array context. After selection, `--max-coverage-fold 2` withholds
   extensions with inconsistent downstream block medians, preserving their
-  targets and recording excluded routes in `withheld_extensions.tsv`. Set the
-  option to `0` to disable this check. On SRR14017553 it removed 35 nonmatching
+  diagnostic records in `withheld_extensions.tsv`. Final `Protospacers.fasta`
+  now contains only targets with an accepted extension, linked through
+  `associations.tsv` to `ContiguousPaths.fasta`. All detected candidates remain
+  separately in `CandidateProtospacers.fasta` and `candidate_associations.tsv`.
+  Supplied inputs remain unchanged in `SuppliedProtospacers.fasta`. Use
+  `--max-coverage-fold 0` to disable the coverage check. On SRR14017553 it removed 35 nonmatching
   extensions and one matching extension; the separate 81-input check retained
-  all 81 records and all 43 previously matching extensions. See the
-  [measured evaluation](docs/protospacer-evaluation-SRR14017553-v8.md)
+  all 81 records and all 43 previously matching extensions. The full discovery
+  run now saves 117 final protospacers linked to 106 unchanged accepted
+  extensions. See the [output-policy validation](docs/protospacer-evaluation-SRR14017553-v9.md),
+  [coverage-filter evaluation](docs/protospacer-evaluation-SRR14017553-v8.md)
   and [workflow and function reference](docs/protospacer-extension.md).
 
 ## Citation

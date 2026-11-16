@@ -26,7 +26,8 @@ HERE = Path(__file__).resolve().parent
 GIB = 1024 ** 3
 METRICS = ["srr", "stage", "started_utc", "wall_seconds", "user_cpu_seconds",
            "system_cpu_seconds", "peak_rss_mib", "exit_code", "log"]
-SUMMARY = ["srr", "status", "spacer_observations", "distinct_spacers", "protospacer_regions",
+SUMMARY = ["srr", "status", "spacer_observations", "distinct_spacers", "candidate_protospacer_regions",
+           "protospacer_regions", "candidate_only_regions",
            "unique_extensions", "limited_queries", "graph", "results", "detail"]
 
 
@@ -292,13 +293,44 @@ def prepare_graph(sample, job, options, metrics):
     return graph_info(base/"graph/graph")
 
 
+def validate_predictions(folder):
+    """Require complete v9 output and one accepted extension for every final target."""
+    summary = json.loads((folder / "run_summary.json").read_text())
+    if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v9" or \
+       summary.get("protospacer_output_policy") != "accepted_extensions_only":
+        raise ValueError("native workflow did not complete with the final-target policy")
+    targets = read_fasta(folder / "Protospacers.fasta")
+    candidates = read_fasta(folder / "CandidateProtospacers.fasta")
+    extensions = read_fasta(folder / "ContiguousPaths.fasta")
+    if len(targets) != summary["protospacer_regions"] or len(extensions) != summary["unique_extensions"] or \
+       len(candidates) != summary["candidate_protospacer_regions"] or \
+       len(candidates) - len(targets) != summary["candidate_only_regions"]:
+        raise ValueError("FASTA count differs from native summary")
+    if any(candidates.get(key) != sequence for key, sequence in targets.items()):
+        raise ValueError("final target is absent from candidate audit")
+    with (folder / "associations.tsv").open() as stream:
+        links = list(csv.DictReader(stream, delimiter="\t"))
+    if {r["target_id"] for r in links} != set(targets) or \
+       {r["extension_id"] for r in links} != set(extensions) or \
+       len({r["query_id"] for r in links}) != summary["extended_queries"]:
+        raise ValueError("final target/extension associations are incomplete")
+    for row in links:
+        sequence = extensions[row["extension_id"]]
+        begin, end = int(row["seed_begin"]), int(row["seed_end"])
+        fragment = sequence[begin:end]
+        canonical = min(fragment, fragment.translate(str.maketrans("ACGT", "TGCA"))[::-1])
+        if not 0 <= begin < end <= len(sequence) or canonical != targets[row["target_id"]]:
+            raise ValueError("final target is not present at its extension coordinates")
+    return summary
+
+
 def process(sample, arrays, options, logdir, binary_hash):
     """Snapshot arrays and execute exactly one native detection/extension/filtering invocation."""
     base = sample/"protospacer_workflow"
     base.mkdir(exist_ok=True)
     job = base/dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     job.mkdir()
-    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v8",
+    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v9",
                 "binary_sha256": binary_hash, "helper_sha256": digest(__file__), "arrays": {p.name: digest(p) for p in arrays}}
     write_json(job/"job.json", manifest)
     try:
@@ -316,7 +348,7 @@ def process(sample, arrays, options, logdir, binary_hash):
                 old = json.loads(previous.read_text())
                 if old.get("status") == "complete" and {k: v for k, v in old.items() if k != "status"} == identity:
                     result = previous.parent/"predictions/run_summary.json"
-                    summary = json.loads(result.read_text())
+                    summary = validate_predictions(result.parent)
                     manifest["status"] = "skipped_identical_complete"
                     write_json(job/"job.json", manifest)
                     return dict(summary, srr=sample.name, status="SKIPPED_COMPLETE", results=str(result.parent))
@@ -336,18 +368,15 @@ def process(sample, arrays, options, logdir, binary_hash):
                    "--max-coverage-fold", options.max_coverage_fold,
                    "--max-flank-length", options.max_flank_length, "--min-extension-flank", options.min_extension_flank],
                   job, logdir/"measurements.tsv", sample.name, "protospacer_workflow")
-        summary = json.loads((job/"predictions/run_summary.json").read_text())
-        if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v8":
-            raise ValueError("native workflow did not complete")
-        if len(read_fasta(job/"predictions/Protospacers.fasta")) != summary["protospacer_regions"] or \
-           len(read_fasta(job/"predictions/ContiguousPaths.fasta")) != summary["unique_extensions"]:
-            raise ValueError("FASTA count differs from native summary")
+        summary = validate_predictions(job/"predictions")
         if graph_info(graph["prefix"]) != graph:
             raise ValueError("graph changed during prediction")
         manifest["status"] = "complete"
         write_json(job/"job.json", manifest)
         (base/"LATEST.txt").write_text(str(job/"predictions") + "\n")
-        return dict(summary, srr=sample.name, status="DONE" if summary["protospacer_regions"] else "NO_DETECTIONS",
+        status = "DONE" if summary["protospacer_regions"] else (
+            "NO_ACCEPTED_EXTENSIONS" if summary["candidate_protospacer_regions"] else "NO_DETECTIONS")
+        return dict(summary, srr=sample.name, status=status,
                     results=str(job/"predictions"))
     except BaseException as error:
         manifest["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
@@ -398,8 +427,8 @@ def main():
             print(sample.name + "\t" + ",".join(p.name for p in arrays))
         return 0
     help_result = subprocess.run([str(args.mcaat), "phage-curate", "--help"], text=True, capture_output=True)
-    if help_result.returncode or "workflow v8" not in help_result.stdout:
-        parser.error("rebuild MCAAT with native protospacer workflow v8")
+    if help_result.returncode or "workflow v9" not in help_result.stdout:
+        parser.error("rebuild MCAAT with native protospacer workflow v9")
     logs = args.root/"_mcaat_workflow_logs"
     logs.mkdir(exist_ok=True)
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -426,7 +455,8 @@ def main():
                 failures += 1
                 row = dict(srr=sample.name, status="FAILED", detail=str(error))
             append_tsv(logdir/"summary.tsv", SUMMARY, row)
-            print(f"{sample.name}: {row['status']}; targets={row.get('protospacer_regions', '-')}; extensions={row.get('unique_extensions', '-')}", flush=True)
+            print(f"{sample.name}: {row['status']}; candidates={row.get('candidate_protospacer_regions', '-')}; "
+                  f"final protospacers={row.get('protospacer_regions', '-')}; extensions={row.get('unique_extensions', '-')}", flush=True)
         print("Summary: " + str(logdir/"summary.tsv"), flush=True)
         return int(failures > 0)
 

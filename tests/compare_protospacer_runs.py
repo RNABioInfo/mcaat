@@ -34,6 +34,8 @@ def load_run(predictions, evaluation):
                 coverage[link["query_id"]] = rows[key]
     counts = {key: summary[key] for key in ("spacer_observations", "distinct_spacers", "detected_queries",
                                           "protospacer_regions", "extended_queries", "unique_extensions")}
+    counts["candidate_protospacer_regions"] = summary.get("candidate_protospacer_regions", summary["protospacer_regions"])
+    counts["protospacer_output_policy"] = summary.get("protospacer_output_policy", "all_detected_candidates")
     counts.update(matching_targets=report["Protospacers"]["matching_sequences"],
                   matching_extensions=report["ContiguousPaths"]["matching_sequences"],
                   matching_extension_queries=len(matches["ContiguousPaths"]))

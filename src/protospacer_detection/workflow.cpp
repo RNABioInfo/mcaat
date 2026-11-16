@@ -26,9 +26,10 @@ void ProtospacerWorkflow::interrupt(int signal) { interrupted_ = signal; }
 ProtospacerWorkflow::ProtospacerWorkflow(WorkflowOptions options) : options_(std::move(options)) {}
 
 void ProtospacerWorkflow::print_help() {
-    std::cout << "MCAAT protospacer workflow v8\n"
+    std::cout << "MCAAT protospacer workflow v9\n"
                  "mcaat phage-curate --arrays DIR --graph PREFIX --output "
                  "NEW_DIR [options]\n"
+                 "Final protospacers must have an accepted extension; all detected candidates are saved separately.\n"
                  "One workflow: spacer alignment -> source-context check -> "
                  "extension -> filtering -> output.\n"
                  "--threads 1 --beam-width 64 --max-flank-length 750 "
@@ -1903,16 +1904,22 @@ void ProtospacerWorkflow::write_outputs() {
         f.exceptions(std::ios::badbit | std::ios::failbit);
         return f;
     };
-    std::map<std::string, std::string> targets, regions;
+    std::map<std::string, std::string> targets, candidate_targets, regions;
     for (const auto &group : results_)
         for (const auto &c : group)
             if (c.detected) {
-                targets[c.target_id] = canonical(c.target);
-                if (c.extended && c.sequence.size() > regions[c.extension_id].size())
-                    regions[c.extension_id] = canonical(c.sequence);
+                candidate_targets[c.target_id] = canonical(c.target);
+                if (c.extended) {
+                    targets[c.target_id] = canonical(c.target);
+                    if (c.sequence.size() > regions[c.extension_id].size())
+                        regions[c.extension_id] = canonical(c.sequence);
+                }
             }
     {
         auto target_fasta = open("Protospacers.fasta"), extension_fasta = open("ContiguousPaths.fasta");
+        auto candidate_fasta = open("CandidateProtospacers.fasta");
+        for (const auto &[id, s] : candidate_targets)
+            candidate_fasta << '>' << id << '\n' << s << '\n';
         for (const auto &[id, s] : targets)
             target_fasta << '>' << id << '\n' << s << '\n';
         for (const auto &[id, s] : regions)
@@ -1997,13 +2004,16 @@ void ProtospacerWorkflow::write_outputs() {
             }
     }
     {
-        auto links = open("associations.tsv"), evidence = open("coverage_evidence.tsv");
-        links << "source_id\tquery_id\ttarget_id\textension_id\tquery_begin\tquery_"
+        auto links = open("associations.tsv"), candidate_links = open("candidate_associations.tsv"),
+             evidence = open("coverage_evidence.tsv");
+        const char *header = "source_id\tquery_id\ttarget_id\textension_id\tquery_begin\tquery_"
                  "end\tidentity\tquery_"
                  "coverage\ttarget_strand\tseed_begin\tseed_end\tsupported_"
                  "fragment_begin\tsupported_"
                  "fragment_end\tleft_bp\tright_bp\tleft_stop\tright_stop\tsearch_"
                  "limited\n";
+        links << header;
+        candidate_links << header;
         evidence << "query_id\ttarget_id\textension_id\tside\tadded_base_"
                     "position\tcount\tpath_capacity\n";
         for (const auto &group : results_)
@@ -2033,17 +2043,20 @@ void ProtospacerWorkflow::write_outputs() {
                         bool source_flip = source.spacer != queries_[c.query].first;
                         size_t begin = source_flip ? source.spacer.size() - c.end : c.begin;
                         size_t end = source_flip ? source.spacer.size() - c.begin : c.end;
-                        links << source.id << '\t' << numbered("Q", c.query + 1) << '\t' << c.target_id
+                        std::ostringstream row;
+                        row << source.id << '\t' << numbered("Q", c.query + 1) << '\t' << c.target_id
                               << '\t' << c.extension_id << '\t' << begin + source.trim_left << '\t'
                               << end + source.trim_left << '\t' << c.identity << '\t' << c.coverage << '\t'
                               << ((reverse ^ source_flip) ? '-' : '+') << '\t';
                         if (c.extended)
-                            links << seed_begin << '\t' << seed_end << '\t' << offset << '\t'
+                            row << seed_begin << '\t' << seed_end << '\t' << offset << '\t'
                                   << offset + c.sequence.size();
                         else
-                            links << "\t\t\t";
-                        links << '\t' << c.left.bases.size() + c.anchor_prefix << '\t' << c.right.bases.size()
+                            row << "\t\t\t";
+                        row << '\t' << c.left.bases.size() + c.anchor_prefix << '\t' << c.right.bases.size()
                               << '\t' << c.left.stop << '\t' << c.right.stop << '\t' << c.limited << '\n';
+                        candidate_links << row.str();
+                        if (c.extended) links << row.str();
                     }
                     for (bool back : {true, false}) {
                         const auto &w = back ? c.left : c.right;
@@ -2104,7 +2117,7 @@ void ProtospacerWorkflow::write_outputs() {
 }
 
 void ProtospacerWorkflow::write_summary(const std::string &status, const std::string &error) const {
-    std::set<std::string> arrays, targets, extensions;
+    std::set<std::string> arrays, targets, candidate_targets, extensions;
     size_t detected = 0, extended = 0, limited = 0;
     for (const auto &s : sources_)
         arrays.insert(s.array);
@@ -2115,9 +2128,11 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
             e |= c.extended;
             l |= c.limited;
             if (c.detected)
+                candidate_targets.insert(c.target_id);
+            if (c.extended) {
                 targets.insert(c.target_id);
-            if (c.extended)
                 extensions.insert(c.extension_id);
+            }
         }
         detected += d;
         extended += e;
@@ -2127,13 +2142,16 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     fs::path temporary = options_.output / "run_summary.json.tmp";
     std::ofstream out(temporary);
     out.exceptions(std::ios::badbit | std::ios::failbit);
-    out << "{\n  \"implementation\": \"protospacer-workflow-v8\",\n  \"status\": " << json(status)
+    out << "{\n  \"implementation\": \"protospacer-workflow-v9\",\n  \"status\": " << json(status)
         << ",\n  \"error\": " << json(error) << ",\n  \"arrays\": " << json(options_.arrays.string())
         << ",\n  \"graph\": " << json(options_.graph.string())
         << ",\n  \"graph_k\": " << (graph_ ? graph_->k() : 0) << ",\n  \"array_count\": " << arrays.size()
         << ",\n  \"spacer_observations\": " << sources_.size()
         << ",\n  \"distinct_spacers\": " << queries_.size() << ",\n  \"detected_queries\": " << detected
         << ",\n  \"protospacer_regions\": " << targets.size() << ",\n  \"extended_queries\": " << extended
+        << ",\n  \"candidate_protospacer_regions\": " << candidate_targets.size()
+        << ",\n  \"candidate_only_regions\": " << candidate_targets.size() - targets.size()
+        << ",\n  \"protospacer_output_policy\": \"accepted_extensions_only\""
         << ",\n  \"unique_extensions\": " << extensions.size()
         << ",\n  \"queries_without_extension\": " << queries_.size() - extended
         << ",\n  \"limited_queries\": " << limited << ",\n  \"threads\": " << options_.threads
@@ -2180,7 +2198,8 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     out.close();
     fs::rename(temporary, options_.output / "run_summary.json");
     if (status == "complete")
-        std::cout << "Possible protospacer regions: " << targets.size()
+        std::cout << "Candidate protospacer regions (diagnostic): " << candidate_targets.size()
+                  << "\nProtospacer regions with an accepted extension: " << targets.size()
                   << "\nSaved extension regions: " << extensions.size()
                   << "\nQueries without an extension: " << queries_.size() - extended << '\n';
 }

@@ -1,6 +1,8 @@
-# Native protospacer detection and extension (v8)
+# Native protospacer detection and extension (v9)
 
 MCAAT searches an existing de Bruijn graph for a possible target of an array spacer, extends that target through competing graph paths, filters source-only and technical paths, and saves the selected sequence with its evidence. All of this runs inside the single `ProtospacerWorkflow` class. The graph remains unchanged. No reference sequence or external aligner is consulted during prediction.
+
+Final protospacers now require an accepted extension. `Protospacers.fasta` and `associations.tsv` contain only targets supported by a saved region in `ContiguousPaths.fasta`. Detection without an accepted extension is retained in `CandidateProtospacers.fasta` and `candidate_associations.tsv` for diagnosis. The candidate FASTA includes the final targets; do not add these two counts together. This output rule is applied after the existing filters and does not change the selected routes or use reference matches.
 
 ## Run on an existing graph
 
@@ -18,6 +20,20 @@ Use a new or empty output folder. This command reuses and retains the graph; it 
 
 The batch wrapper `scripts/run_copsac_protospacers.sh` processes eligible SRR folders sequentially. It reuses an existing graph or downloads reads and builds one when needed. It defaults to 28 threads, a 192 GiB graph-build budget, and the same extension settings listed below: 200 scored external positions, a 200–750-base flank, 256 pending paths, 64 mature paths and a read length of 150. The batch invokes source crossing explicitly. Use `--existing-only` to prohibit downloading/building and `--dry-run` to list eligible samples without running them. Final result directories are recorded in each sample's `protospacer_workflow/LATEST.txt`; the batch's stage logs and measurements are under `_mcaat_workflow_logs`.
 
+From the updated repository root, build and run the whole server batch:
+
+```bash
+git submodule update --init --recursive
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 28
+bash scripts/run_copsac_protospacers.sh \
+  --root /vol/d/data/copsac \
+  --mcaat "$PWD/build/mcaat" \
+  --threads 28 --ram-gb 192
+```
+
+The runner processes SRR folders containing array reports one by one, retains the graphs and earlier results, and has no wall-clock timeout. Its summary distinguishes candidate regions, final protospacers, candidate-only regions and accepted extensions. `NO_ACCEPTED_EXTENSIONS` means candidates were found but none passed extension filtering; `NO_DETECTIONS` means no candidate was detected. Both are completed outcomes, not failed runs. A changed binary or settings starts a new run rather than reusing an older completed result.
+
 ## Inputs and two distinct modes
 
 In ordinary discovery mode, read the array reports and retain every source-spacer observation. Conservative boundary correction can move shared spacer-end motifs into the repeat: the default requires 85% support among at least five distinct spacers, a motif of at least six bases, and agreement across duplicate and reverse-complement observations. Group corrected sequences with their reverse complements into internal queries while retaining the original source associations.
@@ -26,7 +42,7 @@ Map each query to a connected graph path. The defaults require at least 90% iden
 
 In supplied-target mode (`--protospacers FASTA`), the inputs are already identified targets. Require an exact, full-length graph embedding: 100% identity, 100% query coverage, no clipping. Associate each input with source-array context by substring lookup on both strands; do not replace it with the longer source spacer. A target shorter than graph k is embedded as the exact suffix of a full k-mer. The preceding `anchor_prefix_bp` bases belong to the left flank, not to the supplied target. Saved target coordinates still identify the unchanged original sequence.
 
-Every supplied FASTA record is preserved even if it cannot be extended. Unlike new discovery queries, explicitly supplied targets are allowed to map even when their sequence fails the discovery complexity test; an exact mapped target remains identified. Flank complexity and technical-adapter checks still apply. Supplied targets with no source-array association receive an explicit unresolved outcome. Supplied-input evaluation and ordinary discovery evaluate different populations and must be reported separately.
+Every supplied FASTA record is preserved in `SuppliedProtospacers.fasta` even if it cannot be extended. The final `Protospacers.fasta` contains only those with accepted extensions. Unlike new discovery queries, explicitly supplied targets are allowed to map even when their sequence fails the discovery complexity test; an exact mapped target remains identified in the candidate audit. Flank complexity and technical-adapter checks still apply. Supplied targets with no source-array association receive an explicit unresolved outcome. Supplied-input evaluation and ordinary discovery evaluate different populations and must be reported separately.
 
 ## Establish a target before allowing a source-repeat passage
 
@@ -137,12 +153,16 @@ Repeatedly evaluating method changes on one dataset makes it a development datas
 | `spacer_observations` / `sources.tsv` | Ordinary mode: original source-spacer observations. Supplied mode: source-context associations, which may exceed the number of supplied input records. |
 | `distinct_spacers` / `queries.tsv` | Internal canonical queries after grouping duplicates and reverse complements. |
 | `detected_queries` | Queries with a selected possible target, whether extended or not. In supplied mode this is an extension outcome, not a new biological discovery count. |
-| `protospacer_regions` / `Protospacers.fasta` | Unique selected target sequences after target deduplication. |
+| `candidate_protospacer_regions` / `CandidateProtospacers.fasta` | All unique detected target sequences, including final targets and detected-only candidates. Diagnostic output. |
+| `protospacer_regions` / `Protospacers.fasta` | Unique target sequences with at least one accepted, saved extension. Final protospacer count. |
+| `candidate_only_regions` | Candidate target sequences with no accepted extension: candidate count minus final count. |
 | `extended_queries` | Queries associated with an accepted extension. Several queries may share one saved region. |
 | `unique_extensions` / `ContiguousPaths.fasta` | Unique retained extended regions after consolidation. This is not a count of phage genomes. |
 | `limited_queries` | Queries that encountered any recorded search limit. |
 | `queries_without_extension` | Canonical queries without an accepted extension, including detected-only and unresolved outcomes. |
-| `supplied_targets.tsv`, `associations.tsv` | Original record → query → target → extension mappings, strands and exact intervals. |
+| `supplied_targets.tsv` | Every supplied input record mapped to its canonical query, including unsuccessful inputs. |
+| `associations.tsv` | Final source → query → target → accepted extension mappings, strands and exact intervals. Every extension ID is populated. Several targets may share a consolidated extension. |
+| `candidate_associations.tsv` | All detected source → query → target mappings, including final associations. Empty extension IDs mean no accepted extension for that query. |
 | `candidates.tsv`, `unresolved_and_rejected.tsv` | Considered placements and reasons; alternative rows are not extra primary predictions. |
 | `target_context.tsv`, `graph_paths.tsv` | Independent discovery context and selected connected graph routes. |
 | `coverage_evidence.tsv` | Query ID, target/extension IDs, actual scored edge multiplicities and running minimum count. Query IDs distinguish different input queries that map to the same deduplicated target. The historical `path_capacity` column name no longer means segment-median capacity. |
@@ -151,7 +171,7 @@ Repeatedly evaluating method changes on one dataset makes it a development datas
 | `query_metrics.tsv`, `run_summary.json` | Per-query work/timings, all parameter values, count meanings and completion status. |
 | `search_paths/*.tsv.gz` | Optional finished/pruned path audit. These rows are search states, not protospacer or phage counts. `branch_costs` contains raw costs, including masked positions; its unfiltered sum is not `branch_loss`. Only costs whose preceding and selected positions both occur consecutively in `count_positions` contribute. |
 
-Interval coordinates are zero-based and half-open. Supplied-mode query intervals cover the original complete supplied sequence. Left/right paths are oriented to the canonical query; association strand fields relate them back to the original source. Empty extension IDs explicitly mean no accepted extension. Summed worker times can exceed wall time because queries run concurrently.
+Interval coordinates are zero-based and half-open. Supplied-mode query intervals cover the original complete supplied sequence. Left/right paths are oriented to the canonical query; association strand fields relate them back to the original source. Candidate tables and graph diagnostics retain unsuccessful candidates; use the final FASTAs and `associations.tsv` for downstream analysis. IDs are shared across final and candidate files and may have gaps. Summed worker times can exceed wall time because queries run concurrently.
 
 `first_ambiguous_base` is a zero-based outward position from the graph anchor, interpreted only when `ambiguous=1`. For a short target's left flank, add `anchor_prefix_bp` to express it relative to the target boundary. Coverage-evidence positions are one-based outward added-base positions and already include that padding. The optional search audit's `count_positions` are one-based from the graph anchor and exclude padding; a cost at position `p` is `branch_costs[p-1]`. A `runner_up_path_cost` of -1 means no scored competing completed route was recorded; source-branch uncertainty alone can still set `ambiguous=1`.
 
@@ -163,7 +183,7 @@ For configured read length `R` and graph k, use blocks of `max(k+1, R-k)` consec
 
 Counts from the source-array passage are excluded. Neither repeat multiplicity nor anchor multiplicity sets this baseline. Isolated count spikes or dips generally do not determine a block median. The read-length scale reduces sensitivity to adjacent correlated k-mer counts; it does not make the medians statistically independent.
 
-The original target, source associations and strict discovery context stay intact. A withheld route is absent from `ContiguousPaths.fasta`; `withheld_extensions.tsv` retains its complete sequence, outward graph nodes and scored counts for inspection. Its target has reason `coverage_discontinuity` and an empty extension ID. Accepted routes are not shortened by this filter.
+The original target, source associations and strict discovery context stay intact in the diagnostic outputs. A withheld route is absent from `ContiguousPaths.fasta`; `withheld_extensions.tsv` retains its complete sequence, outward graph nodes and scored counts for inspection. Its candidate has reason `coverage_discontinuity` and an empty extension ID. That query is absent from the final associations; its target is absent from the final FASTA unless another query supplies an accepted extension for the same target. Accepted routes are not shortened by this filter.
 
 This is a tunable continuity heuristic, not a p-value or a guarantee of genomic linkage. Genuine coverage variation can also fail it. Report matching extensions removed as well as nonmatching ones removed; evaluate the setting on additional samples before treating the development result as general performance.
 
@@ -211,8 +231,10 @@ All prediction functions belong to one class. The former unitig-median scoring h
 | `select_candidate` | Choose one placement using alignment and extension evidence or mark target ambiguity. |
 | `process_query` | Map, establish strict target context, compare eligible crossing alternatives and record work/timings. |
 | `consolidate` | Deduplicate/contain selected sequences without inventing overlap joins or losing associations. |
-| `write_outputs`, `write_summary` | Publish validated sequence/evidence tables and atomically save status/counts. |
+| `write_outputs`, `write_summary` | Publish final targets with accepted extensions, preserve all candidate evidence separately, and atomically save their distinct counts/status. |
 | `self_test` | Exercise arithmetic, context, ranking, ambiguity and output invariants without loading a dataset. |
+
+The batch helper's `validate_predictions` checks completion, final and candidate FASTA counts, the target subset, complete final associations, and the exact target coordinates inside every saved extension. `process` calls it for both new and resumed results before marking a sample complete. Empty final outputs are valid; a final target without a saved extension is an error.
 
 ## Mathematical background and its limits
 
