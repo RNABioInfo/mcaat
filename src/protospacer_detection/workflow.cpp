@@ -273,25 +273,27 @@ bool ProtospacerWorkflow::informative(const std::string &sequence) {
 }
 
 size_t ProtospacerWorkflow::adapter_position(const std::string &sequence, bool backwards) {
-    // Full TruSeq adapter cores, allowing one substitution. A sequencing
-    // error must not turn a technical junction into independent target evidence.
+    // The exact shared TruSeq prefix catches library-specific/graph variants
+    // beyond that prefix. Full cores additionally tolerate one substitution.
+    // Never relax the short prefix: its specificity depends on an exact match.
     static const std::vector<std::string> motifs = [] {
-        std::vector<std::string> m{"AGATCGGAAGAGCACACGT", "AGATCGGAAGAGCGTCGT"};
-        m.reserve(8);
-        for (size_t i = 0; i < 2; ++i)
+        std::vector<std::string> m{"AGATCGGAAGAGC", "AGATCGGAAGAGCACACGT", "AGATCGGAAGAGCGTCGT"};
+        m.reserve(12);
+        for (size_t i = 0; i < 3; ++i)
             m.push_back(reverse_complement(m[i]));
-        for (size_t i = 0; i < 4; ++i)
+        for (size_t i = 0; i < 6; ++i)
             m.emplace_back(m[i].rbegin(), m[i].rend());
         return m;
     }();
     size_t found = std::string::npos;
-    for (size_t i = backwards ? 4 : 0; i < (backwards ? 8 : 4); ++i) {
+    for (size_t i = backwards ? 6 : 0; i < (backwards ? 12 : 6); ++i) {
         const auto &motif = motifs[i];
+        const size_t allowed = motif.size() == 13 ? 0 : 1;
         for (size_t position = 0; position + motif.size() <= sequence.size() && position < found; ++position) {
             size_t changes = 0;
-            for (size_t j = 0; j < motif.size() && changes <= 1; ++j)
+            for (size_t j = 0; j < motif.size() && changes <= allowed; ++j)
                 changes += sequence[position + j] != motif[j];
-            if (changes <= 1) found = position;
+            if (changes <= allowed) found = position;
         }
     }
     return found;
@@ -1933,7 +1935,7 @@ void ProtospacerWorkflow::write_outputs() {
                  "fragment_begin\tsupported_"
                  "fragment_end\tleft_bp\tright_bp\tleft_stop\tright_stop\tsearch_"
                  "limited\n";
-        evidence << "target_id\textension_id\tside\tadded_base_"
+        evidence << "query_id\ttarget_id\textension_id\tside\tadded_base_"
                     "position\tcount\tpath_capacity\n";
         for (const auto &group : results_)
             for (const auto &c : group)
@@ -1977,7 +1979,7 @@ void ProtospacerWorkflow::write_outputs() {
                     for (bool back : {true, false}) {
                         const auto &w = back ? c.left : c.right;
                         for (size_t j = 0; j < w.counts.size(); ++j)
-                            evidence << c.target_id << '\t' << c.extension_id << '\t'
+                            evidence << numbered("Q", c.query + 1) << '\t' << c.target_id << '\t' << c.extension_id << '\t'
                                      << (back ? "left" : "right") << '\t'
                                      << w.sample_positions[j] + (back ? c.anchor_prefix : 0) << '\t'
                                      << w.counts[j] << '\t' << w.capacities[j] << '\n';
@@ -2056,7 +2058,7 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     fs::path temporary = options_.output / "run_summary.json.tmp";
     std::ofstream out(temporary);
     out.exceptions(std::ios::badbit | std::ios::failbit);
-    out << "{\n  \"implementation\": \"protospacer-workflow-v6\",\n  \"status\": " << json(status)
+    out << "{\n  \"implementation\": \"protospacer-workflow-v7\",\n  \"status\": " << json(status)
         << ",\n  \"error\": " << json(error) << ",\n  \"arrays\": " << json(options_.arrays.string())
         << ",\n  \"graph\": " << json(options_.graph.string())
         << ",\n  \"graph_k\": " << (graph_ ? graph_->k() : 0) << ",\n  \"array_count\": " << arrays.size()
@@ -2198,6 +2200,17 @@ void ProtospacerWorkflow::self_test() {
             "one substitution in a complete technical adapter remains detectable");
     require(adapter_position(adapter.substr(1)) == std::string::npos,
             "short adapter fragment alone is not rejected");
+    const std::string shared_adapter = "AGATCGGAAGAGC";
+    require(adapter_position(shared_adapter + "GTAGAGTAGGG") == 0,
+            "shared adapter prefix survives different downstream adapter variants");
+    require(adapter_position(reverse_complement(shared_adapter) + "ACGT") == 0 &&
+            adapter_position(std::string(shared_adapter.rbegin(), shared_adapter.rend()), true) == 0,
+            "shared adapter recognized in both strand and traversal orientations");
+    auto altered_prefix = shared_adapter;
+    altered_prefix[6] = 'A';
+    require(adapter_position(altered_prefix) == std::string::npos &&
+            adapter_position(shared_adapter.substr(1)) == std::string::npos,
+            "short prefix requires all thirteen bases without mismatches");
     TargetCandidate test_target;
     test_target.target = "ACGTTAGCCATGATCGTACCTAGGTCATGC";
     ExtensionWalk technical;

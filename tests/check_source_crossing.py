@@ -102,19 +102,24 @@ def make_fixture(output, binary):
                     stream.write(f">{name}_{position}_{copy}\n{sequence[position:position + 150]}\n")
             for copy in range(240):
                 stream.write(f">{name}_source_boost_{copy}\n{case['source_sequence']}\n")
-    # The same source-only spacer also reaches an error-containing adapter.
-    # This branch disagrees with the repeat, so it would appear independent if
-    # the full adapter core were checked only for an exact match.
+    # Source-only spacers also reach technical branches: a one-error adapter
+    # and an exact common prefix whose downstream sequence escapes the old
+    # full-core matcher. Neither branch may establish independent context.
     adapter_core = "AGATCGGAAGAGCGTCGT"
     adapter_variant = adapter_core[:-1] + "A"
     case = cases["single_pass"]
     technical = (case["molecule"].split(case["spacer"])[0] + case["spacer"]
                  + case["repeat"][:8] + adapter_variant + dna(500))
+    divergent_adapter = "AGATCGGAAGAGCGTAGAGTAGGG"
+    technical_divergent = (case["molecule"].split(case["spacer"])[0] + case["spacer"]
+                           + case["repeat"][:8] + divergent_adapter + dna(500))
+    technical_branches = [technical, technical_divergent]
     assert adapter_core not in technical and adapter_variant in technical
     with (output / "construction.fasta").open("a") as stream:
-        for position in range(len(technical) - 149):
-            for copy in range(2):
-                stream.write(f">adapter_error_{position}_{copy}\n{technical[position:position + 150]}\n")
+        for variant, sequence in enumerate(technical_branches):
+            for position in range(len(sequence) - 149):
+                for copy in range(2):
+                    stream.write(f">adapter_{variant}_{position}_{copy}\n{sequence[position:position + 150]}\n")
     # Add an already present downstream sequence as another reported member
     # of the same array, without adding reads or changing the graph. Choose its
     # boundaries so no new repeat/junction k-mer exists in this graph; only pure
@@ -127,7 +132,8 @@ def make_fixture(output, binary):
 
     existing_boundary = kmers(reference["source_sequence"]) - kmers(reference["spacer"])
     graph_words = set().union(*(kmers(case[key]) for case in cases.values()
-                                for key in ("molecule", "source_sequence")), kmers(technical))
+                                for key in ("molecule", "source_sequence")),
+                              *(kmers(sequence) for sequence in technical_branches))
     # Check the complete junction set, including the opposite orientation.
     # Merely choosing different immediate flanking bases does not exclude a
     # match to the original source's repeat/spacer boundary elsewhere.
@@ -175,7 +181,9 @@ def make_fixture(output, binary):
         "--output", str(output / "discovery_adapter_filter_disabled"),
         "--source-array-crossing", "true", "--filter-extension-artifacts", "false"]
     fixture = {"k": K, "pure_spacer_member": member, "adapter_core": adapter_core, "adapter_variant": adapter_variant,
-               "technical_branch": technical, "random_seed": 2026111601, "cases": cases, "supplied": supplied,
+               "technical_branch": technical, "technical_branches": technical_branches,
+               "divergent_adapter": divergent_adapter,
+               "random_seed": 2026111601, "cases": cases, "supplied": supplied,
                "binary": str(binary), "binary_sha256": digest(binary),
                "reference_used_for_prediction": False}
     (output / "fixture.json").write_text(json.dumps(fixture, indent=2) + "\n")

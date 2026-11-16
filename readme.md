@@ -148,7 +148,9 @@ autoclean=true
   detected or explicitly supplied target. The workflow saves one selected flank,
   records competing-route uncertainty and search limits, and preserves input
   associations with an optional path audit. It uses no reference database during
-  prediction. See the [measured evaluation](docs/protospacer-evaluation-SRR14017553-v6.md)
+  prediction. Discovery and extension reject the exact shared TruSeq prefix as
+  well as longer adapter cores, preventing technical branches from establishing
+  false outside-array context. See the [measured evaluation](docs/protospacer-evaluation-SRR14017553-v7.md)
   and [workflow and function reference](docs/protospacer-extension.md).
 
 ## Citation

@@ -1,4 +1,4 @@
-# Native protospacer detection and extension (v6)
+# Native protospacer detection and extension (v7)
 
 MCAAT searches an existing de Bruijn graph for a possible target of an array spacer, extends that target through competing graph paths, filters source-only and technical paths, and saves the selected sequence with its evidence. All of this runs inside the single `ProtospacerWorkflow` class. The graph remains unchanged. No reference sequence or external aligner is consulted during prediction.
 
@@ -94,7 +94,11 @@ The default `branch_ratio` is 1.5. A retained competitor is comparable when its 
 
 ## Filter, retain one flank, and save
 
-Stop before either configured TruSeq adapter core, allowing one substitution and checking both strands and the target/flank boundary. Also check 64-base sequence-complexity windows every eight added bases. A window is uninformative if triplet entropy is below 2 bits or one homopolymer occupies at least half its length. The clean preceding prefix remains eligible, and competing paths continue. These finite motif/complexity rules do not detect every technical artifact.
+Stop before the exact shared TruSeq prefix `AGATCGGAAGAGC`, or either configured longer TruSeq core within one substitution. The shorter prefix requires all 13 bases with no mismatches; it catches technical paths whose continuation differs from the two longer cores. Check both strands, both traversal directions, and the target/flank boundary. The prefix is shared by the [Illumina adapter sequences](https://support.illumina.com/ko-kr/bulletins/2016/12/what-sequences-do-i-use-for-adapter-trimming.html).
+
+This check participates in discovery as well as extension: an adapter-containing path cannot establish independent target context unless enough clean context precedes the adapter. Stop before the motif, retain that preceding prefix, and continue competing branches. In SRR14017553, the old full-core check missed technical branches supporting 21 accepted targets; all 21 targets and their selected extensions failed the fixed reference criteria. These observations motivate the repair, but reference alignments are never read by prediction.
+
+Also check 64-base sequence-complexity windows every eight added bases. A window is uninformative if triplet entropy is below 2 bits or one homopolymer occupies at least half its length. These finite motif/complexity rules do not detect every technical artifact.
 
 A retained flank must have at least 200 added bases by default, at least 200 scored edge positions outside the source region, positive recorded support and informative sequence. `--min-extension-flank` and `--min-external-bases` control these distinct requirements. A 750-base path whose first 623 bases lie in unresolved source context is not a supported 750-base external reconstruction. The default maximum is 750 added bases. For short targets, the explicit anchor padding counts toward the left-flank minimum and maximum. Source revisits, source re-entry, failure to clear the expected repeat passage, excessive external revisits, saturated recorded multiplicities, technical motifs and search limits can shorten or reject a flank. Competing-route uncertainty is annotated, not used to manufacture a short confident-looking prefix.
 
@@ -141,7 +145,7 @@ Repeatedly evaluating method changes on one dataset makes it a development datas
 | `supplied_targets.tsv`, `associations.tsv` | Original record → query → target → extension mappings, strands and exact intervals. |
 | `candidates.tsv`, `unresolved_and_rejected.tsv` | Considered placements and reasons; alternative rows are not extra primary predictions. |
 | `target_context.tsv`, `graph_paths.tsv` | Independent discovery context and selected connected graph routes. |
-| `coverage_evidence.tsv` | Actual scored edge multiplicities and running minimum count. The historical `path_capacity` column name no longer means segment-median capacity. |
+| `coverage_evidence.tsv` | Query ID, target/extension IDs, actual scored edge multiplicities and running minimum count. Query IDs distinguish different input queries that map to the same deduplicated target. The historical `path_capacity` column name no longer means segment-median capacity. |
 | `path_selection.tsv` | Retained flank scores, phase, selection status, competing-route count, first divergence and unphased source branching. The legacy `independent_bases` field counts scored edge positions, not statistically independent observations or necessarily distinct nodes. `path_cost = branch_loss / independent_bases` for a nonzero denominator; `runner_up_path_cost` uses that same primary score. `mean_energy` is only a tie-breaker. `branch_observations` is an audit count, not the selection denominator. |
 | `query_metrics.tsv`, `run_summary.json` | Per-query work/timings, all parameter values, count meanings and completion status. |
 | `search_paths/*.tsv.gz` | Optional finished/pruned path audit. These rows are search states, not protospacer or phage counts. `branch_costs` contains raw costs, including masked positions; its unfiltered sum is not `branch_loss`. Only costs whose preceding and selected positions both occur consecutively in `count_positions` contribute. |
@@ -165,7 +169,7 @@ All prediction functions belong to one class. The former unitig-median scoring h
 | `reverse_complement`, `canonical`, `dna` | Orient, group and validate DNA sequences. |
 | `json`, `numbered` | Escape output strings and generate deterministic readable identifiers. |
 | `triplet_entropy`, `informative` | Measure sequence complexity and apply entropy/homopolymer checks. |
-| `adapter_position` | Find a full configured adapter core within one substitution in the traversal orientation. |
+| `adapter_position` | Find the exact shared 13-base TruSeq prefix or a longer configured core within one substitution, in the traversal orientation. |
 | `repeat_context` | Classify the expected adjacent source repeat as pending, matching or incompatible. |
 | `label`, `find_node` | Read a real k-mer label and retrieve a verified exact node. |
 | `neighbors`, `added_base`, `spell` | Return real graph arcs/counts, emit their bases and verify a connected path's sequence. |

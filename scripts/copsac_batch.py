@@ -298,7 +298,7 @@ def process(sample, arrays, options, logdir, binary_hash):
     base.mkdir(exist_ok=True)
     job = base/dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     job.mkdir()
-    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v6",
+    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v7",
                 "binary_sha256": binary_hash, "helper_sha256": digest(__file__), "arrays": {p.name: digest(p) for p in arrays}}
     write_json(job/"job.json", manifest)
     try:
@@ -336,7 +336,7 @@ def process(sample, arrays, options, logdir, binary_hash):
                    "--max-flank-length", options.max_flank_length, "--min-extension-flank", options.min_extension_flank],
                   job, logdir/"measurements.tsv", sample.name, "protospacer_workflow")
         summary = json.loads((job/"predictions/run_summary.json").read_text())
-        if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v6":
+        if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v7":
             raise ValueError("native workflow did not complete")
         if len(read_fasta(job/"predictions/Protospacers.fasta")) != summary["protospacer_regions"] or \
            len(read_fasta(job/"predictions/ContiguousPaths.fasta")) != summary["unique_extensions"]:
