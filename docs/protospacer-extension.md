@@ -1,401 +1,203 @@
-# Native protospacer workflow (v5)
+# Native protospacer detection and extension (v6)
 
-Experimental: the [complete v5 evaluation](protospacer-evaluation-SRR14017553-v5.md)
-on 398 distinct SRR14017553 queries found **20 matching extensions out of 182**, up
-from 6/146: **14 new matching sequences, zero lost**. All 146 earlier sequences
-remain unchanged; 19/20 matching extensions are at least 750 bp. The separate
-81-supplied-target control improves 5/26 to 16/58. The historical 44-match result
-has not been fully recovered; the report lists the remaining losses.
-
-This implementation is entirely within MCAAT: one C++ class, `ProtospacerWorkflow`,
-and plain structs for options, sources, graph arcs, local unitigs, walks and candidates.
-It adds no assembler, aligner, optimization solver or library dependency. The existing
-succinct graph is opened read-only and retained. Array detection and CAS code are not
-part of this replacement.
+MCAAT searches an existing de Bruijn graph for a possible target of an array spacer, extends that target through competing graph paths, filters source-only and technical paths, and saves the selected sequence with its evidence. All of this runs inside the single `ProtospacerWorkflow` class. The graph remains unchanged. No reference sequence or external aligner is consulted during prediction.
 
 ## Run on an existing graph
 
-```bash
-build/mcaat phage-curate \
-  --arrays /vol/d/data/copsac/SRR14017553 \
-  --graph /vol/d/data/copsac/SRR14017553/graph/graph \
-  --output /vol/d/data/copsac/SRR14017553/native_flow_results \
-  --source-array-crossing true \
-  --threads 24
-```
-
-The output folder must be new or empty. No reads, cycle search or graph rebuilding
-are needed for this command. There is no wall-clock timeout. Explicit search budgets
-bound work and are recorded; a completed invocation is not necessarily an exhaustive
-search. SIGINT/SIGTERM request partial-output saving and return a nonzero exit status.
-
-### Extend supplied targets
-
-To extend a known set of target sequences on the same graph:
+From the repository root:
 
 ```bash
 build/mcaat phage-curate \
   --arrays /vol/d/data/copsac/SRR14017553 \
   --graph /vol/d/data/copsac/SRR14017553/graph/graph \
-  --protospacers /path/to/known_protospacers.fasta \
-  --output /vol/d/data/copsac/SRR14017553/supplied_target_extensions \
+  --output /vol/d/data/copsac/SRR14017553/native_protospacer_results \
   --threads 24
 ```
 
-This is extension of supplied targets, not a new discovery count. Every supplied
-FASTA identifier and sequence is retained in `SuppliedProtospacers.fasta`, including
-inputs without an accepted extension. `supplied_targets.tsv` maps input records to
-internal queries; query/result tables then identify any accepted extension. Each
-supplied sequence is associated with its original array context by substring lookup
-on both strands. The full source spacer and unmatched remainder locate the adjacent
-repeat; the longer source spacer does not replace the supplied target. There is no
-reference-database lookup during this process.
+Use a new or empty output folder. This command reuses and retains the graph; it does not download reads or rebuild it. To extend an explicit known target set instead, add `--protospacers /path/to/targets.fasta` and use a separate output folder.
 
-Supplied targets require an exact, full-length graph match: identity and query
-coverage are both 100%, with no substitutions or clipping. A target shorter than
-graph k is embedded as the exact suffix of a full graph k-mer. Its preceding
-padding is explicit in `anchor_prefix_bp`; it is part of the left flank, not part
-of the supplied target. Both minimum and maximum flank lengths include that padding.
-Saved seed coordinates still identify only the original supplied sequence.
+The batch wrapper `scripts/run_copsac_protospacers.sh` processes eligible SRR folders sequentially. It reuses an existing graph or downloads reads and builds one when needed. It defaults to 28 threads, a 192 GiB graph-build budget, and the same extension settings listed below: 200 scored external positions, a 200–750-base flank, 256 pending paths, 64 mature paths and a read length of 150. The batch invokes source crossing explicitly. Use `--existing-only` to prohibit downloading/building and `--dry-run` to list eligible samples without running them. Final result directories are recorded in each sample's `protospacer_workflow/LATEST.txt`; the batch's stage logs and measurements are under `_mcaat_workflow_logs`.
 
-`--source-array-crossing true` is the default. It permits the additional extension
-pass described below; it never relaxes strict discovery. Set it to `false` to compare
-against the noncrossing extension policy on the same inputs. Keep supplied-input and
-full-discovery evaluations separate, even when they use the same graph.
+## Inputs and two distinct modes
 
-## Detection
+In ordinary discovery mode, read the array reports and retain every source-spacer observation. Conservative boundary correction can move shared spacer-end motifs into the repeat: the default requires 85% support among at least five distinct spacers, a motif of at least six bases, and agreement across duplicate and reverse-complement observations. Group corrected sequences with their reverse complements into internal queries while retaining the original source associations.
 
-1. Read graph-path observations if available; otherwise use numbered array reports,
-   falling back to the legacy report. Preserve every source observation.
-2. Optionally correct shared spacer-end motifs with at least 85% support among at
-   least five distinct spacers. Motifs must be at least six bases; duplicate and
-   reverse-complement observations must agree. Record the original boundaries.
-3. Group reverse-complement copies of corrected spacers. Reject uninformative queries
-   with triplet entropy below 2 or a homopolymer covering at least half the sequence.
-4. Partition the minimum covered query interval into short seeds. With at most E
-   substitutions among P blocks, at least one block contains at most floor(E/P)
-   substitutions. Search these short suffixes in the graph's colexicographic index.
-5. From each hit, walk backwards/forwards to align a contiguous graph path to the
-   query. Check every base and every edge. Require at least 90% identity and 85%
-   query coverage by default. Allow substitutions and terminal clipping; internal
-   alignment gaps are not supported. The pigeonhole argument applies before search
-   limits and does not make a truncated search exhaustive.
-6. Check nearby sequence against the associated source repeat. A continuation of
-   that source repeat cannot establish an external target. A shared k-mer alone is
-   not globally blacklisted. Require k+1 further bases beyond the initial k/context
-   check to call a possible external target. This is a sequence-context criterion,
-   not proof of viral origin.
+Map each query to a connected graph path. The defaults require at least 90% identity and 85% query coverage. The mapper permits substitutions and terminal clipping, but not internal gaps. It searches seeds in the succinct index and verifies their connected extensions base by base. Mapping is bounded; a search that reaches a work or placement limit is not exhaustive.
 
-Source-repeat crossing is not evidence for this detection decision. The additional
-extension pass runs only after strict discovery has identified a primary target, or
-when the user has explicitly supplied the target with `--protospacers`.
+In supplied-target mode (`--protospacers FASTA`), the inputs are already identified targets. Require an exact, full-length graph embedding: 100% identity, 100% query coverage, no clipping. Associate each input with source-array context by substring lookup on both strands; do not replace it with the longer source spacer. A target shorter than graph k is embedded as the exact suffix of a full k-mer. The preceding `anchor_prefix_bp` bases belong to the left flank, not to the supplied target. Saved target coordinates still identify the unchanged original sequence.
 
-The default mapping budget is 400,000 index/graph operations per query and the
-placement cap is 128. Seed searches cap their hit list at 4,096 nodes. Reaching one seed’s hit cap does
-not disable the remaining seeds. Once the mismatch allowance is spent, the remaining
-seed prefix is found with an exact index lookup. Duplicate connected alignments are
-visited once per query start. Every reached limit is reported. Runtime index checks independently recover sampled real graph
-nodes using exact and mutated seeds before detection begins.
+Every supplied FASTA record is preserved even if it cannot be extended. Unlike new discovery queries, explicitly supplied targets are allowed to map even when their sequence fails the discovery complexity test; an exact mapped target remains identified. Flank complexity and technical-adapter checks still apply. Supplied targets with no source-array association receive an explicit unresolved outcome. Supplied-input evaluation and ordinary discovery evaluate different populations and must be reported separately.
 
-## Native local-unitig extension
+## Establish a target before allowing a source-repeat passage
 
-The graph is compacted lazily into unbranched segments for each flank. Every
-retained sequence follows actual graph arcs. The original graph is not changed.
-`path_capacity` is the minimum of the segment-median multiplicities along a path.
-A high-count shared segment therefore does not, by itself, reduce this bottleneck.
+First explore the neighboring context with source crossing disabled. The source repeat, in the orientation and position expected from the associated array, cannot establish an external target. Require a continuation incompatible with that source context and sufficient subsequent graph sequence. A shared k-mer alone is not a global rejection rule. This identifies a possible external target; it does not establish that the target is viral.
 
-### One source-repeat passage after detection
+If crossing is enabled, give already detected placements an additional extension pass with a separate work allowance. Supplied targets are eligible because their identity is provided explicitly and their complete sequence must map exactly. The crossing pass cannot turn a previously rejected source-array-only placement into a newly discovered target. Retain the original independent context in `target_context.tsv` when evaluating a crossing extension.
 
-In both modes, first run extension with source crossing disabled and keep every
-already accepted extension. In discovery mode, a primary candidate must pass strict
-target detection before becoming eligible for the additional pass. In supplied-target
-mode, the input provides its identity and its entire sequence must match the graph.
-Only a target without an accepted extension receives the additional pass, which
-can follow one source-repeat passage and continue into the flank. That passage is
-marked; it does not establish a newly discovered target.
+The crossing pass may traverse the associated repeat region once. It cannot revisit an anchor or source-array node. A repeat/junction occurrence adds a k-mer to the repeat-context set; an occurrence wholly inside a spacer does not. The same k-mer can still enter this set if it also occurs at a repeat or junction elsewhere in the associated arrays. After leaving, entering a known repeat/junction node is rejected. This separation matters because a genuine target can share k-mers with another spacer. A source passage must clear by the expected unmatched spacer/repeat interval, its allowed edit/graph overlap, plus one context window; otherwise it stops with `source_passage_not_exited`. External nodes have a configurable visit cap, default two. Counts from the initial source-repeat passage are excluded from the downstream count profile; a repeat's pooled abundance should not set the extension's ordinary coverage baseline.
 
-The additional pass has its own `--max-query-states` allowance. It does not consume
-the original pass's remaining budget or replace its accepted extensions. Search
-limits still apply and must be recorded. Eligibility to traverse a saved route is
-not a guarantee that beam search will retain it or that final filtering will select
-it. The repair's reference-match counts must be measured on completed runs.
+Unlike the previous policy, a short accepted strict extension does not prevent this comparison. Strict and permitted-crossing alternatives are compared before selecting the result. Consequently, this revision does not promise to preserve every previous strict result unchanged.
 
-### Local support and coverage variation
+## Extension score: conditional graph-walk support
 
-The retained extension algorithm measures counts beyond the seed/source-array
-context. `update_profile` forms a robust continuity trace from segment medians:
+At a fork, compare the selected edge's multiplicity with the sum over valid alternatives in the traversal direction. If `c(e)` is the selected count and `C` is that sum, define the empirical local transition proportion `p(e | node) = c(e)/C`. Forward extension uses outgoing arcs; backward extension uses predecessor arcs.
 
-1. A segment with multiple incoming and outgoing connections is a possible shared
-   segment. Exempt its elevated count from the continuity trace only when ordinary
-   entry and exit segments are both observed and no higher. Low counts are not exempted.
-2. Repeat each remaining segment median according to its number of recorded edges,
-   and group this trace into windows of k+1 positions (24 for the tested graph).
-3. Take each window's median, including a final partial window if at least half full.
-   Record the largest adjacent-window change in `log2(median + 1)`.
-4. Prefer continuity within `log2(branch_ratio)` of the best observed value. Within
-   that group, flows within a factor `branch_ratio` of the greatest flow are comparable.
-   Prefer length within the best group, then flow, then lower deviation.
+```
+B = sum over scored forks of -log2(p(e | node))
+N = number of recorded, unmasked edge-count positions
 
-The default ratio 1.5 is a heuristic tolerance. This is a bounded widest-path and
-continuity heuristic, not a fitted count model or a probability of correctness.
-Overlapping k-mer counts are dependent. The archived calibration sample contained
-only one qualifying long unbranched segment, so it did not support a meaningful
-negative-binomial fit. A tested alternative using 150-base windows and average log
-support shortened previously matching extensions and was not retained as the default.
+path_cost = B / N
+```
 
-Local relative coverage has precedent in
-[Haploflow](https://link.springer.com/article/10.1186/s13059-021-02426-8).
-The score, tolerances and beam policy here are MCAAT choices. See
-[sequencing evidence and limitations](protospacer-sequencing-evidence.md).
+Lower cost is preferred. An unbranched position contributes zero decision cost. This is **conditional empirical graph-walk surprisal per scored position**: a locally weak choice costs more than a well-supported choice. It does not estimate the probability that an extension is genomically correct or belongs to a phage. Algebraically, `B` is the negative logarithm of the product of the scored local proportions, and `B/N` is the negative logarithm of that product's `N`th root.
 
-### Technical sequences and low complexity
+The numerator accumulates decision costs; it is not averaged by the number of forks. At a fixed scored length, taking extra easy forks cannot improve the score merely by increasing a fork-count denominator. The normalization still has a length effect: sufficiently many easy added positions can reduce the average cost. Completeness, eligibility and bounded search are handled separately.
 
-Coverage continuity alone can prefer a stable artifact. By default,
-`--filter-extension-artifacts true` adds two native string checks during traversal:
+### Apply the same source mask to branch and count evidence
 
-- Stop before an exact 18-base prefix of either [Illumina TruSeq trimming
-  sequence](https://support-docs.illumina.com/SHARE/AdapterSequences/Content/CDIndexes.htm),
-  on either strand. Check across the anchor/flank boundary too. Queries or mapped
-  targets containing these cores are recorded as `adapter_like_query` or
-  `adapter_like_target`; their source observations remain in the output.
-- Inspect a 64-base window every eight added bases. Stop before that window if its
-  triplet entropy is below 2 bits or a homopolymer occupies at least half the window,
-  using the same complexity predicate already applied to input queries.
+Store each raw local branch cost at its actual added-base position, including while source clearance remains unresolved. Once eligible downstream positions are known, include a branch cost only when the preceding and selected edge-count positions are both unmasked and consecutive. This excludes a source-exit transition whose preceding edge is masked, while retaining eligible downstream decisions encountered before clearance was confirmed.
 
-The clean preceding prefix can still qualify; other competing branches continue.
-These checks prevent extension through known technical motifs or uninformative
-sequence. They do not establish viral origin. The motif policy is explicit and
-can be disabled with `--filter-extension-artifacts false`.
+Use the same adjacent-position condition for count variation:
 
-Comparable routes that diverge restrict output to their common prefix, with
-`ambiguous_coverage` recorded. A shorter prefix of the same route is not treated
-as a competing biological path. The implementation does not silently choose an
-unsupported long route merely to reach the requested maximum length.
+```
+E = sum over adjacent scored positions of
+        [log2((count[i] + 1) / (count[i-1] + 1))]^2
+mean_energy = E / number of those adjacent comparisons
+```
 
-### Search and work limits
+`mean_energy` is a tie-breaker when primary path costs are equal. It is not added to `path_cost`, cannot compensate for a worse primary branch score, and has no fitted coefficient. After trimming a path, recompute both summaries from the remaining positions and the same mask. No score coefficient is fitted to reference labels.
 
-- Up to 750 added bases per flank, beam 64, and at most two visits to external nodes.
-  Source-anchor revisits remain prohibited. A source-array continuation cannot
-  establish a target; one passage is available only in the additional extension pass.
-- Expand cached unbranched segments in rounds, retaining a single bounded live
-  frontier. Segment lengths can differ; the work cap counts their actual arcs.
-  A tested distance-bucket schedule with early bubble pruning lost known routes
-  earlier and was withdrawn. The retained search uses the earlier continuity
-  and flow ranking throughout.
-- Reserve a beam slot for each distinct combination of the first two branch choices
-  across retained states. This retains lower-abundance alternatives rather than using
-  every slot for similar descendants. Remaining slots follow the ranking above.
-- Keep at most four beam widths of terminal candidates. Filling this buffer trims
-  the retained candidate list; **it does not terminate the live frontier**. This fixes
-  the earlier stop at roughly 226 bases observed while a strongly supported path
-  was still advancing. Work, flank-length and visit limits still apply.
-- Beam-pruned prefixes are diagnostic records, not completed candidate extensions.
-  A work-limited selected prefix remains explicitly marked as limited.
-- Visit mapping tiers in decreasing query coverage and identity. Share a tier's
-  budget across its placements, reserving half the remaining work for lower tiers
-  when they exist. Stop after a tier produces an accepted extension, or the query
-  budget is exhausted. Merely detecting a target without extending it no longer
-  suppresses the next tier. The preceding best tier keeps its original search budget.
-  Mapping itself still has explicit state and placement limits.
-- A flank of at least 200 bases may qualify. Counts below the initial source/seed
-  context do not define external support. There is no sparse 100-base sampling rule.
-- The additional crossing pass applies only to a primary detected but unextended
-  candidate, or to an explicitly supplied target. It receives a separate query-work
-  allowance. Disabling it does not change strict detection or mapping thresholds.
-- If the two flanks conflict by more than fourfold path capacity or reuse external nodes,
-  retain the greater-capacity flank instead of joining incompatible contexts.
+The denominator at a fork includes valid local graph arcs before path-specific source, revisit and artifact guards are applied. It is not renormalized over only the branches surviving those guards. Masked transitions are omitted, so this is not the likelihood of the entire reconstruction.
 
-At most one primary target is selected per corrected query. Prefer an accepted
-extension over a detected-only placement; then prefer query coverage and alignment
-identity. An already extended better alignment stays preferred. Distinct targets
-with identical alignment quality in the same outcome category remain unresolved.
-No abundance score overrides the spacer alignment. Exact/RC duplicates and contained
-extensions are consolidated; partial overlaps are not joined into an invented
-sequence. Strict-pass extensions are consolidated first. Their saved representative
-sequences are preserved when new crossing-pass extensions are added; a longer new
-extension cannot replace an already accepted strict representative. This also avoids
-changing a baseline sequence's reference-coverage denominator solely through
-containment consolidation. Every original observation and its association are preserved. Search-limit
-flags mean the result is conditional on the explored paths, not globally unique.
-In supplied-target mode, also preserve the original input records and their mapping;
-an accepted extension is optional and must not determine whether an input is retained.
+These graph-local proportions are **not probabilities that an extension or phage prediction is correct**. Overlapping k-mer counts are correlated and can pool organisms, strains, repeats and sequencing errors. A count-1 route can be real; stable high counts can be misleading. A route with no scored forks has zero branch cost, which means that no branch comparison challenged it—not certainty or viral origin. When `N = 0`, zero is an unscored placeholder; output eligibility still requires the configured external evidence.
 
-### Optional path audit
+No reference sequence or reference-match label is used during prediction. The score ranks paths retained by a bounded search, so the selected route need not minimize it over the complete graph. Sequence-artifact checks, source/revisit rules, ambiguity reporting and exact target/graph validation remain separate checks.
 
-`--save-search true` streams every finished or pruned path to
-`search_paths/Q....tsv.gz`, including its sequence, nodes, counts, unitig blocks,
-stop reason and coverage deviation. Records are written as the search runs; discarded
-paths need not remain in RAM. This is optional diagnostic output and can be large.
-It is disabled in ordinary and batch runs.
-Path identifiers include the strict or crossing phase, so rerunning extension for
-one placement does not reuse an identifier within that query's audit file.
+## Keep bounded alternatives at the same extension distance
 
-## Files and counts
+Expand one graph edge per round. Competing frontier paths therefore have the same physical distance from the anchor rather than advancing by unequal unitig lengths. Cache local adjacency queries to avoid fetching the same neighborhood repeatedly.
 
-| File | Meaning |
+Keep separate bounded pools:
+
+* **Pending:** a source passage or an external path with too little downstream count evidence; default maximum 256 paths.
+* **Mature:** an external path with at least `max(k + 1, read_length - k)` recorded count positions; default beam width 64. For k = 23 and read length 150, this threshold is 127 positions.
+
+The maturity threshold is a chosen observation scale related to one read's effective k-mer span. It does not mean those positions are 127 independent reads, and `--read-length` is supplied metadata rather than an estimate inferred from the graph. Keeping separate pools prevents an unscored source passage from being compared immediately with a path whose downstream support is already known.
+
+Within a pool, prefer established external context and a full requested flank, then lower conditional branch cost, lower mean adjacent-count energy, longer retained sequence, and deterministic node order. Reserve different current oriented endpoints and context states before filling remaining slots by score. Rejoined variants therefore cannot occupy every slot ahead of a distinct continuation. Every retained state keeps its complete real path and revisit history; states are not spliced or asserted to be mathematically equivalent. These policies improve search diversity only within the configured bounds; no route-retention guarantee follows.
+
+Store at most four mature beam widths of eligible terminal candidates. Trimming this terminal buffer does not terminate the live frontier. Beam-pruned states are diagnostic paths, not completed predictions. Reaching a work, placement, frontier or terminal-storage limit is recorded.
+
+When any terminal candidate reaches the requested maximum flank, compare those full-length candidates first. Otherwise compare the retained shorter candidates. Retain the best actual graph route and annotate close competitors, their runner-up score and first divergence. Do not shorten a completed path solely because another route is plausible. Short bubbles that rejoin and then share at least k+1 oriented nodes are treated as local sequence alternatives on the same route; this is a heuristic route equivalence, not read-backed phasing.
+
+The default `branch_ratio` is 1.5. A retained competitor is comparable when its conditional branch cost is at most 1.5 times the best cost (plus numerical tolerance). This is a heuristic cost tolerance, not a probability ratio or confidence interval. Source-region branching is also marked unphased even if its other arms were too short to enter the completed-candidate pool. A graph-valid route can connect a target to downstream sequence that never occurred with it in one molecule; the toy fixture deliberately records this limitation. `ambiguous=0` still does not establish genomic truth or exhaustive uniqueness. Competitor annotations concern the retained routes for a particular placement and side, not every possible target embedding or every unexplored path.
+
+## Filter, retain one flank, and save
+
+Stop before either configured TruSeq adapter core, allowing one substitution and checking both strands and the target/flank boundary. Also check 64-base sequence-complexity windows every eight added bases. A window is uninformative if triplet entropy is below 2 bits or one homopolymer occupies at least half its length. The clean preceding prefix remains eligible, and competing paths continue. These finite motif/complexity rules do not detect every technical artifact.
+
+A retained flank must have at least 200 added bases by default, at least 200 scored edge positions outside the source region, positive recorded support and informative sequence. `--min-extension-flank` and `--min-external-bases` control these distinct requirements. A 750-base path whose first 623 bases lie in unresolved source context is not a supported 750-base external reconstruction. The default maximum is 750 added bases. For short targets, the explicit anchor padding counts toward the left-flank minimum and maximum. Source revisits, source re-entry, failure to clear the expected repeat passage, excessive external revisits, saturated recorded multiplicities, technical motifs and search limits can shorten or reject a flank. Competing-route uncertainty is annotated, not used to manufacture a short confident-looking prefix.
+
+When both sides qualify, keep one side using the same path ranking. Pooled edge counts do not establish that two independently chosen flanks belong to the same molecule. The result is an extended target region with one selected flank, not a complete phage genome. Short-target k-mer padding may still precede a right-side extension; it is the exact anchor embedding, not a separately selected second flank.
+
+Select at most one primary placement per canonical query. Prefer detection and an accepted extension, then alignment coverage and identity, full requested flank, conditional branch cost, mean adjacent-count energy, length and deterministic anchor order. Equal-quality distinct target sequences remain unresolved. Verify the final sequence against the graph before writing it.
+
+Consolidate exact/reverse-complement duplicate sequences and wholly contained extensions. Do not stitch partial overlaps into a new sequence. Strict representatives selected in this run take precedence in containment consolidation; this is not a promise that the preceding revision's primary selection is unchanged. Preserve every source/input association and its exact coordinates.
+
+## Limits and reproducibility
+
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `--max-flank-length` | 750 | Maximum added bases on a side, including short-target left padding. |
+| `--min-extension-flank` | 200 | Minimum total retained flank, including short-target padding. |
+| `--min-external-bases` | 200 | Minimum scored positions outside the initial source context. |
+| `--beam-width` | 64 | Mature frontier width; terminal storage is at most four times this width. |
+| `--max-context-paths` | 256 | Pending/context frontier width. |
+| `--read-length` | 150 | Used to set the downstream-evidence maturity scale. |
+| `--max-placement-states` | 400,000 | Bounded index/connected-mapping work per query. |
+| `--max-placements` | 128 | Maximum retained target placements; short-seed hit lists also have a 4,096-node cap. |
+| `--max-query-states` | 2,000,000 | Main query work allowance; an enabled crossing pass has a separate allowance of this size. |
+| `--max-node-visits` | 2 | Maximum visits to an external node; source/anchor rules are stricter. |
+
+These are search bounds, not wall-clock timeouts. Completion means the bounded procedure finished, not that all graph routes were enumerated. Parameter values, work counts and limit flags are saved. SIGINT/SIGTERM request partial output and a nonzero exit status. Use a new or empty output folder and retain the graph and run summary when comparing versions.
+
+There is no reference-guided branch choice, reference-derived path score or downstream BLAST call in MCAAT. Evaluate frozen predictions afterward with fixed identity/coverage criteria and unchanged inputs. A missing reference hit is not proof of a false positive; a target hit alone does not validate its extension. Report both sequence counts and input-query counts because consolidation can change their relationship.
+
+Repeatedly evaluating method changes on one dataset makes it a development dataset. Independent data are needed before claiming general performance; reference-free prediction does not make repeated development-set evaluation independent.
+
+## Output counts
+
+| Field or file | What it counts or stores |
 |---|---|
-| `Protospacers.fasta` | Unique detected target intervals, with P IDs. |
-| `ContiguousPaths.fasta` | Unique accepted extended regions, with E IDs; not a count of complete phage genomes. |
-| `SuppliedProtospacers.fasta` | In supplied-target mode, every original input identifier and sequence, whether extended or not. |
-| `supplied_targets.tsv` | In supplied-target mode, original input IDs and sequences mapped to internal query IDs. |
-| `sources.tsv` | Discovery: original array-spacer observations, corrected sequences and trim offsets. Supplied mode: source-context associations for the supplied targets. |
-| `queries.tsv` | Every distinct query, outcome, work count and search-limit flag. |
-| `query_metrics.tsv` | Mapping/extension work and per-query mapping, extension and filter seconds. |
-| `candidates.tsv` | Examined placements, identity/coverage, acceptance, stop reasons, left/right coverage deviations, crossing flags and prior target identification. Alternatives are not primary predictions. |
-| `unresolved_and_rejected.tsv` | Queries/placements without an accepted extension, including detected but unextended targets. |
-| `associations.tsv` | Source/query/target/extension relationships and verified coordinates. |
-| `target_context.tsv` | Selected contexts before extension filtering and their original stop reasons. |
-| `graph_paths.tsv` | Anchor and retained flank node paths. Left nodes are listed outwards. |
-| `coverage_evidence.tsv` | Actual per-edge multiplicities and the associated path capacity. |
-| `run_summary.json` | Completion/error status, counts, discovery/supplied mode, crossing policy, parameters, method and stage timings. |
+| `supplied_targets` / `SuppliedProtospacers.fasta` | Every supplied input record, unchanged, including unextended records. Only meaningful in supplied mode. |
+| `spacer_observations` / `sources.tsv` | Ordinary mode: original source-spacer observations. Supplied mode: source-context associations, which may exceed the number of supplied input records. |
+| `distinct_spacers` / `queries.tsv` | Internal canonical queries after grouping duplicates and reverse complements. |
+| `detected_queries` | Queries with a selected possible target, whether extended or not. In supplied mode this is an extension outcome, not a new biological discovery count. |
+| `protospacer_regions` / `Protospacers.fasta` | Unique selected target sequences after target deduplication. |
+| `extended_queries` | Queries associated with an accepted extension. Several queries may share one saved region. |
+| `unique_extensions` / `ContiguousPaths.fasta` | Unique retained extended regions after consolidation. This is not a count of phage genomes. |
+| `limited_queries` | Queries that encountered any recorded search limit. |
+| `queries_without_extension` | Canonical queries without an accepted extension, including detected-only and unresolved outcomes. |
+| `supplied_targets.tsv`, `associations.tsv` | Original record → query → target → extension mappings, strands and exact intervals. |
+| `candidates.tsv`, `unresolved_and_rejected.tsv` | Considered placements and reasons; alternative rows are not extra primary predictions. |
+| `target_context.tsv`, `graph_paths.tsv` | Independent discovery context and selected connected graph routes. |
+| `coverage_evidence.tsv` | Actual scored edge multiplicities and running minimum count. The historical `path_capacity` column name no longer means segment-median capacity. |
+| `path_selection.tsv` | Retained flank scores, phase, selection status, competing-route count, first divergence and unphased source branching. The legacy `independent_bases` field counts scored edge positions, not statistically independent observations or necessarily distinct nodes. `path_cost = branch_loss / independent_bases` for a nonzero denominator; `runner_up_path_cost` uses that same primary score. `mean_energy` is only a tie-breaker. `branch_observations` is an audit count, not the selection denominator. |
+| `query_metrics.tsv`, `run_summary.json` | Per-query work/timings, all parameter values, count meanings and completion status. |
+| `search_paths/*.tsv.gz` | Optional finished/pruned path audit. These rows are search states, not protospacer or phage counts. `branch_costs` contains raw costs, including masked positions; its unfiltered sum is not `branch_loss`. Only costs whose preceding and selected positions both occur consecutively in `count_positions` contribute. |
 
-In discovery mode, `spacer_observations` counts original array-spacer observations.
-In supplied-target mode, it counts source-context associations, which can exceed
-the number of input records because one target can occur in several source contexts.
-The exact supplied-input count is `supplied_targets` in the summary; the unchanged
-records are in `SuppliedProtospacers.fasta` and `supplied_targets.tsv`.
-`distinct_spacers` counts internal canonical queries, so duplicate or reverse-complement
-inputs can share one query while remaining separate supplied records.
+Interval coordinates are zero-based and half-open. Supplied-mode query intervals cover the original complete supplied sequence. Left/right paths are oriented to the canonical query; association strand fields relate them back to the original source. Empty extension IDs explicitly mean no accepted extension. Summed worker times can exceed wall time because queries run concurrently.
 
-Association coordinates are zero-based, half-open. Query coordinates refer to the
-original untrimmed source spacer. Seed/fragment coordinates refer to the saved
-extension. `target_strand` relates the original source to that extension, or to the
-canonical target FASTA if no extension exists. Left/right fields follow the canonical
-query orientation. Containment does not imply support beyond a source's own recorded
-fragment. Empty extension fields mean the target was detected without an accepted
-extension. Worker times may sum beyond wall time because workers run concurrently.
-For short supplied targets, `anchor_prefix_bp` distinguishes graph-anchor padding
-from the target. Reported left-flank lengths and coverage-evidence positions are
-measured from the target boundary and include that padding. Supplied-mode query
-coordinates cover the complete supplied sequence.
+`first_ambiguous_base` is a zero-based outward position from the graph anchor, interpreted only when `ambiguous=1`. For a short target's left flank, add `anchor_prefix_bp` to express it relative to the target boundary. Coverage-evidence positions are one-based outward added-base positions and already include that padding. The optional search audit's `count_positions` are one-based from the graph anchor and exclude padding; a cost at position `p` is `branch_costs[p-1]`. A `runner_up_path_cost` of -1 means no scored competing completed route was recorded; source-branch uncertainty alone can still set `ambiguous=1`.
 
-## Every C++ function
+## Function responsibilities
+
+All prediction functions belong to one class. The former unitig-median scoring helpers have been removed.
 
 | Function | Responsibility |
 |---|---|
-| `ProtospacerWorkflow` | Own options, graph, source observations and query results. |
-| `main` | Dispatch help/self-test, initialize output, install signals and save failure status. |
-| `parse_options` | Parse the explicit native CLI and validate inputs, budgets and output safety. |
-| `print_help` | Describe options and limits. |
-| `interrupt` | Record an interruption for bounded workers to finish/checkpoint. |
-| `run` | Execute stages, parallelize queries, propagate errors and save completion status. |
-| `reverse_complement` | Reverse/complement strict ACGT DNA. |
-| `canonical` | Select the lexical sequence/RC minimum for deduplication. |
-| `dna` | Check nonempty ACGT input. |
-| `json` | Escape output strings safely. |
-| `numbered` | Produce readable deterministic Q/P/E identifiers. |
-| `median` | Calculate unitig capacities from count vectors. |
-| `triplet_entropy` | Measure sequence complexity from overlapping nucleotide triplets. |
-| `informative` | Apply entropy and long-homopolymer checks. |
-| `adapter_position` | Find exact trimming cores in the required traversal orientation. |
-| `repeat_context` | Edit-compare an adjacent repeat; distinguish pending, matching and incompatible context. |
-| `label` | Read a real k-mer label and reject dummy labels. |
-| `find_node` | Retrieve and verify an exact k-mer index hit. |
-| `neighbors` | Return actual incoming/outgoing arcs with their multiplicities. |
-| `added_base` | Read the nucleotide contributed by a forward or backward arc. |
-| `spell` | Verify adjacency and spell a connected graph-node path. |
-| `search_range` | Search a colexicographic suffix interval within a substitution/work budget. |
-| `find_starts` | Retrieve and deterministically order short-seed hits. |
-| `verify_index` | Check exact/mutated seed searches against sampled known graph labels. |
-| `load_sources` | Read reports, expand repeat variants and validate source identities. |
-| `correct_boundaries` | Infer shared-end motifs and record conservative boundary adjustments. |
-| `prepare_source_nodes` | Index reported source-array k-mers on both strands for extension checks. |
-| `load_supplied_targets` | Preserve explicit FASTA inputs and associate them with source contexts by substring lookup on both strands. |
-| `group_queries` | Group corrected strands while retaining all observations and supplied-input associations when applicable. |
-| `map_spacer` | Construct bounded connected alignments; require the full exact sequence for supplied targets and explicitly pad short targets to graph k. |
-| `source_context` | Orient and test the associated source repeats for a candidate's flank. |
-| `source_clearance` | Bound the source-overlap interval using the unmatched spacer remainder, repeat length, allowed edits and graph k. |
-| `build_unitig` | Follow an actual unbranched chain up to a junction, cycle or explicit bound. |
-| `update_flow` | Record a unitig block and diagnostic bottleneck, then advance its coverage profile. |
-| `update_profile` | Track the largest adjacent change between windows of segment-median counts, exempting bracketed shared increases. |
-| `select_candidate` | Prefer an extended placement, then alignment quality; retain one primary result or record equal-quality ambiguity. |
-| `rank_walks` | Rank continuity/support bands and preserve distinct branch families in the beam. |
-| `retain_completed` | Remove ineligible terminal paths, then bound their storage without stopping live paths. |
-| `save_walks` | Stream diagnostic paths and evidence to per-query gzip files with unique IDs. |
-| `advance_walk` | Apply one arc, anchor/revisit/source checks and count evidence under the strict or permitted extension-only crossing policy. |
-| `extension_barrier` | Stop before a technical motif or uninformative window, keeping graph coordinates consistent. |
-| `extend_flank` | Explore cached unitigs with bounded competing path states and the selected source-crossing policy. |
-| `choose_walk` | Prefer length within comparable continuity/support and retain only a common prefix when routes remain ambiguous. |
-| `trim_walk` | Truncate sequence, nodes and count evidence consistently. |
-| `assemble_candidate` | Validate spelling, preserve target evidence, filter flanks and check joint compatibility. |
-| `process_query` | Run noncrossing extension first in both modes, preserve accepted extensions, and give an eligible unextended primary target a separately budgeted crossing pass; record per-function timings. |
-| `consolidate` | Consolidate strict-pass representatives first, then recovered sequences, preserving accepted strict sequences and all associations. |
-| `write_outputs` | Stage validated FASTA/TSV files and publish them before completion status. |
-| `write_summary` | Atomically save status, counts, parameters and wall times. |
-| `self_test` | Check strand/context logic, branch ranking, partial coverage updates, artifact boundaries and bounded terminal storage. |
+| `ProtospacerWorkflow` | Own options, graph, observations and per-query results. |
+| `main` | Dispatch help/self-test, validate startup, install signals and save failure status. |
+| `parse_options` | Parse CLI options and validate files, budgets and output safety. |
+| `print_help` | Describe the current options and count/search semantics. |
+| `interrupt` | Record an interruption for workers to stop and save partial results. |
+| `run` | Execute stages, schedule queries, collect errors and write final status. |
+| `reverse_complement`, `canonical`, `dna` | Orient, group and validate DNA sequences. |
+| `json`, `numbered` | Escape output strings and generate deterministic readable identifiers. |
+| `triplet_entropy`, `informative` | Measure sequence complexity and apply entropy/homopolymer checks. |
+| `adapter_position` | Find a full configured adapter core within one substitution in the traversal orientation. |
+| `repeat_context` | Classify the expected adjacent source repeat as pending, matching or incompatible. |
+| `label`, `find_node` | Read a real k-mer label and retrieve a verified exact node. |
+| `neighbors`, `added_base`, `spell` | Return real graph arcs/counts, emit their bases and verify a connected path's sequence. |
+| `search_range`, `find_starts` | Search bounded colexicographic seed intervals and order candidate starts. |
+| `verify_index` | Check exact/mutated seed lookup against sampled real graph nodes. |
+| `load_sources` | Read array observations and preserve their identities and repeat variants. |
+| `correct_boundaries` | Infer conservative shared-end motifs and save original boundaries. |
+| `prepare_source_nodes` | Index both broad source-array nodes and separate repeat/junction nodes on both strands; pure spacer matches do not imply repeat context. |
+| `load_supplied_targets` | Retain exact supplied records and associate their source contexts. |
+| `group_queries` | Group canonical query sequences while retaining every source/input association. |
+| `map_spacer` | Construct bounded connected mappings; require exact full embeddings in supplied mode. |
+| `source_context`, `source_clearance` | Orient source context, test it and calculate the excluded initial repeat interval. |
+| `trim_walk` | Truncate bases, nodes, positions and score evidence together. |
+| `update_profile` | Apply the same consecutive unmasked-position rule to cumulative branch costs and squared log-count changes. |
+| `walk_score` | Return cumulative branch loss per scored position; zero is an unscored placeholder when no counts exist. |
+| `rank_walks` | Rank completeness, conditional branch cost and mean energy; reserve distinct current endpoints within bounded pools. |
+| `save_walks` | Stream finished/pruned diagnostic states with phase-specific unique identifiers. |
+| `extension_barrier` | Stop before configured adapter or low-complexity sequence while preserving valid coordinates. |
+| `advance_walk` | Store one real edge and its raw branch cost; apply source/revisit/artifact guards, count masking and the flank-length bound. |
+| `retain_completed` | Remove ineligible terminal paths and cap terminal storage without stopping live paths. |
+| `same_route` | Recognize bounded rejoining bubbles with shared downstream context. |
+| `choose_walk` | Retain the best actual terminal route and annotate close competitors and unphased source branching. |
+| `extend_flank` | Expand equal-distance states with separate pending/mature frontiers and record branch scores. |
+| `assemble_candidate` | Preserve discovery evidence, verify spelling, filter both sides and retain one flank. |
+| `select_candidate` | Choose one placement using alignment and extension evidence or mark target ambiguity. |
+| `process_query` | Map, establish strict target context, compare eligible crossing alternatives and record work/timings. |
+| `consolidate` | Deduplicate/contain selected sequences without inventing overlap joins or losing associations. |
+| `write_outputs`, `write_summary` | Publish validated sequence/evidence tables and atomically save status/counts. |
+| `self_test` | Exercise arithmetic, context, ranking, ambiguity and output invariants without loading a dataset. |
 
-## Evaluation, separate from prediction
+## Mathematical background and its limits
 
-`tests/evaluate_protospacer_workflow.py` checks frozen outputs and can optionally
-compare them with a local reference using BLAST. BLAST is only an evaluation tool;
-it is not called by MCAAT or required for prediction. The helper permits only the
-three requested dataset labels: SRR14017553, SRR14017554 and SRR14017569.
+If outgoing-base counts are modeled as multinomial observations, `c(e)/sum(c)` is the maximum-likelihood proportion. Applying that model to pooled graph counts and using the proportions to rank a complete route are additional modelling choices: graph counts do not retain which adjacent decisions came from the same read. The score has no fitted weights and does not estimate a sequencing-error distribution.
 
-| Function | Responsibility |
-|---|---|
-| `fasta` | Read strict DNA FASTA and reject duplicate/empty records. |
-| `table` | Read TSV and reject inconsistent columns. |
-| `reverse_complement` | Independently orient sequences for association checks. |
-| `digest` | Fingerprint files with SHA-256. |
-| `write_json` | Save readable evaluation records. |
-| `validate` | Check all inputs/outcomes, identities, coordinates, retained evidence and deduplication. |
-| `blast` | Evaluate frozen sequences, saving the exact command and runtime. |
-| `summarize_matches` | Calculate exact identity/coverage and save every sequence's best qualifying coverage. |
-| `main` | Validate, freeze/fingerprint, evaluate targets/extensions/all inputs and verify unchanged predictions. |
-
-Default reference criteria: 90% identity with 85% target coverage or 50% extension
-coverage in one HSP. These are reference-match rates, not biological precision.
-Targets and input spacers use 7-base BLAST seeds. Extensions use 9-base seeds when
-every sequence is at least 180 bases: at the specified thresholds, a qualifying
-alignment then contains an exact run of at least nine bases. BLAST remains a
-heuristic alignment search. Use the same settings for before/after comparisons.
-Missing database matches do not prove false positives, and input reference matches
-do not prove their flanks exist in the sample graph. Report search limits and compare
-the same source-query set when measuring gains and losses.
-
-## Diagnostic helpers
-
-`tests/audit_protospacer_search.py` evaluates saved candidates only after prediction.
-It uses SQLite for deduplication and records shorter prefixes separately from full
-750-base flanks. It seeks one qualifying reference witness per query; successful
-queries need no further searches. For unsuccessful queries, it searches every saved
-full-length candidate with word-size-16 BLAST. This gives confirmed witnesses, not
-a maximum recoverability estimate. An optional `--sensitive` pass exhausts the
-remaining pool with word size 9; repetitive paths can make this very expensive.
-The report explicitly records whether that additional pass completed. Neither
-mode proves absence of alternative routes in the full graph. Batches rotate among
-placements and flank sides. All commands and hit files are retained.
-
-| Function | Responsibility |
-|---|---|
-| `reverse_complement` | Normalize candidate strands. |
-| `prepare` | Stream gzip records into a disk database, count partial paths and export eligible distinct sequences. |
-| `screen` | Find positive witnesses with longer exact seeds, stopping each query once one is confirmed. |
-| `evaluate` | Search unresolved queries in batches, preserve witnesses and record how many candidates were tested. |
-| `main` | Parse paths and start/resume the separate evaluation. |
-
-`tests/make_protospacer_controls.py` creates one shuffled control for each corrected
-query, preserving length and exact dinucleotide counts. It keeps repeat associations,
-uses a recorded random seed and rejects exact copies of real/control queries. Inputs
-are already boundary-corrected, so run them with `--correct-spacer-boundaries false`.
-These are background controls, not certified biological negatives or a calibrated FDR.
-
-| Function | Responsibility |
-|---|---|
-| `reverse_complement` | Preserve orientation and reject duplicate controls on either strand. |
-| `shuffle_dinucleotides` | Randomize an Euler trail through nucleotide-pair edges and verify exact pair counts. |
-| `main` | Generate controls and their original-query mapping, preserving source observations. |
-
-`tests/compare_protospacer_runs.py` compares two completed, evaluated runs. It first
-requires identical query IDs and sequences, then maps reference matches back through
-`associations.tsv`. It reports both unique saved sequences and input queries, with
-explicit gained/lost/retained query lists, extension lengths, reference-covered bases,
-and whether each previous matching sequence was actually preserved. It saves a row
-for every query. It never chooses
-prediction paths.
-
-| Function | Responsibility |
-|---|---|
-| `table` | Read tab-separated records. |
-| `load_run` | Require completed predictions and resolve saved matches to query IDs. |
-| `main` | Check identical cohorts and save exact counts and per-query comparisons. |
+Squared adjacent differences are a standard smoothness measure; the broader mathematical treatment is described by [Shuman et al. (2013)](https://documents.epfl.ch/users/s/sh/shuman/www/Papers/Journal/Shuman_et_al_SPM_2013.pdf). Here that measure is a descriptive tie-breaker, not an additive likelihood or penalty in the primary score. Overlapping-read coverage is correlated, as discussed by [Evans et al. (2010)](https://arxiv.org/abs/1004.5587); the scored positions must not be counted as independent reads. [Haploflow](https://pmc.ncbi.nlm.nih.gov/articles/PMC8287296/) is related work using local graph coverage for reconstruction, not validation of this specific MCAAT selector.

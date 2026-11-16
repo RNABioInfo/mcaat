@@ -26,7 +26,7 @@ void ProtospacerWorkflow::interrupt(int signal) { interrupted_ = signal; }
 ProtospacerWorkflow::ProtospacerWorkflow(WorkflowOptions options) : options_(std::move(options)) {}
 
 void ProtospacerWorkflow::print_help() {
-    std::cout << "MCAAT protospacer workflow v5\n"
+    std::cout << "MCAAT protospacer workflow v6\n"
                  "mcaat phage-curate --arrays DIR --graph PREFIX --output "
                  "NEW_DIR [options]\n"
                  "One workflow: spacer alignment -> source-context check -> "
@@ -38,13 +38,14 @@ void ProtospacerWorkflow::print_help() {
                  "--max-query-states 2000000 --max-placement-states 400000 "
                  "--max-placements 128\n"
                  "--branch-ratio 1.5 --max-node-visits 2\n"
+                 "--max-context-paths 256 --read-length 150 --min-external-bases 200\n"
                  "--correct-spacer-boundaries true --boundary-support 0.85\n"
                  "--filter-extension-artifacts true: stop at adapter cores or "
                  "low-complexity windows.\n"
                  "--save-search false: optionally stream all finished/pruned "
                  "flank paths to gzip TSVs.\n"
-                 "The flank limit is a maximum. Ambiguous branches stop at their "
-                 "supported common prefix.\n"
+                 "The flank limit is a maximum. One best actual route is saved; "
+                 "close alternatives and search limits are reported.\n"
                  "Source-array traversal never establishes a target. Graph files "
                  "are never modified.\n"
                  "--protospacers FASTA: extend supplied targets; preserve every "
@@ -89,7 +90,7 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
         } else if (flag == "--threads" || flag == "--beam-width" || flag == "--max-flank-length" ||
                    flag == "--min-extension-flank" || flag == "--max-query-states" ||
                    flag == "--max-placement-states" || flag == "--max-placements" ||
-                   flag == "--max-node-visits") {
+                   flag == "--max-node-visits" || flag == "--max-context-paths" || flag == "--read-length" || flag == "--min-external-bases") {
             if (value.empty() || value.find_first_not_of("0123456789") != std::string::npos)
                 throw std::invalid_argument(flag + " requires a positive integer");
             size_t n = std::stoull(value);
@@ -111,6 +112,9 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
                 o.max_placements = n;
             if (flag == "--max-node-visits")
                 o.max_visits = n;
+            if (flag == "--max-context-paths") o.context_width = n;
+            if (flag == "--read-length") o.read_length = n;
+            if (flag == "--min-external-bases") o.min_external = n;
         } else if (flag == "--min-identity" || flag == "--min-query-coverage" ||
                    flag == "--array-repeat-identity" || flag == "--boundary-support" ||
                    flag == "--branch-ratio") {
@@ -146,7 +150,7 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
     if (!fs::is_regular_file(o.graph.string() + ".sdbg_info"))
         throw std::invalid_argument("graph metadata does not exist");
     if (o.threads > 1024 || o.beam_width > 256 || o.max_placements > 256 || o.max_visits > 4 ||
-        o.max_flank > 10000 || o.min_flank > o.max_flank || o.placement_work > o.max_work)
+        o.max_flank > 10000 || o.min_external > o.max_flank || o.context_width > 4096 || o.read_length < 25 || o.read_length > 10000 || o.min_flank > o.max_flank || o.placement_work > o.max_work)
         throw std::invalid_argument("inconsistent or excessive workflow limits");
     if (fs::exists(o.output) && (!fs::is_directory(o.output) || !fs::is_empty(o.output)))
         throw std::invalid_argument("output must be new or empty; existing results are preserved");
@@ -236,13 +240,6 @@ std::string ProtospacerWorkflow::numbered(const std::string &prefix, size_t valu
     return s.str();
 }
 
-double ProtospacerWorkflow::median(std::vector<double> v) {
-    if (v.empty())
-        return 0;
-    std::sort(v.begin(), v.end());
-    return v.size() % 2 ? v[v.size() / 2] : (v[v.size() / 2 - 1] + v[v.size() / 2]) / 2;
-}
-
 double ProtospacerWorkflow::triplet_entropy(const std::string &s) {
     if (s.size() < 3)
         return 0;
@@ -276,8 +273,8 @@ bool ProtospacerWorkflow::informative(const std::string &sequence) {
 }
 
 size_t ProtospacerWorkflow::adapter_position(const std::string &sequence, bool backwards) {
-    // Exact 18-base TruSeq trimming cores; these are technical motifs, not viral
-    // references.
+    // Full TruSeq adapter cores, allowing one substitution. A sequencing
+    // error must not turn a technical junction into independent target evidence.
     static const std::vector<std::string> motifs = [] {
         std::vector<std::string> m{"AGATCGGAAGAGCACACGT", "AGATCGGAAGAGCGTCGT"};
         m.reserve(8);
@@ -288,8 +285,15 @@ size_t ProtospacerWorkflow::adapter_position(const std::string &sequence, bool b
         return m;
     }();
     size_t found = std::string::npos;
-    for (size_t i = backwards ? 4 : 0; i < (backwards ? 8 : 4); ++i)
-        found = std::min(found, sequence.find(motifs[i]));
+    for (size_t i = backwards ? 4 : 0; i < (backwards ? 8 : 4); ++i) {
+        const auto &motif = motifs[i];
+        for (size_t position = 0; position + motif.size() <= sequence.size() && position < found; ++position) {
+            size_t changes = 0;
+            for (size_t j = 0; j < motif.size() && changes <= 1; ++j)
+                changes += sequence[position + j] != motif[j];
+            if (changes <= 1) found = position;
+        }
+    }
     return found;
 }
 
@@ -747,8 +751,14 @@ void ProtospacerWorkflow::prepare_source_nodes() {
         for (const auto &oriented : {sequence, reverse_complement(sequence)})
             for (size_t i = 0; i + k <= oriented.size(); ++i) {
                 auto node = find_node(oriented.substr(i, k));
-                if (node != missing)
+                if (node != missing) {
                     array_nodes_[source.array].insert(node);
+                    // A pure spacer k-mer can be a genuine target elsewhere.
+                    // Only repeat/junction overlap indicates array context.
+                    bool pure_spacer = i >= source.repeat.size() &&
+                                       i + k <= source.repeat.size() + source.spacer.size();
+                    if (!pure_spacer) array_repeat_nodes_[source.array].insert(node);
+                }
             }
     }
 }
@@ -822,10 +832,13 @@ void ProtospacerWorkflow::group_queries() {
         grouped[canonical(sources_[i].spacer)].push_back(i);
     queries_.assign(grouped.begin(), grouped.end());
     query_source_nodes_.resize(queries_.size());
+    query_repeat_nodes_.resize(queries_.size());
     for (size_t q = 0; q < queries_.size(); ++q)
         for (auto index : queries_[q].second) {
             const auto &nodes = array_nodes_[sources_[index].array];
             query_source_nodes_[q].insert(nodes.begin(), nodes.end());
+            const auto &repeats = array_repeat_nodes_[sources_[index].array];
+            query_repeat_nodes_[q].insert(repeats.begin(), repeats.end());
         }
     results_.resize(queries_.size());
     query_status_.resize(queries_.size(), "not_processed");
@@ -1073,20 +1086,19 @@ size_t ProtospacerWorkflow::source_clearance(size_t query, const TargetCandidate
 void ProtospacerWorkflow::trim_walk(ExtensionWalk &walk, size_t length, const std::string &reason) const {
     length = std::min(length, walk.bases.size());
     walk.bases.resize(length);
+    if (walk.all_counts.size() > length) walk.all_counts.resize(length);
     if (!walk.nodes.empty())
         walk.nodes.resize(length + 1);
     walk.stop = reason;
+    if (walk.ambiguous && length <= walk.first_ambiguous_base) {
+        walk.ambiguous = false;
+        walk.competing_routes = walk.first_ambiguous_base = 0;
+        walk.runner_up_score = -1.;
+    }
     while (!walk.sample_positions.empty() && walk.sample_positions.back() > length) {
         walk.sample_positions.pop_back();
         walk.counts.pop_back();
         walk.capacities.pop_back();
-    }
-    while (!walk.blocks.empty() && walk.blocks.back().begin >= walk.counts.size())
-        walk.blocks.pop_back();
-    if (!walk.blocks.empty() && walk.blocks.back().end > walk.counts.size()) {
-        auto &block = walk.blocks.back();
-        block.end = walk.counts.size();
-        block.count = median({walk.counts.begin() + block.begin, walk.counts.end()});
     }
     if (length < walk.clear_at) {
         walk.external = false;
@@ -1097,147 +1109,77 @@ void ProtospacerWorkflow::trim_walk(ExtensionWalk &walk, size_t length, const st
         walk.source_until = walk.source_last = 0;
     }
     walk.flow = walk.capacities.empty() ? 0 : walk.capacities.back();
-    walk.coverage_window.clear();
-    walk.next_block = walk.profile_samples = 0;
-    walk.previous_median = walk.last_unshared = walk.deviation = 0;
+    walk.profile_samples = 0;
+    walk.deviation = 0;
+    walk.transition_energy = 0;
+    walk.transitions = 0;
+    if (walk.branch_costs.size() > length)
+        walk.branch_costs.resize(length);
+    walk.branch_loss = 0.;
+    walk.branch_observations = 0;
     update_profile(walk, true);
 }
 
-Unitig ProtospacerWorkflow::build_unitig(uint64_t start, const GraphArc &first, bool backwards, size_t &work,
-                                         size_t work_limit) const {
-    Unitig unitig;
-    std::set<uint64_t> seen{start};
-    GraphArc arc = first;
-    while (unitig.arcs.size() < options_.max_flank && !interrupted_) {
-        if (work++ >= work_limit) {
-            unitig.limited = true;
-            break;
-        }
-        unitig.arcs.push_back(arc);
-        if (!seen.insert(arc.node).second)
-            break;
-        if (neighbors(arc.node, !backwards).size() != 1)
-            break;
-        auto next = neighbors(arc.node, backwards);
-        if (next.size() != 1)
-            break;
-        arc = next.front();
-    }
-    if (!unitig.arcs.empty())
-        unitig.shared = neighbors(start, !backwards).size() > 1 &&
-                        neighbors(unitig.arcs.back().node, backwards).size() > 1;
-    return unitig;
-}
-
-void ProtospacerWorkflow::update_flow(ExtensionWalk &walk, size_t before, bool shared) const {
-    if (walk.counts.size() == before)
-        return;
-    // The median is a robust unitig capacity, not an independent-read count.
-    // Max-min path flow tolerates a shared repeat's increased coverage.
-    std::vector<double> counts(walk.counts.begin() + before, walk.counts.end());
-    double capacity = median(std::move(counts));
-    walk.blocks.push_back({before, walk.counts.size(), capacity, shared});
-    // A barrier can trim inside this not-yet-scored segment. Its trailing
-    // capacity slots are still zero, so resume from the last committed block.
-    walk.flow = before ? std::min(walk.capacities[before - 1], capacity) : capacity;
-    for (size_t i = before; i < walk.capacities.size(); ++i)
-        walk.capacities[i] = walk.flow;
-    ++walk.unitigs;
-    update_profile(walk);
-}
-
-void ProtospacerWorkflow::update_profile(ExtensionWalk &walk, bool finish) const {
-    const size_t width = options_.context_bases;
-    auto observe = [&](double value, size_t length) {
-        for (size_t i = 0; i < length; ++i) {
-            walk.coverage_window.push_back(value);
-            ++walk.profile_samples;
-            if (walk.coverage_window.size() == width) {
-                double current = median(walk.coverage_window);
-                if (walk.previous_median > 0)
-                    walk.deviation = std::max(
-                        walk.deviation, std::abs(std::log2((current + 1) / (walk.previous_median + 1))));
-                walk.previous_median = current;
-                walk.coverage_window.clear();
+void ProtospacerWorkflow::update_profile(ExtensionWalk &walk, bool) const {
+    // Consecutive observed edge counts, not unitig medians. Unitig boundaries
+    // must not change the evidence for an otherwise identical graph path.
+    while (walk.profile_samples < walk.counts.size()) {
+        size_t i = walk.profile_samples++;
+        if (i && (walk.sample_positions.empty() ||
+                  walk.sample_positions[i] == walk.sample_positions[i - 1] + 1)) {
+            double change = std::log2((walk.counts[i] + 1.) / (walk.counts[i - 1] + 1.));
+            walk.transition_energy += change * change;
+            ++walk.transitions;
+            // A branch is scored only when both ends have downstream evidence.
+            // This excludes the masked source-exit fork, but includes downstream
+            // forks observed while waiting to confirm source clearance.
+            size_t position = walk.sample_positions.empty() ? i + 1 : walk.sample_positions[i];
+            if (position && position <= walk.branch_costs.size()) {
+                double cost = walk.branch_costs[position - 1];
+                walk.branch_loss += cost;
+                walk.branch_observations += cost > 0.;
             }
         }
-    };
-    while (walk.next_block < walk.blocks.size()) {
-        size_t ordinary = walk.next_block;
-        while (ordinary < walk.blocks.size() && walk.blocks[ordinary].shared)
-            ++ordinary;
-        if (ordinary == walk.blocks.size() && !finish)
-            break; // A shared rise needs its exit before it can be exempted.
-        double after = ordinary < walk.blocks.size() ? walk.blocks[ordinary].count : 0;
-        size_t end = std::min(ordinary + 1, walk.blocks.size());
-        for (size_t i = walk.next_block; i < end; ++i) {
-            const auto &block = walk.blocks[i];
-            bool shared_rise = block.shared && walk.last_unshared > 0 && after > 0 &&
-                               block.count >= std::max(walk.last_unshared, after);
-            if (!shared_rise)
-                observe(block.count, block.end - block.begin);
-        }
-        if (after > 0)
-            walk.last_unshared = after;
-        walk.next_block = end;
     }
-    if (finish && walk.coverage_window.size() >= (width + 1) / 2) {
-        double current = median(walk.coverage_window);
-        if (walk.previous_median > 0)
-            walk.deviation =
-                std::max(walk.deviation, std::abs(std::log2((current + 1) / (walk.previous_median + 1))));
-        walk.previous_median = current;
-        walk.coverage_window.clear();
-    }
+    walk.deviation = walk.transitions ? walk.transition_energy / walk.transitions : 0.;
+}
+
+double ProtospacerWorkflow::walk_score(const ExtensionWalk &walk) const {
+    // Conditional graph-walk surprisal per scored downstream edge. Unbranched
+    // edges contribute zero. Normalize by sequence length, not fork count, so
+    // extra easy forks cannot dilute a weak choice. Raw count continuity is a
+    // separate tie-break, never a reward traded against branch support.
+    // This score is not a probability of genomic or viral correctness.
+    return walk.counts.empty() ? 0. : walk.branch_loss / walk.counts.size();
 }
 
 void ProtospacerWorkflow::rank_walks(std::vector<ExtensionWalk> &walks, size_t limit, bool diverse) const {
     if (walks.empty())
         return;
-    double minimum = std::numeric_limits<double>::infinity();
-    for (const auto &walk : walks)
-        if (walk.external)
-            minimum = std::min(minimum, walk.deviation);
-    if (!std::isfinite(minimum))
-        minimum = 0;
-    const double allowance = std::log2(options_.branch_ratio);
-    double support = 0;
-    for (const auto &walk : walks)
-        if (walk.deviation <= minimum + allowance)
-            support = std::max(support, walk.flow);
-    auto tier = [&](const auto &walk) {
-        if (walk.deviation > minimum + allowance)
-            return 2;
-        return walk.flow * options_.branch_ratio < support ? 1 : 0;
+    auto complete = [&](const auto &w) {
+        return w.bases.size() + w.anchor_padding >= options_.max_flank;
     };
     std::sort(walks.begin(), walks.end(), [&](const auto &a, const auto &b) {
         if (a.external != b.external)
             return a.external > b.external;
-        if (tier(a) != tier(b))
-            return tier(a) < tier(b);
-        if (a.bases.size() != b.bases.size())
-            return a.bases.size() > b.bases.size();
-        if (a.flow != b.flow)
-            return a.flow > b.flow;
+        if (complete(a) != complete(b))
+            return complete(a) > complete(b);
+        if (walk_score(a) != walk_score(b))
+            return walk_score(a) < walk_score(b);
         if (a.deviation != b.deviation)
             return a.deviation < b.deviation;
+        if (a.bases.size() != b.bases.size())
+            return a.bases.size() > b.bases.size();
         return a.nodes < b.nodes;
     });
     if (diverse && walks.size() > limit) {
-        // Reserve one slot for each of the first two branch-choice combinations.
-        // At most 4^2 families; additional slots retain the best-ranked states.
-        std::set<std::vector<uint64_t>> families;
+        std::set<std::tuple<uint64_t, bool, bool>> endpoints;
         std::vector<size_t> chosen;
         std::vector<bool> used(walks.size());
-        // A source passage has no downstream score yet. Preserve a bounded
-        // share of such states until they actually leave the source region.
-        for (size_t i = 0; i < walks.size() && chosen.size() < std::max(size_t(1), limit / 4); ++i)
-            if (walks[i].crosses_source && !walks[i].external) {
-                chosen.push_back(i);
-                used[i] = true;
-            }
+        // Keep distinct graph continuations before spending remaining slots on
+        // rejoined variants. Each retained state keeps its own full history.
         for (size_t i = 0; i < walks.size() && chosen.size() < limit; ++i)
-            if (!used[i] && tier(walks[i]) <= 1 && families.insert(walks[i].branches).second) {
+            if (endpoints.emplace(walks[i].nodes.back(), walks[i].external, walks[i].crosses_source).second) {
                 chosen.push_back(i);
                 used[i] = true;
             }
@@ -1277,8 +1219,8 @@ void ProtospacerWorkflow::save_walks(const TargetCandidate &candidate, bool back
                   "end\tidentity\tquery_coverage\t"
                   "flank_bp\texternal\tclear_"
                   "at\tstop\tlimited\tflow\tsequence\tnodes_outward\t"
-                  "count_positions\tcounts\tblocks\tcoverage_deviation\tanchor_prefix_bp\tcrosses_source_"
-                  "array\tidentified_before_extension\n");
+                  "count_positions\tcounts\tcoverage_deviation\tanchor_prefix_bp\tcrosses_source_"
+                  "array\tidentified_before_extension\ttransition_energy\tadjacent_observations\tbranch_loss\tbranch_observations\tbranch_costs\n");
         for (size_t i = 0; i < walks.size(); ++i) {
             const auto &walk = walks[i];
             auto flank = walk.bases;
@@ -1304,15 +1246,11 @@ void ProtospacerWorkflow::save_walks(const TargetCandidate &candidate, bool back
             list(walk.nodes);
             list(walk.sample_positions);
             list(walk.counts);
-            row << '\t';
-            for (size_t j = 0; j < walk.blocks.size(); ++j) {
-                if (j)
-                    row << ';';
-                const auto &b = walk.blocks[j];
-                row << b.begin << ',' << b.end << ',' << b.count << ',' << b.shared;
-            }
             row << '\t' << walk.deviation << '\t' << candidate.anchor_prefix << '\t' << walk.crosses_source
-                << '\t' << candidate.identified << '\n';
+                << '\t' << candidate.identified << '\t' << walk.transition_energy << '\t' << walk.transitions
+                << '\t' << walk.branch_loss << '\t' << walk.branch_observations;
+            list(walk.branch_costs);
+            row << '\n';
             write(row.str());
         }
     } catch (...) {
@@ -1352,7 +1290,7 @@ bool ProtospacerWorkflow::extension_barrier(ExtensionWalk &walk, const TargetCan
 }
 
 bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc, size_t query,
-                                       const TargetCandidate &candidate, bool backwards) const {
+                                       const TargetCandidate &candidate, bool backwards, double branch_cost) const {
     if (std::find(candidate.anchor.begin(), candidate.anchor.end(), arc.node) != candidate.anchor.end()) {
         walk.stop = "anchor_revisit";
         return false;
@@ -1362,7 +1300,8 @@ bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc,
         walk.stop = "source_node_revisit";
         return false;
     }
-    if (source_node && walk.external && candidate.allow_crossing) {
+    bool repeat_node = candidate.allow_crossing && query_repeat_nodes_[query].count(arc.node);
+    if (repeat_node && walk.external && candidate.allow_crossing) {
         walk.stop = "source_array_reentry";
         return false;
     }
@@ -1372,6 +1311,8 @@ bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc,
     }
     walk.nodes.push_back(arc.node);
     walk.bases += added_base(arc, backwards);
+    walk.all_counts.push_back(arc.count);
+    walk.branch_costs.push_back(branch_cost);
     if (extension_barrier(walk, candidate, backwards))
         return false;
     if (!walk.external) {
@@ -1389,12 +1330,16 @@ bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc,
             }
             walk.crosses_source = true;
             walk.source_until = source_clearance(query, candidate, backwards);
-            if (source_node)
+            if (repeat_node)
                 walk.source_last = walk.bases.size();
             if (walk.bases.size() >= walk.source_until &&
                 walk.bases.size() >= walk.source_last + options_.context_bases) {
                 walk.external = true;
                 walk.clear_at = walk.bases.size();
+            }
+            if (!walk.external && walk.bases.size() >= walk.source_until + options_.context_bases) {
+                walk.stop = "source_passage_not_exited";
+                return false;
             }
         }
         if (state == 2) {
@@ -1402,14 +1347,21 @@ bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc,
             walk.clear_at = walk.bases.size();
         }
     }
-    if (walk.external && walk.bases.size() > std::max(size_t(graph_->k()), walk.clear_at)) {
-        if (arc.count >= 65535) {
-            trim_walk(walk, walk.bases.size() - 1, "saturated_multiplicity");
-            return false;
+    if (walk.external) {
+        size_t first = walk.crosses_source ? std::max(walk.source_last,
+            walk.source_until > size_t(graph_->k()) ? walk.source_until - graph_->k() : 0)
+                                          : size_t(graph_->k());
+        size_t recorded = walk.sample_positions.empty() ? first : walk.sample_positions.back();
+        for (size_t i = recorded; i < walk.all_counts.size(); ++i) {
+            if (walk.all_counts[i] >= 65535) {
+                trim_walk(walk, i, "saturated_multiplicity");
+                return false;
+            }
+            walk.counts.push_back(walk.all_counts[i]);
+            walk.sample_positions.push_back(i + 1);
+            walk.flow = walk.capacities.empty() ? walk.all_counts[i] : std::min(walk.flow, walk.all_counts[i]);
+            walk.capacities.push_back(walk.flow);
         }
-        walk.counts.push_back(arc.count);
-        walk.sample_positions.push_back(walk.bases.size());
-        walk.capacities.push_back(0);
     }
     if (walk.bases.size() + (backwards ? candidate.anchor_prefix : 0) >= options_.max_flank) {
         walk.stop = "maximum_flank";
@@ -1427,15 +1379,42 @@ bool ProtospacerWorkflow::retain_completed(std::vector<ExtensionWalk> &walks) co
                                }),
                 walks.end());
     bool has_extension = std::any_of(walks.begin(), walks.end(),
-                                     [&](const auto &w) { return w.bases.size() + w.anchor_padding >= options_.min_flank; });
+                                     [&](const auto &w) { return w.bases.size() + w.anchor_padding >= options_.min_flank && w.counts.size() >= options_.min_external; });
     if (has_extension)
         walks.erase(std::remove_if(walks.begin(), walks.end(),
-                                   [&](const auto &w) { return w.bases.size() + w.anchor_padding < options_.min_flank; }),
+                                   [&](const auto &w) { return w.bases.size() + w.anchor_padding < options_.min_flank || w.counts.size() < options_.min_external; }),
                     walks.end());
     if (walks.size() <= options_.beam_width * 4)
         return false;
     rank_walks(walks, options_.beam_width * 4, false);
     walks.resize(options_.beam_width * 4);
+    return true;
+}
+
+bool ProtospacerWorkflow::same_route(const ExtensionWalk &a, const ExtensionWalk &b) const {
+    // A small bubble that rejoins the same oriented node is local sequence
+    // uncertainty. It must not erase all the supported sequence after the join.
+    const size_t bubble = options_.context_bases + 1;
+    size_t i = 0, j = 0;
+    while (i < a.nodes.size() && j < b.nodes.size()) {
+        if (a.nodes[i] == b.nodes[j]) { ++i; ++j; continue; }
+        size_t ai = a.nodes.size(), bj = b.nodes.size(), distance = 2 * bubble;
+        for (size_t x = i; x < std::min(a.nodes.size(), i + bubble); ++x)
+            for (size_t y = j; y < std::min(b.nodes.size(), j + bubble); ++y)
+                if (a.nodes[x] == b.nodes[y] && x - i + y - j < distance) {
+                    ai = x; bj = y; distance = x - i + y - j;
+                }
+        if (ai == a.nodes.size() || bj == b.nodes.size())
+            return false;
+        // Require real shared downstream context, not only a repeat junction.
+        size_t shared = 0;
+        while (ai + shared < a.nodes.size() && bj + shared < b.nodes.size() &&
+               a.nodes[ai + shared] == b.nodes[bj + shared])
+            ++shared;
+        if (shared < options_.context_bases)
+            return false;
+        i = ai + shared; j = bj + shared;
+    }
     return true;
 }
 
@@ -1448,30 +1427,42 @@ ExtensionWalk ProtospacerWorkflow::choose_walk(std::vector<ExtensionWalk> walks)
         empty.stop = "no_supported_external_context";
         return empty;
     }
+    bool full = std::any_of(walks.begin(), walks.end(), [&](const auto &w) {
+        return w.bases.size() + w.anchor_padding >= options_.max_flank;
+    });
+    if (full)
+        walks.erase(std::remove_if(walks.begin(), walks.end(), [&](const auto &w) {
+            return w.bases.size() + w.anchor_padding < options_.max_flank;
+        }), walks.end());
     rank_walks(walks, walks.size(), false);
     ExtensionWalk best = walks.front();
-    double minimum = best.deviation, support = 0;
-    for (const auto &walk : walks)
-        minimum = std::min(minimum, walk.deviation);
-    double allowance = std::log2(options_.branch_ratio);
-    for (const auto &walk : walks)
-        if (walk.deviation <= minimum + allowance)
-            support = std::max(support, walk.flow);
     size_t common = best.nodes.size();
     for (size_t i = 1; i < walks.size(); ++i) {
         const auto &other = walks[i];
-        if (other.deviation > minimum + allowance || other.flow * options_.branch_ratio < support)
+        if (walk_score(other) > walk_score(best) * options_.branch_ratio + 1e-12)
+            continue;
+        if (same_route(best, other))
             continue;
         size_t n = 0;
         while (n < std::min(best.nodes.size(), other.nodes.size()) && best.nodes[n] == other.nodes[n])
             ++n;
-        // Prefixes of the same path are not competing biological routes.
         if (n == std::min(best.nodes.size(), other.nodes.size()))
             continue;
         common = std::min(common, n);
+        ++best.competing_routes;
+        if (best.runner_up_score < 0 || walk_score(other) < best.runner_up_score)
+            best.runner_up_score = walk_score(other);
     }
-    if (common < best.nodes.size())
-        trim_walk(best, common ? common - 1 : 0, "ambiguous_coverage");
+    best.ambiguous = common < best.nodes.size();
+    best.first_ambiguous_base = best.ambiguous ? (common ? common - 1 : 0) : 0;
+    // A repeated source junction is unphased even when the other arm is too
+    // short to enter the completed-candidate pool. Do not report certainty
+    // merely because those alternatives were filtered later.
+    if (best.crosses_source && best.pre_context_fork) {
+        best.first_ambiguous_base = best.ambiguous ? std::min(best.first_ambiguous_base, best.first_context_fork)
+                                                 : best.first_context_fork;
+        best.ambiguous = true;
+    }
     return best;
 }
 
@@ -1481,9 +1472,11 @@ ExtensionWalk ProtospacerWorkflow::extend_flank(size_t query, const TargetCandid
     seed.anchor_padding = backwards ? candidate.anchor_prefix : 0;
     seed.nodes = {backwards ? candidate.anchor.front() : candidate.anchor.back()};
     std::vector<ExtensionWalk> frontier{seed}, finished;
-    std::map<uint64_t, Unitig> unitigs;
+    std::map<uint64_t, std::vector<GraphArc>> adjacency;
     bool limited = false;
     size_t serial = 0;
+    // Every frontier contains paths at exactly the same physical distance.
+    // Compression into unitigs cannot let one path jump ahead of its competitors.
     while (!frontier.empty() && !interrupted_) {
         std::vector<ExtensionWalk> next, ended, pruned;
         for (auto &current : frontier) {
@@ -1494,70 +1487,73 @@ ExtensionWalk ProtospacerWorkflow::extend_flank(size_t query, const TargetCandid
                 limited = true;
                 continue;
             }
-            auto arcs = neighbors(current.nodes.back(), backwards);
+            auto node = current.nodes.back();
+            if (!adjacency.count(node)) {
+                ++work;
+                adjacency.emplace(node, neighbors(node, backwards));
+            }
+            const auto &arcs = adjacency.at(node);
             if (arcs.empty()) {
                 current.stop = "dead_end";
                 ended.push_back(std::move(current));
                 continue;
             }
+            double total = 0.;
+            for (const auto &arc : arcs) total += arc.count;
             for (const auto &arc : arcs) {
-                if (!unitigs.count(arc.edge))
-                    unitigs.emplace(arc.edge,
-                                    build_unitig(current.nodes.back(), arc, backwards, work, work_limit));
-                const auto &segment = unitigs.at(arc.edge);
                 auto child = current;
-                if (arcs.size() > 1 && child.branches.size() < 2)
-                    child.branches.push_back(arc.edge);
-                size_t before = child.counts.size();
-                bool continuing = true;
-                for (const auto &edge : segment.arcs) {
-                    if (work++ >= work_limit) {
-                        child.stop = "query_work_limit";
-                        child.limited = true;
-                        limited = true;
-                        continuing = false;
-                        break;
-                    }
-                    ++child.work;
-                    if (!advance_walk(child, edge, query, candidate, backwards)) {
-                        continuing = false;
-                        break;
-                    }
+                if (arcs.size() > 1 && !current.external) {
+                    if (!child.pre_context_fork) child.first_context_fork = current.bases.size();
+                    child.pre_context_fork = true;
                 }
-                if (child.counts.size() >= before)
-                    update_flow(child, before, segment.shared);
-                if (segment.limited) {
-                    child.limited = true;
+                if (work++ >= work_limit) {
                     child.stop = "query_work_limit";
-                    continuing = false;
-                    limited = true;
+                    child.limited = limited = true;
+                    ended.push_back(std::move(child));
+                    continue;
                 }
-                if (continuing && !segment.arcs.empty())
+                ++child.work;
+                // Store the raw choice cost now; update_profile applies the
+                // same downstream mask to branch and count-change evidence.
+                double cost = arcs.size() > 1 && arc.count > 0
+                                ? -std::log2(arc.count / total) : 0.;
+                bool continuing = advance_walk(child, arc, query, candidate, backwards, cost);
+                update_profile(child);
+                if (continuing)
                     next.push_back(std::move(child));
                 else
                     ended.push_back(std::move(child));
             }
         }
-        rank_walks(next, options_.beam_width, true);
-        if (next.size() > options_.beam_width) {
-            // A beam rejection is diagnostic evidence, not a finished extension.
-            for (size_t i = options_.beam_width; i < next.size(); ++i) {
-                next[i].limited = true;
-                next[i].stop = "beam_limit";
-                pruned.push_back(std::move(next[i]));
+        // Do not compare an unscored source passage with mature downstream
+        // paths. Give it a separate bounded frontier until one read's effective
+        // k-mer span has been observed outside the source region.
+        size_t evidence_span = std::max(options_.context_bases,
+            options_.read_length > size_t(graph_->k()) ? options_.read_length - graph_->k() : size_t(1));
+        std::vector<ExtensionWalk> pending, mature;
+        for (auto &walk : next)
+            (walk.external && walk.counts.size() >= evidence_span ? mature : pending).push_back(std::move(walk));
+        next.clear();
+        auto retain = [&](std::vector<ExtensionWalk> &pool, size_t width, const char *reason) {
+            rank_walks(pool, width, true);
+            if (pool.size() > width) {
+                for (size_t i = width; i < pool.size(); ++i) {
+                    pool[i].limited = true;
+                    pool[i].stop = reason;
+                    pruned.push_back(std::move(pool[i]));
+                }
+                pool.resize(width);
+                limited = true;
             }
-            next.resize(options_.beam_width);
-            limited = true;
-        }
+            for (auto &walk : pool) next.push_back(std::move(walk));
+        };
+        retain(pending, options_.context_width, "context_path_limit");
+        retain(mature, options_.beam_width, "beam_limit");
         save_walks(candidate, backwards, pruned, serial);
         save_walks(candidate, backwards, ended, serial);
-        for (auto &walk : ended) {
-            update_profile(walk, true);
+        for (auto &walk : ended)
             finished.push_back(std::move(walk));
-        }
-        if (retain_completed(finished)) {
-            limited = true;
-        }
+        if (retain_completed(finished)) limited = true;
         frontier = std::move(next);
     }
     for (auto &w : frontier) {
@@ -1585,12 +1581,16 @@ void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
         c.reason = "no_independent_target_context";
         return;
     }
-    c.context_left = std::string(padding.rbegin(), padding.rend()) + c.left.bases;
-    c.context_right = c.right.bases;
-    c.context_left_stop = c.left.stop;
-    c.context_right_stop = c.right.stop;
-    c.clear_left = c.left.clear_at + c.anchor_prefix;
-    c.clear_right = c.right.clear_at;
+    // Crossing recovery must retain the independent context that established
+    // discovery. The actual recovery route is saved in graph_paths.tsv.
+    if (!c.allow_crossing) {
+        c.context_left = std::string(padding.rbegin(), padding.rend()) + c.left.bases;
+        c.context_right = c.right.bases;
+        c.context_left_stop = c.left.stop;
+        c.context_right_stop = c.right.stop;
+        c.clear_left = c.left.clear_at + c.anchor_prefix;
+        c.clear_right = c.right.clear_at;
+    }
     // Validate the complete selected walk against the actual graph before output.
     std::vector<uint64_t> full;
     if (!c.left.nodes.empty())
@@ -1604,7 +1604,7 @@ void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
         throw std::runtime_error("selected path spelling mismatch");
     c.status = "detected";
     c.reason = "target_context_passed";
-    if (!informative(c.target)) {
+    if (!c.identified && !informative(c.target)) {
         c.detected = false;
         c.status = "unresolved";
         c.reason = "uninformative_target_sequence";
@@ -1612,25 +1612,18 @@ void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
     }
     for (bool back : {true, false}) {
         auto &w = back ? c.left : c.right;
-        if (w.bases.size() + w.anchor_padding < options_.min_flank || w.flow <= 0 || !informative(w.bases))
+        if (w.bases.size() + w.anchor_padding < options_.min_flank || w.counts.size() < options_.min_external || w.flow <= 0 || !informative(w.bases))
             trim_walk(w, 0, "insufficient_supported_extension");
     }
-    // Each flank is supported separately. Do not silently join incompatible
-    // abundance contexts merely because their seed sequence is shared.
+    // The graph's pooled edge counts do not establish linkage between two
+    // independently selected flanks. Report one actual supported flank.
     if (!c.left.bases.empty() && !c.right.bases.empty()) {
-        double l = c.left.flow, r = c.right.flow;
-        bool conflict =
-            std::max(l, r) > 4 * std::min(l, r) || (c.left.crosses_source && c.right.crosses_source);
-        std::set<uint64_t> nodes(c.left.nodes.begin() + 1, c.left.nodes.end());
-        for (auto n : c.right.nodes)
-            conflict |= nodes.count(n) > 0;
-        if (conflict) {
-            if (l >= r)
-                trim_walk(c.right, 0, "incompatible_flanks");
-            else
-                trim_walk(c.left, 0, "incompatible_flanks");
-            c.reason = "incompatible_flanks";
-        }
+        std::vector<ExtensionWalk> sides{c.left, c.right};
+        rank_walks(sides, 2, false);
+        if (sides.front().nodes == c.left.nodes)
+            trim_walk(c.right, 0, "alternative_flank");
+        else
+            trim_walk(c.left, 0, "alternative_flank");
     }
     left = c.left.bases;
     std::reverse(left.begin(), left.end());
@@ -1644,7 +1637,7 @@ void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
 }
 
 void ProtospacerWorkflow::select_candidate(std::vector<TargetCandidate> &candidates) const {
-    std::sort(candidates.begin(), candidates.end(), [](const auto &a, const auto &b) {
+    std::sort(candidates.begin(), candidates.end(), [&](const auto &a, const auto &b) {
         if (a.detected != b.detected)
             return a.detected > b.detected;
         if (a.extended != b.extended)
@@ -1653,6 +1646,16 @@ void ProtospacerWorkflow::select_candidate(std::vector<TargetCandidate> &candida
             return a.coverage > b.coverage;
         if (a.identity != b.identity)
             return a.identity > b.identity;
+        auto flank = [](const auto &c) -> const ExtensionWalk & {
+            return c.left.bases.empty() ? c.right : c.left;
+        };
+        const auto &aw = flank(a), &bw = flank(b);
+        bool af = aw.bases.size() + aw.anchor_padding >= options_.max_flank;
+        bool bf = bw.bases.size() + bw.anchor_padding >= options_.max_flank;
+        if (af != bf) return af > bf;
+        if (walk_score(aw) != walk_score(bw)) return walk_score(aw) < walk_score(bw);
+        if (aw.deviation != bw.deviation) return aw.deviation < bw.deviation;
+        if (aw.bases.size() != bw.bases.size()) return aw.bases.size() > bw.bases.size();
         return a.anchor < b.anchor;
     });
     if (!candidates.empty() && candidates.front().detected) {
@@ -1682,7 +1685,7 @@ void ProtospacerWorkflow::process_query(size_t query) {
         query_status_[query] = "adapter_like_query";
         return;
     }
-    if (!informative(queries_[query].first)) {
+    if (options_.protospacers.empty() && !informative(queries_[query].first)) {
         query_status_[query] = "uninformative_query";
         return;
     }
@@ -1718,7 +1721,7 @@ void ProtospacerWorkflow::process_query(size_t query) {
         // Reserve half the remaining budget for lower tiers if this one cannot
         // extend.
         size_t tier_limit = work + (end < anchors.size() ? remaining / 2 : remaining);
-        bool extended = false;
+        bool has_complete_extension = false;
         for (size_t i = first; i < end && !interrupted_; ++i) {
             auto &candidate = anchors[i];
             candidate.placement = i;
@@ -1748,36 +1751,43 @@ void ProtospacerWorkflow::process_query(size_t query) {
             assemble_candidate(candidate);
             query_timings_[query][2] +=
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-            extended |= candidate.extended;
+            has_complete_extension |= candidate.extended &&
+                        std::max(candidate.left.bases.size() + candidate.anchor_prefix,
+                                 candidate.right.bases.size()) >= options_.max_flank;
             checked.push_back(std::move(candidate));
         }
-        if (extended || work >= options_.max_work)
+        if (has_complete_extension || work >= options_.max_work)
             break;
         first = end;
     }
-    select_candidate(checked);
-    // Discovery stays strict. Only an already selected, independently detected
-    // target may get a crossing-enabled second pass. Preserve accepted
-    // extensions.
-    if (options_.source_array_crossing && !checked.empty() && checked.front().detected &&
-        !checked.front().extended && !interrupted_) {
-        auto candidate = checked.front();
-        candidate.identified = candidate.allow_crossing = true;
-        size_t limit = work + options_.max_work;
-        start = std::chrono::steady_clock::now();
-        candidate.left = extend_flank(query, candidate, true, work, work + options_.max_work / 2);
-        candidate.right = extend_flank(query, candidate, false, work, limit);
-        query_timings_[query][1] +=
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        candidate.limited |= candidate.left.limited || candidate.right.limited;
-        query_limited_[query] |= candidate.limited;
-        start = std::chrono::steady_clock::now();
-        assemble_candidate(candidate);
-        query_timings_[query][2] +=
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        if (candidate.extended)
-            checked.front() = std::move(candidate);
+    // Independent target detection precedes source crossing. An existing
+    // partial/wrong strict extension must not prevent this comparison.
+    if (options_.source_array_crossing && !interrupted_) {
+        size_t eligible = std::count_if(checked.begin(), checked.end(), [](const auto &c) { return c.detected; });
+        size_t extra = options_.max_work;
+        size_t originals = checked.size();
+        for (size_t i = 0; i < originals && eligible && !interrupted_; ++i) {
+            if (!checked[i].detected) continue;
+            auto candidate = checked[i];
+            candidate.identified = candidate.allow_crossing = true;
+            size_t budget = extra / eligible--;
+            size_t before = work;
+            start = std::chrono::steady_clock::now();
+            candidate.left = extend_flank(query, candidate, true, work, before + budget / 2);
+            candidate.right = extend_flank(query, candidate, false, work, before + budget);
+            extra -= std::min(extra, work - before);
+            query_timings_[query][1] +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            candidate.limited |= candidate.left.limited || candidate.right.limited;
+            query_limited_[query] |= candidate.limited;
+            start = std::chrono::steady_clock::now();
+            assemble_candidate(candidate);
+            query_timings_[query][2] +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            checked.push_back(std::move(candidate));
+        }
     }
+    select_candidate(checked);
     query_status_[query] = checked.empty() ? "interrupted" : checked.front().reason;
     query_work_[query] = work;
     results_[query] = std::move(checked);
@@ -2000,6 +2010,23 @@ void ProtospacerWorkflow::write_outputs() {
                     paths << '\t' << c.anchor_prefix << '\n';
                 }
     }
+    {
+        auto scores = open("path_selection.tsv");
+        scores << "query_id\tplacement\tphase\tselected\tside\tlength\tstop\traw_transition_energy\tadjacent_observations\tmean_energy\tbranch_loss\tbranch_observations\tambiguous\tcompeting_routes\tfirst_ambiguous_base\trunner_up_path_cost\tindependent_bases\tunphased_source_branch\tpath_cost\n";
+        for (const auto &group : results_)
+            for (const auto &c : group)
+                for (bool back : {true, false}) {
+                    const auto &w = back ? c.left : c.right;
+                    scores << numbered("Q", c.query + 1) << '\t' << c.placement << '\t'
+                           << (c.allow_crossing ? "crossing" : "strict") << '\t' << c.detected << '\t'
+                           << (back ? "left" : "right") << '\t' << w.bases.size() + w.anchor_padding
+                           << '\t' << w.stop << '\t' << w.transition_energy << '\t' << w.transitions
+                           << '\t' << w.deviation << '\t' << w.branch_loss << '\t' << w.branch_observations
+                           << '\t' << w.ambiguous << '\t' << w.competing_routes << '\t' << w.first_ambiguous_base
+                           << '\t' << w.runner_up_score << '\t' << w.counts.size() << '\t'
+                           << (w.crosses_source && w.pre_context_fork) << '\t' << walk_score(w) << '\n';
+                }
+    }
     for (const auto &f : fs::directory_iterator(staging))
         fs::rename(f.path(), options_.output / f.path().filename());
     fs::remove(staging);
@@ -2029,7 +2056,7 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     fs::path temporary = options_.output / "run_summary.json.tmp";
     std::ofstream out(temporary);
     out.exceptions(std::ios::badbit | std::ios::failbit);
-    out << "{\n  \"implementation\": \"protospacer-workflow-v5\",\n  \"status\": " << json(status)
+    out << "{\n  \"implementation\": \"protospacer-workflow-v6\",\n  \"status\": " << json(status)
         << ",\n  \"error\": " << json(error) << ",\n  \"arrays\": " << json(options_.arrays.string())
         << ",\n  \"graph\": " << json(options_.graph.string())
         << ",\n  \"graph_k\": " << (graph_ ? graph_->k() : 0) << ",\n  \"array_count\": " << arrays.size()
@@ -2040,6 +2067,9 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
         << ",\n  \"queries_without_extension\": " << queries_.size() - extended
         << ",\n  \"limited_queries\": " << limited << ",\n  \"threads\": " << options_.threads
         << ",\n  \"beam_width\": " << options_.beam_width
+        << ",\n  \"max_context_paths\": " << options_.context_width
+        << ",\n  \"read_length\": " << options_.read_length
+        << ",\n  \"min_external_bases\": " << options_.min_external
         << ",\n  \"max_flank_length\": " << options_.max_flank
         << ",\n  \"min_extension_flank\": " << options_.min_flank
         << ",\n  \"min_identity\": " << options_.identity
@@ -2056,8 +2086,8 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
         << ",\n  \"max_placements\": " << options_.max_placements
         << ",\n  \"branch_ratio\": " << options_.branch_ratio
         << ",\n  \"max_node_visits\": " << options_.max_visits
-        << ",\n  \"extension_method\": \"unitig_coverage_continuity\""
-        << ",\n  \"coverage_window\": " << options_.context_bases
+        << ",\n  \"extension_method\": \"conditional_branch_support_per_scored_edge\""
+        << ",\n  \"context_bases\": " << options_.context_bases
         << ",\n  \"probabilities_of_correctness\": false,\n  "
            "\"reference_used_for_selection\": false,\n  "
            "\"source_array_crossing\": "
@@ -2076,6 +2106,10 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     out << "\n  }\n}\n";
     out.close();
     fs::rename(temporary, options_.output / "run_summary.json");
+    if (status == "complete")
+        std::cout << "Possible protospacer regions: " << targets.size()
+                  << "\nSaved extension regions: " << extensions.size()
+                  << "\nQueries without an extension: " << queries_.size() - extended << '\n';
 }
 
 int ProtospacerWorkflow::run() {
@@ -2158,6 +2192,10 @@ void ProtospacerWorkflow::self_test() {
     const std::string adapter = "AGATCGGAAGAGCGTCGT";
     require(adapter_position("TT" + adapter) == 2 && adapter_position(reverse_complement(adapter)) == 0,
             "adapter core recognition on both strands");
+    auto mutated_adapter = adapter;
+    mutated_adapter.back() = 'A';
+    require(adapter_position("TT" + mutated_adapter) == 2,
+            "one substitution in a complete technical adapter remains detectable");
     require(adapter_position(adapter.substr(1)) == std::string::npos,
             "short adapter fragment alone is not rejected");
     TargetCandidate test_target;
@@ -2183,27 +2221,13 @@ void ProtospacerWorkflow::self_test() {
     require(workflow.extension_barrier(technical, test_target, false) && technical.bases.size() == 200 &&
                 technical.stop == "low_complexity_extension",
             "low-complexity continuation stops before its uninformative window");
-    ExtensionWalk coverage;
-    for (double count : {20., 25., 20.}) {
-        size_t before = coverage.counts.size();
-        coverage.counts.push_back(count);
-        coverage.capacities.push_back(0);
-        workflow.update_flow(coverage, before);
-    }
-    require(coverage.flow == 20., "shared repeat does not penalize widest-path capacity");
-    auto partially_scored = coverage;
-    size_t committed = partially_scored.counts.size();
-    partially_scored.counts.insert(partially_scored.counts.end(), 5, 15.);
-    partially_scored.capacities.insert(partially_scored.capacities.end(), 5, 0.);
-    partially_scored.flow = 0; // A trim retained part of this uncommitted segment.
-    workflow.update_flow(partially_scored, committed);
-    require(partially_scored.flow == 15. && partially_scored.capacities.back() == 15.,
-            "a partial new segment does not erase prior coverage support");
     auto walk = [](size_t length, double flow, uint64_t branch) {
         ExtensionWalk w;
         w.external = true;
         w.clear_at = 1;
         w.flow = flow;
+        w.counts.assign(length, flow);
+        w.capacities.assign(length, flow);
         w.stop = "dead_end";
         w.bases.assign(length, 'A');
         w.nodes.resize(length + 1);
@@ -2215,36 +2239,63 @@ void ProtospacerWorkflow::self_test() {
     require(workflow.choose_walk({long_path, short_path}).bases.size() == 250,
             "short dead end cannot erase supported extension");
     auto weak_path = walk(250, 2, 3000);
-    require(workflow.choose_walk({long_path, weak_path}).nodes == long_path.nodes,
-            "widest path wins against weak alternative");
+    require(workflow.choose_walk({long_path, weak_path}).ambiguous,
+            "absolute abundance alone cannot resolve otherwise equal paths");
+    auto supported_fork = walk(750, 10, 10000), smooth_wrong_fork = walk(750, 200, 20000);
+    supported_fork.branch_observations = smooth_wrong_fork.branch_observations = 10;
+    supported_fork.branch_loss = 1.4;
+    smooth_wrong_fork.branch_loss = 2.3;
+    // Use real count changes: choose_walk recomputes deviation from the profile.
+    supported_fork.counts[300] = 11.;
+    workflow.update_profile(supported_fork, true);
+    workflow.update_profile(smooth_wrong_fork, true);
+    require(supported_fork.transition_energy > 0. && smooth_wrong_fork.transition_energy == 0. &&
+                workflow.choose_walk({supported_fork, smooth_wrong_fork}).nodes == supported_fork.nodes,
+            "supported branch decisions outweigh a small measured count change");
     auto tied_path = walk(250, 10, 4000);
-    require(workflow.choose_walk({long_path, tied_path}).bases.empty(),
-            "equal flow preserves branch ambiguity");
-    auto profile = [&](double exit, double shared_count) {
-        ExtensionWalk w;
-        for (auto [count, shared] :
-             {std::make_pair(8., false), std::make_pair(shared_count, true), std::make_pair(exit, false)}) {
-            size_t before = w.counts.size();
-            w.counts.insert(w.counts.end(), 48, count);
-            w.capacities.insert(w.capacities.end(), 48, 0);
-            workflow.update_flow(w, before, shared);
-        }
-        workflow.update_profile(w, true);
-        return w.deviation;
-    };
-    require(profile(9, 50) < .2 && profile(40, 50) > 2,
-            "shared rise preserves entry-exit coverage distinction");
-    require(profile(9, 1) > 2, "low-support shared segment is not exempted");
+    require(workflow.choose_walk({long_path, tied_path}).ambiguous &&
+            workflow.choose_walk({long_path, tied_path}).bases.size() == 250,
+            "a competing route is annotated without destroying the selected actual path");
+    ExtensionWalk continuous, split;
+    std::vector<double> trace{8, 8, 9, 8, 1, 8, 9, 8};
+    continuous.counts = trace;
+    workflow.update_profile(continuous, true);
+    for (double c : trace) {
+        split.counts.push_back(c);
+        workflow.update_profile(split);
+    }
+    require(std::abs(continuous.deviation - split.deviation) < 1e-12 &&
+            continuous.deviation > 0., "raw path evidence is invariant to arbitrary unitig segmentation");
+    ExtensionWalk masked;
+    masked.bases.assign(7, 'A');
+    masked.nodes.resize(8);
+    masked.all_counts.assign(7, 10.);
+    masked.counts = {10., 11., 12.};
+    masked.capacities = {10., 10., 10.};
+    masked.sample_positions = {4, 5, 7};
+    masked.branch_costs = {9., 9., 9., 6., 2., 9., 8.};
+    workflow.update_profile(masked);
+    require(masked.branch_loss == 2. && masked.branch_observations == 1 && masked.transitions == 1,
+            "branch and continuity evidence use the same adjacent downstream mask");
+    workflow.trim_walk(masked, 4, "test_trim");
+    require(masked.branch_loss == 0. && masked.branch_observations == 0 && masked.transitions == 0,
+            "trimming removes both fork and continuity evidence beyond the saved prefix");
+    auto bubble_a = walk(250, 10, 1000), bubble_b = bubble_a;
+    for (size_t i = 50; i < 74; ++i) bubble_b.nodes[i] += 10000;
+    require(workflow.choose_walk({bubble_a, bubble_b}).bases.size() == 250,
+            "rejoining single-variant bubble preserves downstream context");
+    bubble_b.nodes[180] += 10000;
+    require(workflow.same_route(bubble_a, bubble_b), "separate rejoining bubbles remain one route class");
+    for (size_t i = 180; i < bubble_b.nodes.size(); ++i) bubble_b.nodes[i] += 20000;
+    require(!workflow.same_route(bubble_a, bubble_b), "persistent divergence cannot be merged as a bubble");
     auto longer = walk(750, 9, 5000);
     std::vector<ExtensionWalk> comparable{long_path, longer};
     workflow.rank_walks(comparable, 2, false);
     require(comparable.front().bases.size() == 750, "prefer length within comparable coverage support");
-    long_path.branches = {1, 1};
     auto sibling = long_path;
-    longer.branches = {2, 1};
     std::vector<ExtensionWalk> families{long_path, sibling, longer};
     workflow.rank_walks(families, 2, true);
-    require(families[0].branches != families[1].branches, "beam keeps distinct branch families");
+    require(families[0].nodes.back() != families[1].nodes.back(), "beam keeps distinct current endpoints");
     auto short_dead_end = walk(30, 100, 6000), valid_extension = walk(750, 9, 7000);
     valid_extension.deviation = 1;
     std::vector<ExtensionWalk> terminal_buffer(300, short_dead_end);
@@ -2276,10 +2327,12 @@ void ProtospacerWorkflow::self_test() {
             "equally aligned different extended targets remain unresolved");
     auto padded = walk(196, 10, 8000), unpadded = walk(199, 10, 9000);
     padded.anchor_padding = 4;
+    workflow.options_.min_external = 150;
     std::vector<ExtensionWalk> boundary{padded, unpadded};
     workflow.retain_completed(boundary);
     require(boundary.size() == 1 && boundary.front().anchor_padding == 4,
-            "minimum flank includes short-target graph padding, like the maximum");
+            "total minimum flank includes padding while independent support has its own threshold");
+    workflow.options_.min_external = 200;
     TargetCandidate strict, recovered, contained;
     strict.detected = strict.extended = true;
     strict.target = "ACGT";

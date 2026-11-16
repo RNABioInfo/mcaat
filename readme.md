@@ -142,14 +142,14 @@ autoclean=true
 ## v2.0.0 (planned)
 - **CAS detection**: identify and annotate CAS genes flanking detected CRISPR arrays.
 - **Protospacer workflow (experimental)**: one native class performs connected
-  spacer alignment, local-unitig extension, filtering and output. Discovery remains
-  strict; an identified target can receive one source-region passage when strict
-  extension fails. Accepted earlier sequences are preserved. The complete
-  SRR14017553 test improves **6/146 to 20/182 reference-matching extensions**:
-  **14 gained, zero lost**, with 19/20 matches at least 750 bp. The separate fixed
-  81-target test improves 5/26 to 16/58; the historical 44 matches are not all restored.
-  See the [measured evaluation](docs/protospacer-evaluation-SRR14017553-v5.md)
-  and [workflow/function reference](docs/protospacer-extension.md).
+  spacer alignment, source-context and sequence-artifact filtering, bounded beam
+  extension and output. Local branch support ranks actual graph routes; count
+  variation breaks ties. Source-repeat crossing is available only for an already
+  detected or explicitly supplied target. The workflow saves one selected flank,
+  records competing-route uncertainty and search limits, and preserves input
+  associations with an optional path audit. It uses no reference database during
+  prediction. See the [measured evaluation](docs/protospacer-evaluation-SRR14017553-v6.md)
+  and [workflow and function reference](docs/protospacer-extension.md).
 
 ## Citation
 

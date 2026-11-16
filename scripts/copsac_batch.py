@@ -298,13 +298,15 @@ def process(sample, arrays, options, logdir, binary_hash):
     base.mkdir(exist_ok=True)
     job = base/dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     job.mkdir()
-    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v5",
+    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v6",
                 "binary_sha256": binary_hash, "helper_sha256": digest(__file__), "arrays": {p.name: digest(p) for p in arrays}}
     write_json(job/"job.json", manifest)
     try:
         graph = prepare_graph(sample, job, options, logdir/"measurements.tsv")
         manifest.update(graph=graph, threads=options.threads, beam_width=options.beam_width,
-                        max_flank_length=options.max_flank_length, min_extension_flank=options.min_extension_flank)
+                        max_flank_length=options.max_flank_length, min_extension_flank=options.min_extension_flank,
+                        min_external_bases=options.min_external_bases, read_length=options.read_length,
+                        max_context_paths=options.max_context_paths)
         # Resume only a completed invocation with exactly the same inputs/settings.
         identity = {k: v for k, v in manifest.items() if k != "status"}
         if not options.rerun:
@@ -329,11 +331,12 @@ def process(sample, arrays, options, logdir, binary_hash):
             raise ValueError("mcaat binary changed during batch; completed work preserved")
         run_stage([options.mcaat, "phage-curate", "--arrays", snapshot, "--graph", graph["prefix"],
                    "--output", job/"predictions", "--threads", options.threads, "--beam-width", options.beam_width,
-                   "--source-array-crossing", "true",
+                   "--source-array-crossing", "true", "--max-context-paths", options.max_context_paths,
+                   "--read-length", options.read_length, "--min-external-bases", options.min_external_bases,
                    "--max-flank-length", options.max_flank_length, "--min-extension-flank", options.min_extension_flank],
                   job, logdir/"measurements.tsv", sample.name, "protospacer_workflow")
         summary = json.loads((job/"predictions/run_summary.json").read_text())
-        if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v5":
+        if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v6":
             raise ValueError("native workflow did not complete")
         if len(read_fasta(job/"predictions/Protospacers.fasta")) != summary["protospacer_regions"] or \
            len(read_fasta(job/"predictions/ContiguousPaths.fasta")) != summary["unique_extensions"]:
@@ -363,6 +366,9 @@ def main():
     parser.add_argument("--beam-width", type=int, default=64)
     parser.add_argument("--max-flank-length", type=int, default=750)
     parser.add_argument("--min-extension-flank", type=int, default=200)
+    parser.add_argument("--min-external-bases", type=int, default=200)
+    parser.add_argument("--max-context-paths", type=int, default=256)
+    parser.add_argument("--read-length", type=int, default=150)
     parser.add_argument("--existing-only", action="store_true", help="require graphs; do not download or build")
     parser.add_argument("--rerun", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -374,6 +380,8 @@ def main():
         parser.error("invalid resource settings")
     if not 1 <= args.min_extension_flank <= args.max_flank_length <= 10000:
         parser.error("invalid flank lengths")
+    if not 1 <= args.min_external_bases <= args.max_flank_length or not 1 <= args.max_context_paths <= 4096 or not 25 <= args.read_length <= 10000:
+        parser.error("invalid external evidence or context settings")
     samples = [p for p in sorted(args.root.iterdir()) if p.is_dir() and re.fullmatch(r"SRR\d+", p.name)
                and (not args.srr or p.name in args.srr)]
     missing = set(args.srr)-{p.name for p in samples}
@@ -385,8 +393,8 @@ def main():
             print(sample.name + "\t" + ",".join(p.name for p in arrays))
         return 0
     help_result = subprocess.run([str(args.mcaat), "phage-curate", "--help"], text=True, capture_output=True)
-    if help_result.returncode or "workflow v5" not in help_result.stdout:
-        parser.error("rebuild MCAAT with native protospacer workflow v5")
+    if help_result.returncode or "workflow v6" not in help_result.stdout:
+        parser.error("rebuild MCAAT with native protospacer workflow v6")
     logs = args.root/"_mcaat_workflow_logs"
     logs.mkdir(exist_ok=True)
     for signum in (signal.SIGINT, signal.SIGTERM):
