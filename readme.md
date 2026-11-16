@@ -150,7 +150,13 @@ autoclean=true
   associations with an optional path audit. It uses no reference database during
   prediction. Discovery and extension reject the exact shared TruSeq prefix as
   well as longer adapter cores, preventing technical branches from establishing
-  false outside-array context. See the [measured evaluation](docs/protospacer-evaluation-SRR14017553-v7.md)
+  false outside-array context. After selection, `--max-coverage-fold 2` withholds
+  extensions with inconsistent downstream block medians, preserving their
+  targets and recording excluded routes in `withheld_extensions.tsv`. Set the
+  option to `0` to disable this check. On SRR14017553 it removed 35 nonmatching
+  extensions and one matching extension; the separate 81-input check retained
+  all 81 records and all 43 previously matching extensions. See the
+  [measured evaluation](docs/protospacer-evaluation-SRR14017553-v8.md)
   and [workflow and function reference](docs/protospacer-extension.md).
 
 ## Citation

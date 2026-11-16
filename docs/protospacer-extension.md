@@ -1,4 +1,4 @@
-# Native protospacer detection and extension (v7)
+# Native protospacer detection and extension (v8)
 
 MCAAT searches an existing de Bruijn graph for a possible target of an array spacer, extends that target through competing graph paths, filters source-only and technical paths, and saves the selected sequence with its evidence. All of this runs inside the single `ProtospacerWorkflow` class. The graph remains unchanged. No reference sequence or external aligner is consulted during prediction.
 
@@ -147,12 +147,25 @@ Repeatedly evaluating method changes on one dataset makes it a development datas
 | `target_context.tsv`, `graph_paths.tsv` | Independent discovery context and selected connected graph routes. |
 | `coverage_evidence.tsv` | Query ID, target/extension IDs, actual scored edge multiplicities and running minimum count. Query IDs distinguish different input queries that map to the same deduplicated target. The historical `path_capacity` column name no longer means segment-median capacity. |
 | `path_selection.tsv` | Retained flank scores, phase, selection status, competing-route count, first divergence and unphased source branching. The legacy `independent_bases` field counts scored edge positions, not statistically independent observations or necessarily distinct nodes. `path_cost = branch_loss / independent_bases` for a nonzero denominator; `runner_up_path_cost` uses that same primary score. `mean_energy` is only a tie-breaker. `branch_observations` is an audit count, not the selection denominator. |
+| `withheld_extensions.tsv` | One row per withheld selected route: target, reason, full sequence, block statistics, outward graph nodes and scored multiplicities. These are diagnostic routes, not accepted extensions. `count_positions` are one-based from the graph anchor; add `anchor_prefix_bp` for a short target’s left flank. |
 | `query_metrics.tsv`, `run_summary.json` | Per-query work/timings, all parameter values, count meanings and completion status. |
 | `search_paths/*.tsv.gz` | Optional finished/pruned path audit. These rows are search states, not protospacer or phage counts. `branch_costs` contains raw costs, including masked positions; its unfiltered sum is not `branch_loss`. Only costs whose preceding and selected positions both occur consecutively in `count_positions` contribute. |
 
 Interval coordinates are zero-based and half-open. Supplied-mode query intervals cover the original complete supplied sequence. Left/right paths are oriented to the canonical query; association strand fields relate them back to the original source. Empty extension IDs explicitly mean no accepted extension. Summed worker times can exceed wall time because queries run concurrently.
 
 `first_ambiguous_base` is a zero-based outward position from the graph anchor, interpreted only when `ambiguous=1`. For a short target's left flank, add `anchor_prefix_bp` to express it relative to the target boundary. Coverage-evidence positions are one-based outward added-base positions and already include that padding. The optional search audit's `count_positions` are one-based from the graph anchor and exclude padding; a cost at position `p` is `branch_costs[p-1]`. A `runner_up_path_cost` of -1 means no scored competing completed route was recorded; source-branch uncertainty alone can still set `ambiguous=1`.
+
+## Coverage validation after selection
+
+`--max-coverage-fold 2` validates the one selected extension. Set it to `0` to disable this filter. Search, candidate ranking, spacer detection and source-array handling run first. There is no fallback to a weaker placement, opposite flank or smoother alternative after the selected route fails. This avoids accepting an arbitrary route simply because one of many explored paths passes a smoothness filter.
+
+For configured read length `R` and graph k, use blocks of `max(k+1, R-k)` consecutive scored edges: 127 positions for 150-base reads and k=23. Calculate the median multiplicity of every complete block of the selected flank. With at least two blocks, withhold the extension if the largest median exceeds the smallest by the configured factor. An incomplete trailing block is ignored. Paths with fewer than two complete blocks receive no decision from this check and remain subject to the other extension rules.
+
+Counts from the source-array passage are excluded. Neither repeat multiplicity nor anchor multiplicity sets this baseline. Isolated count spikes or dips generally do not determine a block median. The read-length scale reduces sensitivity to adjacent correlated k-mer counts; it does not make the medians statistically independent.
+
+The original target, source associations and strict discovery context stay intact. A withheld route is absent from `ContiguousPaths.fasta`; `withheld_extensions.tsv` retains its complete sequence, outward graph nodes and scored counts for inspection. Its target has reason `coverage_discontinuity` and an empty extension ID. Accepted routes are not shortened by this filter.
+
+This is a tunable continuity heuristic, not a p-value or a guarantee of genomic linkage. Genuine coverage variation can also fail it. Report matching extensions removed as well as nonmatching ones removed; evaluate the setting on additional samples before treating the development result as general performance.
 
 ## Function responsibilities
 
@@ -188,6 +201,7 @@ All prediction functions belong to one class. The former unitig-median scoring h
 | `rank_walks` | Rank completeness, conditional branch cost and mean energy; reserve distinct current endpoints within bounded pools. |
 | `save_walks` | Stream finished/pruned diagnostic states with phase-specific unique identifiers. |
 | `extension_barrier` | Stop before configured adapter or low-complexity sequence while preserving valid coordinates. |
+| `filter_selected_extension` | Measure complete read-span block medians after final selection; withhold an inconsistent extension without fallback, preserving its target, discovery context and route audit. |
 | `advance_walk` | Store one real edge and its raw branch cost; apply source/revisit/artifact guards, count masking and the flank-length bound. |
 | `retain_completed` | Remove ineligible terminal paths and cap terminal storage without stopping live paths. |
 | `same_route` | Recognize bounded rejoining bubbles with shared downstream context. |
@@ -205,3 +219,5 @@ All prediction functions belong to one class. The former unitig-median scoring h
 If outgoing-base counts are modeled as multinomial observations, `c(e)/sum(c)` is the maximum-likelihood proportion. Applying that model to pooled graph counts and using the proportions to rank a complete route are additional modelling choices: graph counts do not retain which adjacent decisions came from the same read. The score has no fitted weights and does not estimate a sequencing-error distribution.
 
 Squared adjacent differences are a standard smoothness measure; the broader mathematical treatment is described by [Shuman et al. (2013)](https://documents.epfl.ch/users/s/sh/shuman/www/Papers/Journal/Shuman_et_al_SPM_2013.pdf). Here that measure is a descriptive tie-breaker, not an additive likelihood or penalty in the primary score. Overlapping-read coverage is correlated, as discussed by [Evans et al. (2010)](https://arxiv.org/abs/1004.5587); the scored positions must not be counted as independent reads. [Haploflow](https://pmc.ncbi.nlm.nih.gov/articles/PMC8287296/) is related work using local graph coverage for reconstruction, not validation of this specific MCAAT selector.
+
+Local coverage consistency is also used in [MetaCortex (2023)](https://academic.oup.com/bioinformatics/article/39/1/btad020/6986127). Its adjacent-node model is related motivation, not the block-median rule implemented here. [García-López et al. (2015)](https://pmc.ncbi.nlm.nih.gov/articles/PMC4585024/) document coverage variation and reconstruction limitations in viral metagenomes. Neither paper validates MCAAT’s twofold default; its measured trade-off must be reported separately.

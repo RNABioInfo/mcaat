@@ -21,6 +21,7 @@ struct WorkflowOptions {
     size_t max_visits = 2, context_bases = 24, context_width = 256, read_length = 150, min_external = 200;
     double identity = .90, coverage = .85, repeat_identity = .85;
     double boundary_support = .85, branch_ratio = 1.5;
+    double max_coverage_fold = 2.;
     bool correct_boundaries = true, save_search = false, filter_artifacts = true;
     bool source_array_crossing = true;
 };
@@ -60,7 +61,11 @@ struct TargetCandidate {
     size_t anchor_prefix = 0;
     std::vector<uint64_t> anchor;
     std::string target, sequence, status = "rejected", reason, target_id, extension_id;
-    ExtensionWalk left, right;
+    ExtensionWalk left, right, withheld;
+    std::string withheld_sequence;
+    bool withheld_left = false;
+    size_t coverage_blocks = 0;
+    double coverage_min = 0., coverage_max = 0.;
     std::string context_left, context_right, context_left_stop, context_right_stop;
     size_t clear_left = 0, clear_right = 0;
     double identity = 0, coverage = 0;
@@ -138,6 +143,7 @@ class ProtospacerWorkflow {
     bool advance_walk(ExtensionWalk &walk, const GraphArc &arc, size_t query,
                       const TargetCandidate &candidate, bool backwards, double branch_cost = 0.) const;
     bool extension_barrier(ExtensionWalk &walk, const TargetCandidate &candidate, bool backwards) const;
+    void filter_selected_extension(TargetCandidate &candidate) const;
     ExtensionWalk choose_walk(std::vector<ExtensionWalk> walks) const;
     bool same_route(const ExtensionWalk &a, const ExtensionWalk &b) const;
     void trim_walk(ExtensionWalk &walk, size_t length, const std::string &reason) const;

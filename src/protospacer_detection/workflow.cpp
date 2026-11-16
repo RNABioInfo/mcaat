@@ -26,7 +26,7 @@ void ProtospacerWorkflow::interrupt(int signal) { interrupted_ = signal; }
 ProtospacerWorkflow::ProtospacerWorkflow(WorkflowOptions options) : options_(std::move(options)) {}
 
 void ProtospacerWorkflow::print_help() {
-    std::cout << "MCAAT protospacer workflow v6\n"
+    std::cout << "MCAAT protospacer workflow v8\n"
                  "mcaat phage-curate --arrays DIR --graph PREFIX --output "
                  "NEW_DIR [options]\n"
                  "One workflow: spacer alignment -> source-context check -> "
@@ -39,6 +39,7 @@ void ProtospacerWorkflow::print_help() {
                  "--max-placements 128\n"
                  "--branch-ratio 1.5 --max-node-visits 2\n"
                  "--max-context-paths 256 --read-length 150 --min-external-bases 200\n"
+                 "--max-coverage-fold 2: withhold the selected extension if read-span medians exceed this ratio; 0 disables.\n"
                  "--correct-spacer-boundaries true --boundary-support 0.85\n"
                  "--filter-extension-artifacts true: stop at adapter cores or "
                  "low-complexity windows.\n"
@@ -117,12 +118,16 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
             if (flag == "--min-external-bases") o.min_external = n;
         } else if (flag == "--min-identity" || flag == "--min-query-coverage" ||
                    flag == "--array-repeat-identity" || flag == "--boundary-support" ||
-                   flag == "--branch-ratio") {
+                   flag == "--branch-ratio" || flag == "--max-coverage-fold") {
             size_t used = 0;
             double n = std::stod(value, &used);
             if (used != value.size() || !std::isfinite(n))
                 throw std::invalid_argument("invalid " + flag);
-            if (flag == "--branch-ratio") {
+            if (flag == "--max-coverage-fold") {
+                if (n != 0. && (n <= 1. || n > 1000000.))
+                    throw std::invalid_argument("coverage fold must exceed one, or be zero to disable");
+                o.max_coverage_fold = n;
+            } else if (flag == "--branch-ratio") {
                 if (n <= 1 || n > 1000000)
                     throw std::invalid_argument("branch ratio must exceed one");
                 o.branch_ratio = n;
@@ -1291,6 +1296,45 @@ bool ProtospacerWorkflow::extension_barrier(ExtensionWalk &walk, const TargetCan
     return false;
 }
 
+void ProtospacerWorkflow::filter_selected_extension(TargetCandidate &candidate) const {
+    if (!candidate.detected || !candidate.extended) return;
+    const bool backwards = !candidate.left.bases.empty();
+    auto &walk = backwards ? candidate.left : candidate.right;
+    // One read contributes read_length-k consecutive (k+1)-mer observations.
+    // Use complete disjoint blocks of unmasked downstream counts only.
+    const size_t k = options_.context_bases - 1;
+    const size_t span = std::max(options_.context_bases,
+                                options_.read_length > k ? options_.read_length - k : size_t(1));
+    candidate.coverage_blocks = walk.counts.size() / span;
+    for (size_t block = 0; block < candidate.coverage_blocks; ++block) {
+        const size_t start = block * span;
+        std::vector<double> counts(walk.counts.begin() + start, walk.counts.begin() + start + span);
+        auto middle = counts.begin() + counts.size() / 2;
+        std::nth_element(counts.begin(), middle, counts.end());
+        double median = *middle;
+        if (counts.size() % 2 == 0)
+            median = (median + *std::max_element(counts.begin(), middle)) / 2.;
+        candidate.coverage_min = block ? std::min(candidate.coverage_min, median) : median;
+        candidate.coverage_max = block ? std::max(candidate.coverage_max, median) : median;
+    }
+    if (options_.max_coverage_fold == 0. || candidate.coverage_blocks < 2 ||
+        (candidate.coverage_min > 0. && candidate.coverage_max <= options_.max_coverage_fold * candidate.coverage_min))
+        return;
+    // Validate the independently selected route; do not search for a different
+    // smooth-looking route after the strongest one fails this check.
+    // Retain the exact target and its original discovery evidence. Keep the
+    // withheld route/counts in a separate audit, never in the accepted FASTA.
+    candidate.withheld_sequence = candidate.sequence;
+    candidate.withheld_left = backwards;
+    candidate.withheld = std::move(walk);
+    walk = ExtensionWalk{};
+    walk.stop = "coverage_discontinuity";
+    candidate.sequence = (candidate.anchor_prefix ? label(candidate.anchor.front()).substr(0, candidate.anchor_prefix) : "") + candidate.target;
+    candidate.extended = false;
+    candidate.status = "detected";
+    candidate.reason = "coverage_discontinuity";
+}
+
 bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc, size_t query,
                                        const TargetCandidate &candidate, bool backwards, double branch_cost) const {
     if (std::find(candidate.anchor.begin(), candidate.anchor.end(), arc.node) != candidate.anchor.end()) {
@@ -1790,6 +1834,9 @@ void ProtospacerWorkflow::process_query(size_t query) {
         }
     }
     select_candidate(checked);
+    start = std::chrono::steady_clock::now();
+    if (!checked.empty()) filter_selected_extension(checked.front());
+    query_timings_[query][2] += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     query_status_[query] = checked.empty() ? "interrupted" : checked.front().reason;
     query_work_[query] = work;
     results_[query] = std::move(checked);
@@ -1902,7 +1949,7 @@ void ProtospacerWorkflow::write_outputs() {
                       "stop\tsearch_limited\t"
                       "left_deviation\tright_deviation\tleft_crosses_source_"
                       "array\tright_crosses_source_array\tidentified_before_"
-                      "extension\tanchor_prefix_bp\n";
+                      "extension\tanchor_prefix_bp\tcoverage_blocks\tcoverage_block_min\tcoverage_block_max\n";
         rejected << "query_id\tstatus\treason\n";
         for (size_t i = 0; i < queries_.size(); ++i) {
             auto id = numbered("Q", i + 1);
@@ -1921,11 +1968,33 @@ void ProtospacerWorkflow::write_outputs() {
                            << c.right.bases.size() << '\t' << c.left.stop << '\t' << c.right.stop << '\t'
                            << c.limited << '\t' << c.left.deviation << '\t' << c.right.deviation << '\t'
                            << c.left.crosses_source << '\t' << c.right.crosses_source << '\t' << c.identified
-                           << '\t' << c.anchor_prefix << '\n';
+                           << '\t' << c.anchor_prefix << '\t' << c.coverage_blocks << '\t' << c.coverage_min << '\t' << c.coverage_max << '\n';
                 if (!c.extended)
                     rejected << id << '\t' << c.status << '\t' << c.reason << '\n';
             }
         }
+    }
+    {
+        auto audit = open("withheld_extensions.tsv");
+        audit << "query_id\ttarget_id\treason\tside\tsequence\tcoverage_blocks\tblock_min\tblock_max\tnodes_outward\tcount_positions\tcounts\n";
+        for (const auto &group : results_)
+            for (const auto &c : group) {
+                if (c.withheld_sequence.empty()) continue;
+                audit << numbered("Q", c.query + 1) << '\t' << c.target_id << '\t' << c.reason << '\t'
+                      << (c.withheld_left ? "left" : "right") << '\t' << c.withheld_sequence << '\t'
+                      << c.coverage_blocks << '\t' << c.coverage_min << '\t' << c.coverage_max;
+                auto values = [&](const auto &items) {
+                    audit << '\t';
+                    for (size_t i = 0; i < items.size(); ++i) {
+                        if (i) audit << ',';
+                        audit << items[i];
+                    }
+                };
+                values(c.withheld.nodes);
+                values(c.withheld.sample_positions);
+                values(c.withheld.counts);
+                audit << '\n';
+            }
     }
     {
         auto links = open("associations.tsv"), evidence = open("coverage_evidence.tsv");
@@ -2058,7 +2127,7 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     fs::path temporary = options_.output / "run_summary.json.tmp";
     std::ofstream out(temporary);
     out.exceptions(std::ios::badbit | std::ios::failbit);
-    out << "{\n  \"implementation\": \"protospacer-workflow-v7\",\n  \"status\": " << json(status)
+    out << "{\n  \"implementation\": \"protospacer-workflow-v8\",\n  \"status\": " << json(status)
         << ",\n  \"error\": " << json(error) << ",\n  \"arrays\": " << json(options_.arrays.string())
         << ",\n  \"graph\": " << json(options_.graph.string())
         << ",\n  \"graph_k\": " << (graph_ ? graph_->k() : 0) << ",\n  \"array_count\": " << arrays.size()
@@ -2087,6 +2156,8 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
         << ",\n  \"max_placement_states\": " << options_.placement_work
         << ",\n  \"max_placements\": " << options_.max_placements
         << ",\n  \"branch_ratio\": " << options_.branch_ratio
+        << ",\n  \"max_coverage_fold\": " << options_.max_coverage_fold
+        << ",\n  \"coverage_filter_stage\": \"after_selection_no_fallback\""
         << ",\n  \"max_node_visits\": " << options_.max_visits
         << ",\n  \"extension_method\": \"conditional_branch_support_per_scored_edge\""
         << ",\n  \"context_bases\": " << options_.context_bases
@@ -2191,6 +2262,56 @@ void ProtospacerWorkflow::self_test() {
     require(json("a\n\"b") == "\"a\\u000a\\\"b\"", "JSON escaping");
     require(!informative("TGTGGGGGGGGGGGGGGGTGTGAAA"), "homopolymer target rejection");
     ProtospacerWorkflow workflow(WorkflowOptions{});
+    workflow.options_.max_coverage_fold = 4.;
+    auto coverage_case = [](const std::vector<double> &counts) {
+        TargetCandidate c;
+        c.target = "ACGT"; c.detected = c.extended = true;
+        c.context_right = "original discovery evidence";
+        c.right.counts = c.right.all_counts = counts;
+        c.right.capacities.assign(counts.size(), 1.);
+        c.right.sample_positions.resize(counts.size());
+        std::iota(c.right.sample_positions.begin(), c.right.sample_positions.end(), size_t(1));
+        c.right.bases.assign(counts.size(), 'A');
+        c.right.nodes.resize(counts.size() + 1);
+        c.sequence = c.target + c.right.bases;
+        return c;
+    };
+    std::vector<double> stable_counts(254, 10.);
+    stable_counts[160] = 1.; stable_counts[161] = 200.;
+    auto stable_coverage = coverage_case(stable_counts);
+    workflow.filter_selected_extension(stable_coverage);
+    require(stable_coverage.extended, "isolated count dips and spikes do not reject a stable path");
+    auto jump_counts = std::vector<double>(254, 10.);
+    std::fill(jump_counts.begin() + 127, jump_counts.end(), 41.);
+    auto jump_coverage = coverage_case(jump_counts);
+    workflow.filter_selected_extension(jump_coverage);
+    require(jump_coverage.detected && !jump_coverage.extended && jump_coverage.target == "ACGT" &&
+            jump_coverage.context_right == "original discovery evidence" && jump_coverage.right.bases.empty() &&
+            jump_coverage.withheld.counts == jump_counts && jump_coverage.withheld_sequence.size() == 258 &&
+            jump_coverage.reason == "coverage_discontinuity",
+            "coverage rejection preserves the target, discovery context and complete withheld-route evidence");
+    std::fill(jump_counts.begin() + 127, jump_counts.end(), 40.);
+    auto boundary_coverage = coverage_case(jump_counts);
+    workflow.filter_selected_extension(boundary_coverage);
+    require(boundary_coverage.extended, "coverage fold bound is inclusive");
+    std::fill(jump_counts.begin(), jump_counts.begin() + 127, 200.);
+    auto drop_coverage = coverage_case(jump_counts);
+    workflow.filter_selected_extension(drop_coverage);
+    require(!drop_coverage.extended, "persistent abundance drops are detected as well as increases");
+    auto masked_coverage = coverage_case(jump_counts);
+    masked_coverage.right.counts.assign(254, 40.);
+    workflow.filter_selected_extension(masked_coverage);
+    require(masked_coverage.extended, "masked source counts do not calibrate external coverage");
+    auto incomplete_counts = std::vector<double>(254, 10.);
+    incomplete_counts.insert(incomplete_counts.end(), 126, 1000.);
+    auto incomplete = coverage_case(incomplete_counts);
+    workflow.filter_selected_extension(incomplete);
+    require(incomplete.extended && incomplete.coverage_blocks == 2, "partial trailing block does not establish a persistent change");
+    workflow.options_.max_coverage_fold = 0.;
+    auto disabled_coverage = coverage_case(jump_counts);
+    workflow.filter_selected_extension(disabled_coverage);
+    require(disabled_coverage.extended, "coverage filter can be disabled explicitly");
+    workflow.options_.max_coverage_fold = 2.;
     const std::string adapter = "AGATCGGAAGAGCGTCGT";
     require(adapter_position("TT" + adapter) == 2 && adapter_position(reverse_complement(adapter)) == 0,
             "adapter core recognition on both strands");

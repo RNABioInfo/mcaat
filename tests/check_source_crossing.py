@@ -57,6 +57,19 @@ def write_fasta(path, records):
     path.write_text("".join(f">{name}\n{sequence}\n" for name, sequence in records.items()))
 
 
+def graph_commands(output, binary, reads):
+    """Build only the graph through the same native stages used by the batch runner."""
+    library = output / "reads.lib"
+    library.write_text(f"# synthetic single-end records\nse {reads}\n")
+    prefix = output / "graph_build/graph"
+    return {
+        "build_library": [str(binary), "buildlib", str(library), str(prefix / "reads")],
+        "build_graph": [str(binary), "read2sdbg", "--read_lib_file", str(prefix / "reads"),
+                        "--output_prefix", str(prefix / "graph"), "--host_mem", str(2 * 1024**3),
+                        "--num_cpu_threads", "2", "-k", str(K), "-m", "1"],
+    }
+
+
 def make_fixture(output, binary):
     rng = random.Random(2026111601)
     dna = lambda length: "".join(rng.choice("ACGT") for _ in range(length))
@@ -159,9 +172,7 @@ def make_fixture(output, binary):
             "--min-identity", "1", "--min-query-coverage", "1", "--correct-spacer-boundaries", "false",
             "--beam-width", "64", "--save-search", "true"]
     commands = {
-        "build": [str(binary), "--input-files", str(output / "construction.fasta"),
-                  "--output-folder", str(output / "graph_build"), "--threads", "2", "--ram", "2G",
-                  "--threshold-multiplicity", "1000000", "--autoclean", "false"],
+        **graph_commands(output, binary, output / "construction.fasta"),
         "discovery": base + ["--output", str(output / "discovery"), "--source-array-crossing", "true"],
         "supplied_strict": base + ["--protospacers", str(output / "supplied.fasta"),
                                    "--output", str(output / "supplied_strict"), "--source-array-crossing", "false"],
@@ -440,10 +451,11 @@ def main():
         print(json.dumps({"prepared": str(output), "native_processes_started": 0}, indent=2))
         return
     graph_hashes = None
+    (output / "graph_build/graph").mkdir(parents=True, exist_ok=True)
     for name, command in commands.items():
         with (output / (name + ".log")).open("w") as log:
             subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
-        if name == "build":
+        if name == "build_graph":
             graph_hashes = {str(path): digest(path) for path in (output / "graph_build/graph").glob("graph.sdbg*")}
     result = check_outputs(output, fixture)
     assert graph_hashes and all(digest(Path(path)) == sha for path, sha in graph_hashes.items()), "graph changed"

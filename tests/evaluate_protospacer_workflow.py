@@ -57,7 +57,7 @@ def write_json(path, data):
 def validate(folder):
     """Check all source/query outcomes, sequence identities, and association coordinates."""
     summary = json.loads((folder / "run_summary.json").read_text())
-    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2", "protospacer-workflow-v3", "protospacer-workflow-v4", "protospacer-workflow-v5") or summary["status"] != "complete":
+    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2", "protospacer-workflow-v3", "protospacer-workflow-v4", "protospacer-workflow-v5", "protospacer-workflow-v6", "protospacer-workflow-v7", "protospacer-workflow-v8") or summary["status"] != "complete":
         raise ValueError("evaluation requires a complete workflow run")
     sources = {r["source_id"]: r for r in table(folder / "sources.tsv")}
     queries = {r["query_id"]: r for r in table(folder / "queries.tsv")}
@@ -116,6 +116,30 @@ def validate(folder):
             nodes = r[side+"_nodes_outward"].split(",") if r[side+"_nodes_outward"] else []
             assert len(nodes) in (int(c[side+"_bp"])-(padding if side == "left" else 0)+1, 0)
             assert int(c[side+"_bp"]) <= summary["max_flank_length"]
+    withheld = []
+    if summary.get("coverage_filter_stage") == "after_selection_no_fallback":
+        withheld = table(folder / "withheld_extensions.tsv")
+        assert len({r["query_id"] for r in withheld}) == len(withheld)
+        span = max(summary["graph_k"] + 1, summary["read_length"] - summary["graph_k"])
+        for row in withheld:
+            query_id = row["query_id"]
+            candidate = accepted[query_id]
+            assert candidate["status"] == "detected" and queries[query_id]["status"] == "coverage_discontinuity"
+            assert all(not r["extension_id"] for r in links if r["query_id"] == query_id)
+            counts = list(map(float, row["counts"].split(",")))
+            positions = list(map(int, row["count_positions"].split(",")))
+            nodes = row["nodes_outward"].split(",")
+            assert len(counts) == len(positions) and 0 < positions[0] <= positions[-1] < len(nodes)
+            assert all(b == a + 1 for a, b in zip(positions, positions[1:]))
+            medians = [statistics.median(counts[i:i + span]) for i in range(0, len(counts) - span + 1, span)]
+            assert len(medians) == int(row["coverage_blocks"]) >= 2
+            assert min(medians) == float(row["block_min"]) and max(medians) == float(row["block_max"])
+            assert summary["max_coverage_fold"] > 0 and max(medians) > summary["max_coverage_fold"] * min(medians)
+            padding = int(candidate["anchor_prefix_bp"])
+            begin = (len(nodes) - 1 if row["side"] == "left" else 0) + padding
+            assert row["sequence"][begin:begin + len(candidate["sequence"])] == candidate["sequence"]
+            assert len(row["sequence"]) == len(nodes) - 1 + padding + len(candidate["sequence"])
+        assert {r["query_id"] for r in withheld} == {q for q, row in queries.items() if row["status"] == "coverage_discontinuity"}
     lengths = sorted(map(len, extensions.values()))
     return {"validation": "passed", "source_observations": len(sources), "distinct_corrected_spacers": len(queries),
             "detected_queries": len(accepted), "protospacer_regions": len(targets), "unique_extensions": len(extensions),
@@ -126,7 +150,7 @@ def validate(folder):
             "all_search_limited_queries": sum(q.get("search_limited", "0") == "1" for q in queries.values()),
             "left_stops": dict(Counter(c["left_stop"] for c in accepted.values())),
             "right_stops": dict(Counter(c["right_stop"] for c in accepted.values())),
-            "coverage_observations": len(evidence)}
+            "coverage_observations": len(evidence), "coverage_withheld_queries": len(withheld)}
 
 
 def blast(fasta_path, database, destination, threads, word_size=7):
