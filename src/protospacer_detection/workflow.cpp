@@ -14,6 +14,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
+#include <zlib.h>
 
 namespace mcaat::proto {
 namespace fs = std::filesystem;
@@ -25,20 +26,37 @@ void ProtospacerWorkflow::interrupt(int signal) { interrupted_ = signal; }
 ProtospacerWorkflow::ProtospacerWorkflow(WorkflowOptions options) : options_(std::move(options)) {}
 
 void ProtospacerWorkflow::print_help() {
-    std::cout
-        << "MCAAT protospacer workflow v2\n"
-           "mcaat phage-curate --arrays DIR --graph PREFIX --output NEW_DIR [options]\n"
-           "One workflow: spacer alignment -> source-context check -> extension -> filtering -> output.\n"
-           "--threads 1 --beam-width 64 --max-flank-length 750 --min-extension-flank 200\n"
-           "--min-identity 0.90 --min-query-coverage 0.85 --array-repeat-identity 0.85\n"
-           "--max-query-states 2000000 --max-placement-states 400000 --max-placements 128\n"
-           "--branch-ratio 1.5 --max-node-visits 2\n"
-           "--correct-spacer-boundaries true --boundary-support 0.85\n"
-           "The flank limit is a maximum. Ambiguous branches stop at their supported common prefix.\n"
-           "Source-array traversal never establishes a target. Graph files are never modified.\n"
-           "No supplied-target preservation mode and no reference-guided path selection.\n"
-           "Output must be new or empty. All counts and search limits are recorded in run_summary.json.\n"
-           "--self-test runs arithmetic/context checks without a graph or biological dataset.\n";
+    std::cout << "MCAAT protospacer workflow v5\n"
+                 "mcaat phage-curate --arrays DIR --graph PREFIX --output "
+                 "NEW_DIR [options]\n"
+                 "One workflow: spacer alignment -> source-context check -> "
+                 "extension -> filtering -> output.\n"
+                 "--threads 1 --beam-width 64 --max-flank-length 750 "
+                 "--min-extension-flank 200\n"
+                 "--min-identity 0.90 --min-query-coverage 0.85 "
+                 "--array-repeat-identity 0.85\n"
+                 "--max-query-states 2000000 --max-placement-states 400000 "
+                 "--max-placements 128\n"
+                 "--branch-ratio 1.5 --max-node-visits 2\n"
+                 "--correct-spacer-boundaries true --boundary-support 0.85\n"
+                 "--filter-extension-artifacts true: stop at adapter cores or "
+                 "low-complexity windows.\n"
+                 "--save-search false: optionally stream all finished/pruned "
+                 "flank paths to gzip TSVs.\n"
+                 "The flank limit is a maximum. Ambiguous branches stop at their "
+                 "supported common prefix.\n"
+                 "Source-array traversal never establishes a target. Graph files "
+                 "are never modified.\n"
+                 "--protospacers FASTA: extend supplied targets; preserve every "
+                 "supplied input separately.\n"
+                 "Supplied targets require an exact full-sequence graph embedding.\n"
+                 "--source-array-crossing true: one passage for identified "
+                 "targets only, never discovery.\n"
+                 "No reference-guided path selection.\n"
+                 "Output must be new or empty. All counts and search limits are "
+                 "recorded in run_summary.json.\n"
+                 "--self-test runs arithmetic/context checks without a graph or "
+                 "biological dataset.\n";
 }
 
 WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
@@ -50,14 +68,24 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
         std::string value = argv[i];
         if (flag == "--arrays")
             o.arrays = value;
+        else if (flag == "--protospacers")
+            o.protospacers = value;
         else if (flag == "--graph")
             o.graph = value;
         else if (flag == "--output")
             o.output = value;
-        else if (flag == "--correct-spacer-boundaries") {
+        else if (flag == "--correct-spacer-boundaries" || flag == "--save-search" ||
+                 flag == "--filter-extension-artifacts" || flag == "--source-array-crossing") {
             if (value != "true" && value != "false")
                 throw std::invalid_argument(flag + " requires true or false");
-            o.correct_boundaries = value == "true";
+            if (flag == "--save-search")
+                o.save_search = value == "true";
+            else if (flag == "--source-array-crossing")
+                o.source_array_crossing = value == "true";
+            else if (flag == "--filter-extension-artifacts")
+                o.filter_artifacts = value == "true";
+            else
+                o.correct_boundaries = value == "true";
         } else if (flag == "--threads" || flag == "--beam-width" || flag == "--max-flank-length" ||
                    flag == "--min-extension-flank" || flag == "--max-query-states" ||
                    flag == "--max-placement-states" || flag == "--max-placements" ||
@@ -125,6 +153,13 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
     o.arrays = fs::absolute(o.arrays);
     o.graph = fs::absolute(o.graph);
     o.output = fs::absolute(o.output);
+    if (!o.protospacers.empty()) {
+        if (!fs::is_regular_file(o.protospacers))
+            throw std::invalid_argument("supplied protospacer FASTA does not exist");
+        o.protospacers = fs::absolute(o.protospacers);
+        // Already identified graph intervals must not be substituted or clipped.
+        o.identity = o.coverage = 1.;
+    }
     return o;
 }
 
@@ -238,6 +273,24 @@ bool ProtospacerWorkflow::informative(const std::string &sequence) {
         longest = std::max(longest, run);
     }
     return longest * 2 < sequence.size();
+}
+
+size_t ProtospacerWorkflow::adapter_position(const std::string &sequence, bool backwards) {
+    // Exact 18-base TruSeq trimming cores; these are technical motifs, not viral
+    // references.
+    static const std::vector<std::string> motifs = [] {
+        std::vector<std::string> m{"AGATCGGAAGAGCACACGT", "AGATCGGAAGAGCGTCGT"};
+        m.reserve(8);
+        for (size_t i = 0; i < 2; ++i)
+            m.push_back(reverse_complement(m[i]));
+        for (size_t i = 0; i < 4; ++i)
+            m.emplace_back(m[i].rbegin(), m[i].rend());
+        return m;
+    }();
+    size_t found = std::string::npos;
+    for (size_t i = backwards ? 4 : 0; i < (backwards ? 8 : 4); ++i)
+        found = std::min(found, sequence.find(motifs[i]));
+    return found;
 }
 
 int ProtospacerWorkflow::repeat_context(const std::string &outward, const std::string &remainder,
@@ -686,11 +739,94 @@ void ProtospacerWorkflow::correct_boundaries() {
     }
 }
 
+void ProtospacerWorkflow::prepare_source_nodes() {
+    // Index only the reported source arrays, not the whole metagenome.
+    const size_t k = graph_->k();
+    for (const auto &source : sources_) {
+        auto sequence = source.repeat + source.spacer + source.repeat;
+        for (const auto &oriented : {sequence, reverse_complement(sequence)})
+            for (size_t i = 0; i + k <= oriented.size(); ++i) {
+                auto node = find_node(oriented.substr(i, k));
+                if (node != missing)
+                    array_nodes_[source.array].insert(node);
+            }
+    }
+}
+
+void ProtospacerWorkflow::load_supplied_targets() {
+    if (options_.protospacers.empty())
+        return;
+    std::ifstream input(options_.protospacers);
+    std::string line;
+    std::set<std::string> ids;
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty())
+            continue;
+        if (line.front() == '>') {
+            std::istringstream header(line.substr(1));
+            std::string id;
+            header >> id;
+            if (id.empty() || !ids.insert(id).second)
+                throw std::runtime_error("empty or duplicate supplied target ID");
+            supplied_.emplace_back(id, "");
+        } else {
+            if (supplied_.empty() || !dna(line))
+                throw std::runtime_error("invalid supplied target FASTA");
+            supplied_.back().second += line;
+        }
+    }
+    if (input.bad() || supplied_.empty())
+        throw std::runtime_error("empty or unreadable supplied target FASTA");
+    auto array_sources = std::move(sources_);
+    sources_.clear();
+    for (const auto &[id, sequence] : supplied_) {
+        if (!dna(sequence))
+            throw std::runtime_error("empty supplied target: " + id);
+        size_t matched = 0;
+        std::set<std::tuple<std::string, std::string, std::string, std::string>> contexts;
+        for (const auto &source : array_sources)
+            for (bool reverse : {false, true}) {
+                auto spacer = reverse ? reverse_complement(source.spacer) : source.spacer;
+                auto repeat = reverse ? reverse_complement(source.repeat) : source.repeat;
+                for (size_t at = spacer.find(sequence); at != std::string::npos;
+                     at = spacer.find(sequence, at + 1)) {
+                    auto left = spacer.substr(0, at), right = spacer.substr(at + sequence.size());
+                    if (!contexts.emplace(source.array, repeat, left, right).second)
+                        continue;
+                    SpacerSource s;
+                    s.id = id + ":" + std::to_string(++matched);
+                    s.array = source.array;
+                    s.spacer = s.original_spacer = sequence;
+                    s.repeat = s.original_repeat = repeat;
+                    s.source_left = left;
+                    s.source_right = right;
+                    sources_.push_back(std::move(s));
+                }
+            }
+        if (!matched) {
+            // Keep an explicit input outcome; do not invent missing source context.
+            SpacerSource s;
+            s.id = id + ":0";
+            s.array = "unassociated";
+            s.spacer = s.original_spacer = sequence;
+            sources_.push_back(std::move(s));
+        }
+    }
+}
+
 void ProtospacerWorkflow::group_queries() {
     std::map<std::string, std::vector<size_t>> grouped;
     for (size_t i = 0; i < sources_.size(); ++i)
         grouped[canonical(sources_[i].spacer)].push_back(i);
     queries_.assign(grouped.begin(), grouped.end());
+    query_source_nodes_.resize(queries_.size());
+    for (size_t q = 0; q < queries_.size(); ++q)
+        for (auto index : queries_[q].second) {
+            const auto &nodes = array_nodes_[sources_[index].array];
+            query_source_nodes_[q].insert(nodes.begin(), nodes.end());
+        }
     results_.resize(queries_.size());
     query_status_.resize(queries_.size(), "not_processed");
     query_work_.resize(queries_.size());
@@ -704,8 +840,28 @@ std::vector<TargetCandidate> ProtospacerWorkflow::map_spacer(size_t query, size_
     const auto &sequence = queries_[query].first;
     const size_t k = graph_->k(), length = sequence.size();
     std::vector<TargetCandidate> found;
-    if (length < k)
+    if (length < k) {
+        if (options_.protospacers.empty() || k - length > options_.max_flank)
+            return found;
+        // A supplied short target is an interval inside a full graph k-mer.
+        // Keep the complete target unchanged; padding is explicit, not alignment.
+        auto starts = find_starts(sequence, 0, work, limited);
+        for (auto [node, errors] : starts) {
+            TargetCandidate candidate;
+            candidate.query = query;
+            candidate.end = length;
+            candidate.anchor = {node};
+            candidate.anchor_prefix = k - length;
+            candidate.target = sequence;
+            candidate.identity = candidate.coverage = 1.;
+            found.push_back(std::move(candidate));
+            if (found.size() >= options_.max_placements) {
+                limited |= starts.size() > found.size();
+                break;
+            }
+        }
         return found;
+    }
     const size_t minimum = std::max(k, size_t(std::ceil(options_.coverage * length - 1e-9)));
     std::map<std::pair<std::string, size_t>, std::vector<std::pair<uint64_t, size_t>>> cache;
     auto step = [&]() {
@@ -877,19 +1033,41 @@ int ProtospacerWorkflow::source_context(size_t query, const TargetCandidate &can
     for (size_t index : queries_[query].second) {
         const auto &source = sources_[index];
         std::string repeat = source.repeat;
-        if (source.spacer != sequence)
+        auto left = source.source_left, right = source.source_right;
+        if (source.spacer != sequence) {
             repeat = reverse_complement(repeat);
-        auto remainder = backwards ? sequence.substr(0, candidate.begin) : sequence.substr(candidate.end);
+            std::swap(left, right);
+            left = reverse_complement(left);
+            right = reverse_complement(right);
+        }
+        auto remainder =
+            backwards ? left + sequence.substr(0, candidate.begin) : sequence.substr(candidate.end) + right;
         if (backwards) {
             std::reverse(repeat.begin(), repeat.end());
             std::reverse(remainder.begin(), remainder.end());
         }
+        if (repeat.empty())
+            return 0;
         int state = repeat_context(outward, remainder, repeat, options_.repeat_identity);
         if (state == 1)
             return 1;
         pending |= state == 0;
     }
     return pending ? 0 : 2;
+}
+
+size_t ProtospacerWorkflow::source_clearance(size_t query, const TargetCandidate &c, bool backwards) const {
+    size_t end = 0;
+    for (auto index : queries_[query].second) {
+        const auto &s = sources_[index];
+        bool flipped = s.spacer != queries_[query].first;
+        size_t remainder = backwards ? c.begin : queries_[query].first.size() - c.end;
+        remainder += (backwards != flipped) ? s.source_left.size() : s.source_right.size();
+        size_t edits = size_t(std::floor((1 - options_.repeat_identity) * s.repeat.size() + 1e-9));
+        end = std::max(end, remainder + s.repeat.size() + edits + size_t(graph_->k()));
+    }
+    size_t padding = backwards ? c.anchor_prefix : 0;
+    return end > padding ? end - padding : 0;
 }
 
 void ProtospacerWorkflow::trim_walk(ExtensionWalk &walk, size_t length, const std::string &reason) const {
@@ -903,11 +1081,26 @@ void ProtospacerWorkflow::trim_walk(ExtensionWalk &walk, size_t length, const st
         walk.counts.pop_back();
         walk.capacities.pop_back();
     }
+    while (!walk.blocks.empty() && walk.blocks.back().begin >= walk.counts.size())
+        walk.blocks.pop_back();
+    if (!walk.blocks.empty() && walk.blocks.back().end > walk.counts.size()) {
+        auto &block = walk.blocks.back();
+        block.end = walk.counts.size();
+        block.count = median({walk.counts.begin() + block.begin, walk.counts.end()});
+    }
     if (length < walk.clear_at) {
         walk.external = false;
         walk.clear_at = 0;
     }
+    if (!length) {
+        walk.crosses_source = false;
+        walk.source_until = walk.source_last = 0;
+    }
     walk.flow = walk.capacities.empty() ? 0 : walk.capacities.back();
+    walk.coverage_window.clear();
+    walk.next_block = walk.profile_samples = 0;
+    walk.previous_median = walk.last_unshared = walk.deviation = 0;
+    update_profile(walk, true);
 }
 
 Unitig ProtospacerWorkflow::build_unitig(uint64_t start, const GraphArc &first, bool backwards, size_t &work,
@@ -930,20 +1123,232 @@ Unitig ProtospacerWorkflow::build_unitig(uint64_t start, const GraphArc &first, 
             break;
         arc = next.front();
     }
+    if (!unitig.arcs.empty())
+        unitig.shared = neighbors(start, !backwards).size() > 1 &&
+                        neighbors(unitig.arcs.back().node, backwards).size() > 1;
     return unitig;
 }
 
-void ProtospacerWorkflow::update_flow(ExtensionWalk &walk, size_t before) const {
+void ProtospacerWorkflow::update_flow(ExtensionWalk &walk, size_t before, bool shared) const {
     if (walk.counts.size() == before)
         return;
     // The median is a robust unitig capacity, not an independent-read count.
     // Max-min path flow tolerates a shared repeat's increased coverage.
     std::vector<double> counts(walk.counts.begin() + before, walk.counts.end());
     double capacity = median(std::move(counts));
-    walk.flow = before ? std::min(walk.flow, capacity) : capacity;
+    walk.blocks.push_back({before, walk.counts.size(), capacity, shared});
+    // A barrier can trim inside this not-yet-scored segment. Its trailing
+    // capacity slots are still zero, so resume from the last committed block.
+    walk.flow = before ? std::min(walk.capacities[before - 1], capacity) : capacity;
     for (size_t i = before; i < walk.capacities.size(); ++i)
         walk.capacities[i] = walk.flow;
     ++walk.unitigs;
+    update_profile(walk);
+}
+
+void ProtospacerWorkflow::update_profile(ExtensionWalk &walk, bool finish) const {
+    const size_t width = options_.context_bases;
+    auto observe = [&](double value, size_t length) {
+        for (size_t i = 0; i < length; ++i) {
+            walk.coverage_window.push_back(value);
+            ++walk.profile_samples;
+            if (walk.coverage_window.size() == width) {
+                double current = median(walk.coverage_window);
+                if (walk.previous_median > 0)
+                    walk.deviation = std::max(
+                        walk.deviation, std::abs(std::log2((current + 1) / (walk.previous_median + 1))));
+                walk.previous_median = current;
+                walk.coverage_window.clear();
+            }
+        }
+    };
+    while (walk.next_block < walk.blocks.size()) {
+        size_t ordinary = walk.next_block;
+        while (ordinary < walk.blocks.size() && walk.blocks[ordinary].shared)
+            ++ordinary;
+        if (ordinary == walk.blocks.size() && !finish)
+            break; // A shared rise needs its exit before it can be exempted.
+        double after = ordinary < walk.blocks.size() ? walk.blocks[ordinary].count : 0;
+        size_t end = std::min(ordinary + 1, walk.blocks.size());
+        for (size_t i = walk.next_block; i < end; ++i) {
+            const auto &block = walk.blocks[i];
+            bool shared_rise = block.shared && walk.last_unshared > 0 && after > 0 &&
+                               block.count >= std::max(walk.last_unshared, after);
+            if (!shared_rise)
+                observe(block.count, block.end - block.begin);
+        }
+        if (after > 0)
+            walk.last_unshared = after;
+        walk.next_block = end;
+    }
+    if (finish && walk.coverage_window.size() >= (width + 1) / 2) {
+        double current = median(walk.coverage_window);
+        if (walk.previous_median > 0)
+            walk.deviation =
+                std::max(walk.deviation, std::abs(std::log2((current + 1) / (walk.previous_median + 1))));
+        walk.previous_median = current;
+        walk.coverage_window.clear();
+    }
+}
+
+void ProtospacerWorkflow::rank_walks(std::vector<ExtensionWalk> &walks, size_t limit, bool diverse) const {
+    if (walks.empty())
+        return;
+    double minimum = std::numeric_limits<double>::infinity();
+    for (const auto &walk : walks)
+        if (walk.external)
+            minimum = std::min(minimum, walk.deviation);
+    if (!std::isfinite(minimum))
+        minimum = 0;
+    const double allowance = std::log2(options_.branch_ratio);
+    double support = 0;
+    for (const auto &walk : walks)
+        if (walk.deviation <= minimum + allowance)
+            support = std::max(support, walk.flow);
+    auto tier = [&](const auto &walk) {
+        if (walk.deviation > minimum + allowance)
+            return 2;
+        return walk.flow * options_.branch_ratio < support ? 1 : 0;
+    };
+    std::sort(walks.begin(), walks.end(), [&](const auto &a, const auto &b) {
+        if (a.external != b.external)
+            return a.external > b.external;
+        if (tier(a) != tier(b))
+            return tier(a) < tier(b);
+        if (a.bases.size() != b.bases.size())
+            return a.bases.size() > b.bases.size();
+        if (a.flow != b.flow)
+            return a.flow > b.flow;
+        if (a.deviation != b.deviation)
+            return a.deviation < b.deviation;
+        return a.nodes < b.nodes;
+    });
+    if (diverse && walks.size() > limit) {
+        // Reserve one slot for each of the first two branch-choice combinations.
+        // At most 4^2 families; additional slots retain the best-ranked states.
+        std::set<std::vector<uint64_t>> families;
+        std::vector<size_t> chosen;
+        std::vector<bool> used(walks.size());
+        // A source passage has no downstream score yet. Preserve a bounded
+        // share of such states until they actually leave the source region.
+        for (size_t i = 0; i < walks.size() && chosen.size() < std::max(size_t(1), limit / 4); ++i)
+            if (walks[i].crosses_source && !walks[i].external) {
+                chosen.push_back(i);
+                used[i] = true;
+            }
+        for (size_t i = 0; i < walks.size() && chosen.size() < limit; ++i)
+            if (!used[i] && tier(walks[i]) <= 1 && families.insert(walks[i].branches).second) {
+                chosen.push_back(i);
+                used[i] = true;
+            }
+        for (size_t i = 0; i < walks.size() && chosen.size() < limit; ++i)
+            if (!used[i]) {
+                chosen.push_back(i);
+                used[i] = true;
+            }
+        std::vector<ExtensionWalk> reordered;
+        reordered.reserve(walks.size());
+        for (size_t i : chosen)
+            reordered.push_back(std::move(walks[i]));
+        for (size_t i = 0; i < walks.size(); ++i)
+            if (!used[i])
+                reordered.push_back(std::move(walks[i]));
+        walks = std::move(reordered);
+    }
+}
+
+void ProtospacerWorkflow::save_walks(const TargetCandidate &candidate, bool backwards,
+                                     const std::vector<ExtensionWalk> &walks, size_t &serial) const {
+    if (!options_.save_search || walks.empty())
+        return;
+    auto query = numbered("Q", candidate.query + 1);
+    auto path = options_.output / "search_paths" / (query + ".tsv.gz");
+    bool header = !fs::exists(path);
+    gzFile file = gzopen(path.c_str(), "ab1");
+    if (!file)
+        throw std::runtime_error("cannot open search audit: " + path.string());
+    auto write = [&](const std::string &s) {
+        if (gzwrite(file, s.data(), unsigned(s.size())) != int(s.size()))
+            throw std::runtime_error("cannot write search audit: " + path.string());
+    };
+    try {
+        if (header)
+            write("path_id\tquery_id\tplacement\tside\tquery_begin\tquery_"
+                  "end\tidentity\tquery_coverage\t"
+                  "flank_bp\texternal\tclear_"
+                  "at\tstop\tlimited\tflow\tsequence\tnodes_outward\t"
+                  "count_positions\tcounts\tblocks\tcoverage_deviation\tanchor_prefix_bp\tcrosses_source_"
+                  "array\tidentified_before_extension\n");
+        for (size_t i = 0; i < walks.size(); ++i) {
+            const auto &walk = walks[i];
+            auto flank = walk.bases;
+            if (backwards)
+                std::reverse(flank.begin(), flank.end());
+            std::ostringstream row;
+            auto side = backwards ? "L" : "R";
+            row << query << '_' << (candidate.allow_crossing ? "C" : "S") << '_'
+                << numbered("A", candidate.placement + 1) << '_' << side << '_' << numbered("P", ++serial)
+                << '\t' << query << '\t' << candidate.placement << '\t' << side << '\t' << candidate.begin
+                << '\t' << candidate.end << '\t' << candidate.identity << '\t' << candidate.coverage << '\t'
+                << walk.bases.size() << '\t' << walk.external << '\t' << walk.clear_at << '\t' << walk.stop
+                << '\t' << walk.limited << '\t' << walk.flow << '\t'
+                << (backwards ? flank + spell(candidate.anchor) : spell(candidate.anchor) + flank);
+            auto list = [&](const auto &values) {
+                row << '\t';
+                for (size_t j = 0; j < values.size(); ++j) {
+                    if (j)
+                        row << ',';
+                    row << values[j];
+                }
+            };
+            list(walk.nodes);
+            list(walk.sample_positions);
+            list(walk.counts);
+            row << '\t';
+            for (size_t j = 0; j < walk.blocks.size(); ++j) {
+                if (j)
+                    row << ';';
+                const auto &b = walk.blocks[j];
+                row << b.begin << ',' << b.end << ',' << b.count << ',' << b.shared;
+            }
+            row << '\t' << walk.deviation << '\t' << candidate.anchor_prefix << '\t' << walk.crosses_source
+                << '\t' << candidate.identified << '\n';
+            write(row.str());
+        }
+    } catch (...) {
+        gzclose(file);
+        throw;
+    }
+    if (gzclose(file) != Z_OK)
+        throw std::runtime_error("cannot finish search audit: " + path.string());
+}
+
+bool ProtospacerWorkflow::extension_barrier(ExtensionWalk &walk, const TargetCandidate &candidate,
+                                            bool backwards) const {
+    if (!options_.filter_artifacts)
+        return false;
+    // Include the anchor boundary: a technical motif can straddle seed and flank.
+    std::string tail;
+    if (walk.bases.size() < 64) {
+        tail = candidate.anchor_prefix ? label(candidate.anchor.front()) : candidate.target;
+        if (backwards)
+            std::reverse(tail.begin(), tail.end());
+    }
+    tail += walk.bases.substr(walk.bases.size() > 64 ? walk.bases.size() - 64 : 0);
+    if (tail.size() > 64)
+        tail.erase(0, tail.size() - 64);
+    size_t position = adapter_position(tail, backwards);
+    if (position != std::string::npos) {
+        size_t retained =
+            walk.bases.size() + position > tail.size() ? walk.bases.size() + position - tail.size() : 0;
+        trim_walk(walk, retained, "adapter_sequence");
+        return true;
+    }
+    if (tail.size() == 64 && walk.bases.size() % 8 == 0 && !informative(tail)) {
+        trim_walk(walk, walk.bases.size() > 64 ? walk.bases.size() - 64 : 0, "low_complexity_extension");
+        return true;
+    }
+    return false;
 }
 
 bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc, size_t query,
@@ -952,17 +1357,45 @@ bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc,
         walk.stop = "anchor_revisit";
         return false;
     }
+    bool source_node = candidate.allow_crossing && query_source_nodes_[query].count(arc.node);
+    if (source_node && std::find(walk.nodes.begin(), walk.nodes.end(), arc.node) != walk.nodes.end()) {
+        walk.stop = "source_node_revisit";
+        return false;
+    }
+    if (source_node && walk.external && candidate.allow_crossing) {
+        walk.stop = "source_array_reentry";
+        return false;
+    }
     if (size_t(std::count(walk.nodes.begin(), walk.nodes.end(), arc.node)) >= options_.max_visits) {
         walk.stop = "repeat_visit_limit";
         return false;
     }
     walk.nodes.push_back(arc.node);
     walk.bases += added_base(arc, backwards);
+    if (extension_barrier(walk, candidate, backwards))
+        return false;
     if (!walk.external) {
-        int state = source_context(query, candidate, walk.bases, backwards);
+        auto outward = walk.bases;
+        if (backwards && candidate.anchor_prefix) {
+            auto padding = label(candidate.anchor.front()).substr(0, candidate.anchor_prefix);
+            std::reverse(padding.begin(), padding.end());
+            outward = padding + outward;
+        }
+        int state = walk.crosses_source ? 1 : source_context(query, candidate, outward, backwards);
         if (state == 1) {
-            trim_walk(walk, 0, "source_array_context");
-            return false;
+            if (!candidate.allow_crossing) {
+                trim_walk(walk, 0, "source_array_context");
+                return false;
+            }
+            walk.crosses_source = true;
+            walk.source_until = source_clearance(query, candidate, backwards);
+            if (source_node)
+                walk.source_last = walk.bases.size();
+            if (walk.bases.size() >= walk.source_until &&
+                walk.bases.size() >= walk.source_last + options_.context_bases) {
+                walk.external = true;
+                walk.clear_at = walk.bases.size();
+            }
         }
         if (state == 2) {
             walk.external = true;
@@ -971,21 +1404,21 @@ bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc,
     }
     if (walk.external && walk.bases.size() > std::max(size_t(graph_->k()), walk.clear_at)) {
         if (arc.count >= 65535) {
-            walk.stop = "saturated_multiplicity";
+            trim_walk(walk, walk.bases.size() - 1, "saturated_multiplicity");
             return false;
         }
         walk.counts.push_back(arc.count);
         walk.sample_positions.push_back(walk.bases.size());
         walk.capacities.push_back(0);
     }
-    if (walk.bases.size() >= options_.max_flank) {
+    if (walk.bases.size() + (backwards ? candidate.anchor_prefix : 0) >= options_.max_flank) {
         walk.stop = "maximum_flank";
         return false;
     }
     return true;
 }
 
-ExtensionWalk ProtospacerWorkflow::choose_walk(std::vector<ExtensionWalk> walks) const {
+bool ProtospacerWorkflow::retain_completed(std::vector<ExtensionWalk> &walks) const {
     walks.erase(std::remove_if(walks.begin(), walks.end(),
                                [&](const auto &w) {
                                    return !w.external ||
@@ -993,29 +1426,41 @@ ExtensionWalk ProtospacerWorkflow::choose_walk(std::vector<ExtensionWalk> walks)
                                                                options_.context_bases;
                                }),
                 walks.end());
+    bool has_extension = std::any_of(walks.begin(), walks.end(),
+                                     [&](const auto &w) { return w.bases.size() + w.anchor_padding >= options_.min_flank; });
+    if (has_extension)
+        walks.erase(std::remove_if(walks.begin(), walks.end(),
+                                   [&](const auto &w) { return w.bases.size() + w.anchor_padding < options_.min_flank; }),
+                    walks.end());
+    if (walks.size() <= options_.beam_width * 4)
+        return false;
+    rank_walks(walks, options_.beam_width * 4, false);
+    walks.resize(options_.beam_width * 4);
+    return true;
+}
+
+ExtensionWalk ProtospacerWorkflow::choose_walk(std::vector<ExtensionWalk> walks) const {
+    for (auto &walk : walks)
+        update_profile(walk, true);
+    retain_completed(walks);
     if (walks.empty()) {
         ExtensionWalk empty;
         empty.stop = "no_supported_external_context";
         return empty;
     }
-    bool has_extension = std::any_of(walks.begin(), walks.end(),
-                                     [&](const auto &w) { return w.bases.size() >= options_.min_flank; });
-    if (has_extension)
-        walks.erase(std::remove_if(walks.begin(), walks.end(),
-                                   [&](const auto &w) { return w.bases.size() < options_.min_flank; }),
-                    walks.end());
-    std::sort(walks.begin(), walks.end(), [](const auto &a, const auto &b) {
-        if (a.flow != b.flow)
-            return a.flow > b.flow;
-        if (a.bases.size() != b.bases.size())
-            return a.bases.size() > b.bases.size();
-        return a.nodes < b.nodes;
-    });
+    rank_walks(walks, walks.size(), false);
     ExtensionWalk best = walks.front();
+    double minimum = best.deviation, support = 0;
+    for (const auto &walk : walks)
+        minimum = std::min(minimum, walk.deviation);
+    double allowance = std::log2(options_.branch_ratio);
+    for (const auto &walk : walks)
+        if (walk.deviation <= minimum + allowance)
+            support = std::max(support, walk.flow);
     size_t common = best.nodes.size();
     for (size_t i = 1; i < walks.size(); ++i) {
         const auto &other = walks[i];
-        if (other.flow * options_.branch_ratio < best.flow)
+        if (other.deviation > minimum + allowance || other.flow * options_.branch_ratio < support)
             continue;
         size_t n = 0;
         while (n < std::min(best.nodes.size(), other.nodes.size()) && best.nodes[n] == other.nodes[n])
@@ -1026,31 +1471,33 @@ ExtensionWalk ProtospacerWorkflow::choose_walk(std::vector<ExtensionWalk> walks)
         common = std::min(common, n);
     }
     if (common < best.nodes.size())
-        trim_walk(best, common ? common - 1 : 0, "ambiguous_flow");
+        trim_walk(best, common ? common - 1 : 0, "ambiguous_coverage");
     return best;
 }
 
 ExtensionWalk ProtospacerWorkflow::extend_flank(size_t query, const TargetCandidate &candidate,
                                                 bool backwards, size_t &work, size_t work_limit) const {
     ExtensionWalk seed;
+    seed.anchor_padding = backwards ? candidate.anchor_prefix : 0;
     seed.nodes = {backwards ? candidate.anchor.front() : candidate.anchor.back()};
     std::vector<ExtensionWalk> frontier{seed}, finished;
     std::map<uint64_t, Unitig> unitigs;
     bool limited = false;
+    size_t serial = 0;
     while (!frontier.empty() && !interrupted_) {
-        std::vector<ExtensionWalk> next;
+        std::vector<ExtensionWalk> next, ended, pruned;
         for (auto &current : frontier) {
             if (work >= work_limit) {
                 current.limited = true;
                 current.stop = "query_work_limit";
-                finished.push_back(std::move(current));
+                ended.push_back(std::move(current));
                 limited = true;
                 continue;
             }
             auto arcs = neighbors(current.nodes.back(), backwards);
             if (arcs.empty()) {
                 current.stop = "dead_end";
-                finished.push_back(std::move(current));
+                ended.push_back(std::move(current));
                 continue;
             }
             for (const auto &arc : arcs) {
@@ -1059,6 +1506,8 @@ ExtensionWalk ProtospacerWorkflow::extend_flank(size_t query, const TargetCandid
                                     build_unitig(current.nodes.back(), arc, backwards, work, work_limit));
                 const auto &segment = unitigs.at(arc.edge);
                 auto child = current;
+                if (arcs.size() > 1 && child.branches.size() < 2)
+                    child.branches.push_back(arc.edge);
                 size_t before = child.counts.size();
                 bool continuing = true;
                 for (const auto &edge : segment.arcs) {
@@ -1076,7 +1525,7 @@ ExtensionWalk ProtospacerWorkflow::extend_flank(size_t query, const TargetCandid
                     }
                 }
                 if (child.counts.size() >= before)
-                    update_flow(child, before);
+                    update_flow(child, before, segment.shared);
                 if (segment.limited) {
                     child.limited = true;
                     child.stop = "query_work_limit";
@@ -1086,44 +1535,36 @@ ExtensionWalk ProtospacerWorkflow::extend_flank(size_t query, const TargetCandid
                 if (continuing && !segment.arcs.empty())
                     next.push_back(std::move(child));
                 else
-                    finished.push_back(std::move(child));
+                    ended.push_back(std::move(child));
             }
         }
-        // Unitigs have different lengths. Rank progress only after capacity;
-        // every retained state still traverses actual graph arcs.
-        std::sort(next.begin(), next.end(), [](const auto &a, const auto &b) {
-            if (a.external != b.external)
-                return a.external > b.external;
-            if (a.flow != b.flow)
-                return a.flow > b.flow;
-            if (a.bases.size() != b.bases.size())
-                return a.bases.size() > b.bases.size();
-            return a.nodes < b.nodes;
-        });
+        rank_walks(next, options_.beam_width, true);
         if (next.size() > options_.beam_width) {
-            // Save pruned prefixes as unresolved alternatives. They can prevent
-            // an unsupported unique call but are never treated as completed paths.
+            // A beam rejection is diagnostic evidence, not a finished extension.
             for (size_t i = options_.beam_width; i < next.size(); ++i) {
                 next[i].limited = true;
                 next[i].stop = "beam_limit";
-                finished.push_back(std::move(next[i]));
+                pruned.push_back(std::move(next[i]));
             }
             next.resize(options_.beam_width);
             limited = true;
         }
-        frontier = std::move(next);
-        if (finished.size() > options_.beam_width * 32) {
-            for (auto &w : frontier) {
-                w.limited = true;
-                w.stop = "candidate_limit";
-                finished.push_back(std::move(w));
-            }
-            frontier.clear();
+        save_walks(candidate, backwards, pruned, serial);
+        save_walks(candidate, backwards, ended, serial);
+        for (auto &walk : ended) {
+            update_profile(walk, true);
+            finished.push_back(std::move(walk));
+        }
+        if (retain_completed(finished)) {
             limited = true;
         }
+        frontier = std::move(next);
     }
-    for (auto &w : frontier)
+    for (auto &w : frontier) {
+        w.stop = "interrupted";
+        w.limited = true;
         finished.push_back(std::move(w));
+    }
     auto chosen = choose_walk(std::move(finished));
     chosen.limited |= limited;
     return chosen;
@@ -1132,22 +1573,23 @@ ExtensionWalk ProtospacerWorkflow::extend_flank(size_t query, const TargetCandid
 void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
     auto left = c.left.bases;
     std::reverse(left.begin(), left.end());
-    c.sequence = left + c.target + c.right.bases;
+    auto padding = c.anchor_prefix ? label(c.anchor.front()).substr(0, c.anchor_prefix) : "";
+    c.sequence = left + padding + c.target + c.right.bases;
     auto valid = [&](const ExtensionWalk &w) {
         return w.external &&
                w.bases.size() >= std::max(size_t(graph_->k()), w.clear_at) + options_.context_bases;
     };
-    c.detected = valid(c.left) || valid(c.right);
+    c.detected = c.identified || valid(c.left) || valid(c.right);
     if (!c.detected) {
         c.status = "rejected";
         c.reason = "no_independent_target_context";
         return;
     }
-    c.context_left = c.left.bases;
+    c.context_left = std::string(padding.rbegin(), padding.rend()) + c.left.bases;
     c.context_right = c.right.bases;
     c.context_left_stop = c.left.stop;
     c.context_right_stop = c.right.stop;
-    c.clear_left = c.left.clear_at;
+    c.clear_left = c.left.clear_at + c.anchor_prefix;
     c.clear_right = c.right.clear_at;
     // Validate the complete selected walk against the actual graph before output.
     std::vector<uint64_t> full;
@@ -1170,14 +1612,15 @@ void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
     }
     for (bool back : {true, false}) {
         auto &w = back ? c.left : c.right;
-        if (w.bases.size() < options_.min_flank || w.flow <= 0 || !informative(w.bases))
+        if (w.bases.size() + w.anchor_padding < options_.min_flank || w.flow <= 0 || !informative(w.bases))
             trim_walk(w, 0, "insufficient_supported_extension");
     }
     // Each flank is supported separately. Do not silently join incompatible
     // abundance contexts merely because their seed sequence is shared.
     if (!c.left.bases.empty() && !c.right.bases.empty()) {
         double l = c.left.flow, r = c.right.flow;
-        bool conflict = std::max(l, r) > 4 * std::min(l, r);
+        bool conflict =
+            std::max(l, r) > 4 * std::min(l, r) || (c.left.crosses_source && c.right.crosses_source);
         std::set<uint64_t> nodes(c.left.nodes.begin() + 1, c.left.nodes.end());
         for (auto n : c.right.nodes)
             conflict |= nodes.count(n) > 0;
@@ -1191,7 +1634,7 @@ void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
     }
     left = c.left.bases;
     std::reverse(left.begin(), left.end());
-    c.sequence = left + c.target + c.right.bases;
+    c.sequence = left + padding + c.target + c.right.bases;
     c.extended = !c.left.bases.empty() || !c.right.bases.empty();
     if (c.extended) {
         c.status = "extended";
@@ -1200,9 +1643,53 @@ void ProtospacerWorkflow::assemble_candidate(TargetCandidate &c) const {
         c.reason = "target_detected_extension_unresolved";
 }
 
+void ProtospacerWorkflow::select_candidate(std::vector<TargetCandidate> &candidates) const {
+    std::sort(candidates.begin(), candidates.end(), [](const auto &a, const auto &b) {
+        if (a.detected != b.detected)
+            return a.detected > b.detected;
+        if (a.extended != b.extended)
+            return a.extended > b.extended;
+        if (a.coverage != b.coverage)
+            return a.coverage > b.coverage;
+        if (a.identity != b.identity)
+            return a.identity > b.identity;
+        return a.anchor < b.anchor;
+    });
+    if (!candidates.empty() && candidates.front().detected) {
+        auto &first = candidates.front();
+        bool ambiguous = false;
+        for (size_t i = 1; i < candidates.size(); ++i) {
+            auto &other = candidates[i];
+            if (other.detected && other.extended == first.extended && other.coverage == first.coverage &&
+                other.identity == first.identity && other.target != first.target)
+                ambiguous = true;
+            other.detected = false;
+            other.extended = false;
+            other.status = "alternative";
+            other.reason = "alternative_alignment";
+        }
+        if (ambiguous) {
+            first.detected = false;
+            first.extended = false;
+            first.status = "unresolved";
+            first.reason = "multiple_target_placements";
+        }
+    }
+}
+
 void ProtospacerWorkflow::process_query(size_t query) {
+    if (options_.filter_artifacts && adapter_position(queries_[query].first) != std::string::npos) {
+        query_status_[query] = "adapter_like_query";
+        return;
+    }
     if (!informative(queries_[query].first)) {
         query_status_[query] = "uninformative_query";
+        return;
+    }
+    if (!options_.protospacers.empty() &&
+        std::all_of(queries_[query].second.begin(), queries_[query].second.end(),
+                    [&](size_t i) { return sources_[i].repeat.empty(); })) {
+        query_status_[query] = "supplied_target_without_source_association";
         return;
     }
     auto start = std::chrono::steady_clock::now();
@@ -1221,54 +1708,75 @@ void ProtospacerWorkflow::process_query(size_t query) {
         return;
     }
     std::vector<TargetCandidate> checked;
-    for (size_t i = 0; i < anchors.size() && !interrupted_; ++i) {
-        auto &candidate = anchors[i];
-        candidate.limited = limited;
-        size_t budget = (options_.max_work - std::min(work, options_.max_work)) / (anchors.size() - i);
-        size_t left_limit = work + budget / 2, right_limit = work + budget;
+    for (size_t first = 0; first < anchors.size() && !interrupted_;) {
+        size_t end = first + 1;
+        while (end < anchors.size() && anchors[end].coverage == anchors[first].coverage &&
+               anchors[end].identity == anchors[first].identity)
+            ++end;
+        size_t remaining = options_.max_work - std::min(work, options_.max_work);
+        // Finish the best alignment tier before spending work on inferior mappings.
+        // Reserve half the remaining budget for lower tiers if this one cannot
+        // extend.
+        size_t tier_limit = work + (end < anchors.size() ? remaining / 2 : remaining);
+        bool extended = false;
+        for (size_t i = first; i < end && !interrupted_; ++i) {
+            auto &candidate = anchors[i];
+            candidate.placement = i;
+            candidate.limited = limited;
+            candidate.identified = !options_.protospacers.empty();
+            // First preserve any extension supported without a source passage,
+            // in both discovery and supplied-target modes.
+            candidate.allow_crossing = false;
+            if (options_.filter_artifacts &&
+                adapter_position(candidate.anchor_prefix ? label(candidate.anchor.front())
+                                                         : candidate.target) != std::string::npos) {
+                candidate.reason = "adapter_like_target";
+                checked.push_back(std::move(candidate));
+                continue;
+            }
+            size_t budget = (tier_limit - std::min(work, tier_limit)) / (end - i);
+            size_t left_limit = work + budget / 2, right_limit = work + budget;
+            start = std::chrono::steady_clock::now();
+            candidate.left = extend_flank(query, candidate, true, work, left_limit);
+            candidate.right = extend_flank(query, candidate, false, work, right_limit);
+            query_timings_[query][1] +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            candidate.limited |=
+                candidate.left.limited || candidate.right.limited || work >= options_.max_work;
+            query_limited_[query] |= candidate.limited;
+            start = std::chrono::steady_clock::now();
+            assemble_candidate(candidate);
+            query_timings_[query][2] +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            extended |= candidate.extended;
+            checked.push_back(std::move(candidate));
+        }
+        if (extended || work >= options_.max_work)
+            break;
+        first = end;
+    }
+    select_candidate(checked);
+    // Discovery stays strict. Only an already selected, independently detected
+    // target may get a crossing-enabled second pass. Preserve accepted
+    // extensions.
+    if (options_.source_array_crossing && !checked.empty() && checked.front().detected &&
+        !checked.front().extended && !interrupted_) {
+        auto candidate = checked.front();
+        candidate.identified = candidate.allow_crossing = true;
+        size_t limit = work + options_.max_work;
         start = std::chrono::steady_clock::now();
-        candidate.left = extend_flank(query, candidate, true, work, left_limit);
-        candidate.right = extend_flank(query, candidate, false, work, right_limit);
+        candidate.left = extend_flank(query, candidate, true, work, work + options_.max_work / 2);
+        candidate.right = extend_flank(query, candidate, false, work, limit);
         query_timings_[query][1] +=
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        candidate.limited |= candidate.left.limited || candidate.right.limited || work >= options_.max_work;
+        candidate.limited |= candidate.left.limited || candidate.right.limited;
         query_limited_[query] |= candidate.limited;
         start = std::chrono::steady_clock::now();
         assemble_candidate(candidate);
         query_timings_[query][2] +=
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        checked.push_back(std::move(candidate));
-        if (work >= options_.max_work)
-            break;
-    }
-    std::sort(checked.begin(), checked.end(), [](const auto &a, const auto &b) {
-        if (a.detected != b.detected)
-            return a.detected > b.detected;
-        if (a.coverage != b.coverage)
-            return a.coverage > b.coverage;
-        if (a.identity != b.identity)
-            return a.identity > b.identity;
-        return a.anchor < b.anchor;
-    });
-    if (!checked.empty() && checked.front().detected) {
-        auto &first = checked.front();
-        bool ambiguous = false;
-        for (size_t i = 1; i < checked.size(); ++i) {
-            auto &other = checked[i];
-            if (other.detected && other.coverage == first.coverage && other.identity == first.identity &&
-                other.target != first.target)
-                ambiguous = true;
-            other.detected = false;
-            other.extended = false;
-            other.status = "alternative";
-            other.reason = "alternative_alignment";
-        }
-        if (ambiguous) {
-            first.detected = false;
-            first.extended = false;
-            first.status = "unresolved";
-            first.reason = "multiple_target_placements";
-        }
+        if (candidate.extended)
+            checked.front() = std::move(candidate);
     }
     query_status_[query] = checked.empty() ? "interrupted" : checked.front().reason;
     query_work_[query] = work;
@@ -1277,13 +1785,17 @@ void ProtospacerWorkflow::process_query(size_t query) {
 
 void ProtospacerWorkflow::consolidate() {
     std::map<std::string, std::string> targets, regions;
+    std::set<std::string> strict_regions;
     for (auto &group : results_)
         for (auto &c : group)
             if (c.detected) {
                 auto key = canonical(c.target);
                 targets.emplace(key, "");
-                if (c.extended)
+                if (c.extended) {
                     regions.emplace(canonical(c.sequence), "");
+                    if (!c.allow_crossing)
+                        strict_regions.insert(canonical(c.sequence));
+                }
             }
     size_t number = 0;
     for (auto &item : targets)
@@ -1291,12 +1803,15 @@ void ProtospacerWorkflow::consolidate() {
     number = 0;
     for (auto &item : regions)
         item.second = numbered("E", ++number);
-    // Assign each contained fragment to a fixed longest representative.
+    // Consolidate strict-pass predictions first. A new recovery must not replace
+    // an already accepted output with a longer, less certain sequence.
     // Never merge two partially overlapping paths into an invented sequence.
     std::vector<std::string> order;
     for (const auto &item : regions)
         order.push_back(item.first);
-    std::sort(order.begin(), order.end(), [](const auto &a, const auto &b) {
+    std::sort(order.begin(), order.end(), [&](const auto &a, const auto &b) {
+        if (strict_regions.count(a) != strict_regions.count(b))
+            return strict_regions.count(a) > strict_regions.count(b);
         return a.size() != b.size() ? a.size() > b.size() : a < b;
     });
     std::vector<std::string> representatives;
@@ -1344,20 +1859,38 @@ void ProtospacerWorkflow::write_outputs() {
         for (const auto &[id, s] : regions)
             extension_fasta << '>' << id << '\n' << s << '\n';
     }
+    if (!supplied_.empty()) {
+        auto fasta = open("SuppliedProtospacers.fasta"), table = open("supplied_targets.tsv");
+        table << "input_id\tsequence\tquery_id\n";
+        std::map<std::string, size_t> index;
+        for (size_t q = 0; q < queries_.size(); ++q)
+            index[queries_[q].first] = q;
+        for (const auto &[id, sequence] : supplied_) {
+            fasta << '>' << id << '\n' << sequence << '\n';
+            table << id << '\t' << sequence << '\t' << numbered("Q", index.at(canonical(sequence)) + 1)
+                  << '\n';
+        }
+    }
     {
         auto input = open("sources.tsv"), queries = open("queries.tsv"), candidates = open("candidates.tsv"),
              rejected = open("unresolved_and_rejected.tsv");
-        input << "source_id\tarray_id\toriginal_spacer\toriginal_repeat\tspacer\trepeat\ttrim_left\ttrim_"
+        input << "source_id\tarray_id\toriginal_spacer\toriginal_"
+                 "repeat\tspacer\trepeat\ttrim_left\ttrim_"
                  "right\n";
         for (const auto &s : sources_)
             input << s.id << '\t' << s.array << '\t' << s.original_spacer << '\t' << s.original_repeat << '\t'
                   << s.spacer << '\t' << s.repeat << '\t' << s.trim_left << '\t' << s.trim_right << '\n';
         queries << "query_id\tspacer\tsource_count\tstatus\twork\tsearch_limited\n";
         auto metrics = open("query_metrics.tsv");
-        metrics
-            << "query_id\tmapping_work\textension_work\tmapping_seconds\textension_seconds\tfilter_seconds\n";
-        candidates << "query_id\ttarget_id\tstatus\treason\tquery_begin\tquery_end\tidentity\tquery_"
-                      "coverage\tsequence\tleft_bp\tright_bp\tleft_stop\tright_stop\tsearch_limited\n";
+        metrics << "query_id\tmapping_work\textension_work\tmapping_"
+                   "seconds\textension_seconds\tfilter_seconds\n";
+        candidates << "query_id\ttarget_id\tstatus\treason\tquery_begin\tquery_"
+                      "end\tidentity\tquery_"
+                      "coverage\tsequence\tleft_bp\tright_bp\tleft_stop\tright_"
+                      "stop\tsearch_limited\t"
+                      "left_deviation\tright_deviation\tleft_crosses_source_"
+                      "array\tright_crosses_source_array\tidentified_before_"
+                      "extension\tanchor_prefix_bp\n";
         rejected << "query_id\tstatus\treason\n";
         for (size_t i = 0; i < queries_.size(); ++i) {
             auto id = numbered("Q", i + 1);
@@ -1372,8 +1905,11 @@ void ProtospacerWorkflow::write_outputs() {
             for (const auto &c : results_[i]) {
                 candidates << id << '\t' << c.target_id << '\t' << c.status << '\t' << c.reason << '\t'
                            << c.begin << '\t' << c.end << '\t' << c.identity << '\t' << c.coverage << '\t'
-                           << c.target << '\t' << c.left.bases.size() << '\t' << c.right.bases.size() << '\t'
-                           << c.left.stop << '\t' << c.right.stop << '\t' << c.limited << '\n';
+                           << c.target << '\t' << c.left.bases.size() + c.anchor_prefix << '\t'
+                           << c.right.bases.size() << '\t' << c.left.stop << '\t' << c.right.stop << '\t'
+                           << c.limited << '\t' << c.left.deviation << '\t' << c.right.deviation << '\t'
+                           << c.left.crosses_source << '\t' << c.right.crosses_source << '\t' << c.identified
+                           << '\t' << c.anchor_prefix << '\n';
                 if (!c.extended)
                     rejected << id << '\t' << c.status << '\t' << c.reason << '\n';
             }
@@ -1381,10 +1917,14 @@ void ProtospacerWorkflow::write_outputs() {
     }
     {
         auto links = open("associations.tsv"), evidence = open("coverage_evidence.tsv");
-        links << "source_id\tquery_id\ttarget_id\textension_id\tquery_begin\tquery_end\tidentity\tquery_"
-                 "coverage\ttarget_strand\tseed_begin\tseed_end\tsupported_fragment_begin\tsupported_"
-                 "fragment_end\tleft_bp\tright_bp\tleft_stop\tright_stop\tsearch_limited\n";
-        evidence << "target_id\textension_id\tside\tadded_base_position\tcount\tpath_capacity\n";
+        links << "source_id\tquery_id\ttarget_id\textension_id\tquery_begin\tquery_"
+                 "end\tidentity\tquery_"
+                 "coverage\ttarget_strand\tseed_begin\tseed_end\tsupported_"
+                 "fragment_begin\tsupported_"
+                 "fragment_end\tleft_bp\tright_bp\tleft_stop\tright_stop\tsearch_"
+                 "limited\n";
+        evidence << "target_id\textension_id\tside\tadded_base_"
+                    "position\tcount\tpath_capacity\n";
         for (const auto &group : results_)
             for (const auto &c : group)
                 if (c.detected) {
@@ -1400,7 +1940,8 @@ void ProtospacerWorkflow::write_outputs() {
                         }
                         if (offset == std::string::npos)
                             throw std::runtime_error("consolidation lost a supported fragment");
-                        seed_begin = offset + (reverse ? c.right.bases.size() : c.left.bases.size());
+                        seed_begin =
+                            offset + (reverse ? c.right.bases.size() : c.left.bases.size() + c.anchor_prefix);
                         seed_end = seed_begin + c.target.size();
                         if (region.substr(seed_begin, c.target.size()) !=
                             (reverse ? reverse_complement(c.target) : c.target))
@@ -1420,24 +1961,27 @@ void ProtospacerWorkflow::write_outputs() {
                                   << offset + c.sequence.size();
                         else
                             links << "\t\t\t";
-                        links << '\t' << c.left.bases.size() << '\t' << c.right.bases.size() << '\t'
-                              << c.left.stop << '\t' << c.right.stop << '\t' << c.limited << '\n';
+                        links << '\t' << c.left.bases.size() + c.anchor_prefix << '\t' << c.right.bases.size()
+                              << '\t' << c.left.stop << '\t' << c.right.stop << '\t' << c.limited << '\n';
                     }
                     for (bool back : {true, false}) {
                         const auto &w = back ? c.left : c.right;
                         for (size_t j = 0; j < w.counts.size(); ++j)
                             evidence << c.target_id << '\t' << c.extension_id << '\t'
-                                     << (back ? "left" : "right") << '\t' << w.sample_positions[j] << '\t'
+                                     << (back ? "left" : "right") << '\t'
+                                     << w.sample_positions[j] + (back ? c.anchor_prefix : 0) << '\t'
                                      << w.counts[j] << '\t' << w.capacities[j] << '\n';
                     }
                 }
     }
     {
         auto contexts = open("target_context.tsv");
-        contexts << "query_id\ttarget_id\tleft_outward\tright_outward\tleft_clear_at\tright_clear_at\tleft_"
+        contexts << "query_id\ttarget_id\tleft_outward\tright_outward\tleft_clear_"
+                    "at\tright_clear_at\tleft_"
                     "stop_before_filter\tright_stop_before_filter\n";
         auto paths = open("graph_paths.tsv");
-        paths << "query_id\ttarget_id\textension_id\tanchor_nodes\tleft_nodes_outward\tright_nodes_outward\n";
+        paths << "query_id\ttarget_id\textension_id\tanchor_nodes\tleft_nodes_"
+                 "outward\tright_nodes_outward\tanchor_prefix_bp\n";
         for (const auto &group : results_)
             for (const auto &c : group)
                 if (c.detected) {
@@ -1453,7 +1997,7 @@ void ProtospacerWorkflow::write_outputs() {
                             paths << (*nodes)[i];
                         }
                     }
-                    paths << '\n';
+                    paths << '\t' << c.anchor_prefix << '\n';
                 }
     }
     for (const auto &f : fs::directory_iterator(staging))
@@ -1485,7 +2029,7 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     fs::path temporary = options_.output / "run_summary.json.tmp";
     std::ofstream out(temporary);
     out.exceptions(std::ios::badbit | std::ios::failbit);
-    out << "{\n  \"implementation\": \"protospacer-workflow-v2\",\n  \"status\": " << json(status)
+    out << "{\n  \"implementation\": \"protospacer-workflow-v5\",\n  \"status\": " << json(status)
         << ",\n  \"error\": " << json(error) << ",\n  \"arrays\": " << json(options_.arrays.string())
         << ",\n  \"graph\": " << json(options_.graph.string())
         << ",\n  \"graph_k\": " << (graph_ ? graph_->k() : 0) << ",\n  \"array_count\": " << arrays.size()
@@ -1503,14 +2047,25 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
         << ",\n  \"array_repeat_identity\": " << options_.repeat_identity
         << ",\n  \"boundary_support\": " << options_.boundary_support
         << ",\n  \"correct_spacer_boundaries\": " << (options_.correct_boundaries ? "true" : "false")
+        << ",\n  \"save_search\": " << (options_.save_search ? "true" : "false")
+        << ",\n  \"filter_extension_artifacts\": " << (options_.filter_artifacts ? "true" : "false")
+        << ",\n  \"extension_complexity_window\": 64,\n  "
+           "\"extension_complexity_stride\": 8"
         << ",\n  \"max_query_states\": " << options_.max_work
         << ",\n  \"max_placement_states\": " << options_.placement_work
         << ",\n  \"max_placements\": " << options_.max_placements
         << ",\n  \"branch_ratio\": " << options_.branch_ratio
         << ",\n  \"max_node_visits\": " << options_.max_visits
-        << ",\n  \"extension_method\": \"unitig_widest_path\""
-        << ",\n  \"probabilities_of_correctness\": false,\n  \"reference_used_for_selection\": false,\n  "
-           "\"source_array_crossing\": false,\n  \"timings_seconds\": {";
+        << ",\n  \"extension_method\": \"unitig_coverage_continuity\""
+        << ",\n  \"coverage_window\": " << options_.context_bases
+        << ",\n  \"probabilities_of_correctness\": false,\n  "
+           "\"reference_used_for_selection\": false,\n  "
+           "\"source_array_crossing\": "
+        << (options_.source_array_crossing ? "true" : "false")
+        << ",\n  \"supplied_targets\": " << supplied_.size()
+        << ",\n  \"target_mode\": " << json(options_.protospacers.empty() ? "discovery" : "supplied")
+        << ",\n  \"source_crossing_establishes_detection\": false,\n  "
+           "\"timings_seconds\": {";
     bool first = true;
     for (const auto &[name, seconds] : timings_) {
         if (!first)
@@ -1540,7 +2095,11 @@ int ProtospacerWorkflow::run() {
     finish("verify_index");
     load_sources();
     correct_boundaries();
+    prepare_source_nodes();
+    load_supplied_targets();
     group_queries();
+    if (options_.save_search)
+        fs::create_directory(options_.output / "search_paths");
     finish("prepare_spacers");
     std::cout << sources_.size() << " source observations; " << queries_.size()
               << " distinct corrected spacers\n"
@@ -1575,7 +2134,9 @@ int ProtospacerWorkflow::run() {
     write_outputs();
     finish("write_outputs");
     write_summary(interrupted_ ? "interrupted" : "complete");
-    std::cout << "Workflow complete. Final counts: " << (options_.output / "run_summary.json") << '\n';
+    std::cout << (interrupted_ ? "Workflow interrupted; partial outputs saved. Counts: "
+                               : "Workflow complete. Final counts: ")
+              << (options_.output / "run_summary.json") << '\n';
     return interrupted_ ? 128 + interrupted_ : 0;
 }
 
@@ -1594,6 +2155,34 @@ void ProtospacerWorkflow::self_test() {
     require(json("a\n\"b") == "\"a\\u000a\\\"b\"", "JSON escaping");
     require(!informative("TGTGGGGGGGGGGGGGGGTGTGAAA"), "homopolymer target rejection");
     ProtospacerWorkflow workflow(WorkflowOptions{});
+    const std::string adapter = "AGATCGGAAGAGCGTCGT";
+    require(adapter_position("TT" + adapter) == 2 && adapter_position(reverse_complement(adapter)) == 0,
+            "adapter core recognition on both strands");
+    require(adapter_position(adapter.substr(1)) == std::string::npos,
+            "short adapter fragment alone is not rejected");
+    TargetCandidate test_target;
+    test_target.target = "ACGTTAGCCATGATCGTACCTAGGTCATGC";
+    ExtensionWalk technical;
+    technical.bases = std::string(200, 'A') + adapter;
+    technical.nodes.resize(technical.bases.size() + 1);
+    require(workflow.extension_barrier(technical, test_target, false) && technical.bases.size() == 200 &&
+                technical.nodes.size() == 201 && technical.stop == "adapter_sequence",
+            "adapter branch retains only its preceding graph prefix");
+    auto reverse_adapter = std::string(adapter.rbegin(), adapter.rend());
+    technical.bases = std::string(200, 'A') + reverse_adapter;
+    technical.nodes.resize(technical.bases.size() + 1);
+    require(workflow.extension_barrier(technical, test_target, true) && technical.bases.size() == 200,
+            "backward traversal recognizes the reversed motif");
+    test_target.target += adapter.substr(0, 10);
+    technical.bases = adapter.substr(10);
+    technical.nodes.resize(technical.bases.size() + 1);
+    require(workflow.extension_barrier(technical, test_target, false) && technical.bases.empty(),
+            "adapter crossing the seed boundary is stopped");
+    technical.bases = std::string(264, 'C');
+    technical.nodes.resize(265);
+    require(workflow.extension_barrier(technical, test_target, false) && technical.bases.size() == 200 &&
+                technical.stop == "low_complexity_extension",
+            "low-complexity continuation stops before its uninformative window");
     ExtensionWalk coverage;
     for (double count : {20., 25., 20.}) {
         size_t before = coverage.counts.size();
@@ -1602,6 +2191,14 @@ void ProtospacerWorkflow::self_test() {
         workflow.update_flow(coverage, before);
     }
     require(coverage.flow == 20., "shared repeat does not penalize widest-path capacity");
+    auto partially_scored = coverage;
+    size_t committed = partially_scored.counts.size();
+    partially_scored.counts.insert(partially_scored.counts.end(), 5, 15.);
+    partially_scored.capacities.insert(partially_scored.capacities.end(), 5, 0.);
+    partially_scored.flow = 0; // A trim retained part of this uncommitted segment.
+    workflow.update_flow(partially_scored, committed);
+    require(partially_scored.flow == 15. && partially_scored.capacities.back() == 15.,
+            "a partial new segment does not erase prior coverage support");
     auto walk = [](size_t length, double flow, uint64_t branch) {
         ExtensionWalk w;
         w.external = true;
@@ -1623,6 +2220,81 @@ void ProtospacerWorkflow::self_test() {
     auto tied_path = walk(250, 10, 4000);
     require(workflow.choose_walk({long_path, tied_path}).bases.empty(),
             "equal flow preserves branch ambiguity");
+    auto profile = [&](double exit, double shared_count) {
+        ExtensionWalk w;
+        for (auto [count, shared] :
+             {std::make_pair(8., false), std::make_pair(shared_count, true), std::make_pair(exit, false)}) {
+            size_t before = w.counts.size();
+            w.counts.insert(w.counts.end(), 48, count);
+            w.capacities.insert(w.capacities.end(), 48, 0);
+            workflow.update_flow(w, before, shared);
+        }
+        workflow.update_profile(w, true);
+        return w.deviation;
+    };
+    require(profile(9, 50) < .2 && profile(40, 50) > 2,
+            "shared rise preserves entry-exit coverage distinction");
+    require(profile(9, 1) > 2, "low-support shared segment is not exempted");
+    auto longer = walk(750, 9, 5000);
+    std::vector<ExtensionWalk> comparable{long_path, longer};
+    workflow.rank_walks(comparable, 2, false);
+    require(comparable.front().bases.size() == 750, "prefer length within comparable coverage support");
+    long_path.branches = {1, 1};
+    auto sibling = long_path;
+    longer.branches = {2, 1};
+    std::vector<ExtensionWalk> families{long_path, sibling, longer};
+    workflow.rank_walks(families, 2, true);
+    require(families[0].branches != families[1].branches, "beam keeps distinct branch families");
+    auto short_dead_end = walk(30, 100, 6000), valid_extension = walk(750, 9, 7000);
+    valid_extension.deviation = 1;
+    std::vector<ExtensionWalk> terminal_buffer(300, short_dead_end);
+    terminal_buffer.push_back(valid_extension);
+    workflow.retain_completed(terminal_buffer);
+    require(terminal_buffer.size() == 1 && terminal_buffer.front().bases.size() == 750,
+            "ineligible dead ends cannot displace a completed extension");
+    TargetCandidate exact, supported;
+    exact.detected = true;
+    exact.identity = exact.coverage = 1.;
+    exact.target = "ACGT";
+    supported.detected = supported.extended = true;
+    supported.identity = .94;
+    supported.coverage = 1.;
+    supported.target = "ACGA";
+    std::vector<TargetCandidate> placements{exact, supported};
+    workflow.select_candidate(placements);
+    require(placements.front().extended && placements.front().identity == .94,
+            "an unextended exact placement cannot suppress a qualifying extended "
+            "placement");
+    exact.extended = true;
+    placements = {supported, exact};
+    workflow.select_candidate(placements);
+    require(placements.front().identity == 1., "an already extended better alignment remains preferred");
+    supported.identity = 1.;
+    placements = {supported, exact};
+    workflow.select_candidate(placements);
+    require(!placements.front().detected && placements.front().reason == "multiple_target_placements",
+            "equally aligned different extended targets remain unresolved");
+    auto padded = walk(196, 10, 8000), unpadded = walk(199, 10, 9000);
+    padded.anchor_padding = 4;
+    std::vector<ExtensionWalk> boundary{padded, unpadded};
+    workflow.retain_completed(boundary);
+    require(boundary.size() == 1 && boundary.front().anchor_padding == 4,
+            "minimum flank includes short-target graph padding, like the maximum");
+    TargetCandidate strict, recovered, contained;
+    strict.detected = strict.extended = true;
+    strict.target = "ACGT";
+    strict.sequence = "ACGTACCGGTTAACCGGTT";
+    recovered = strict;
+    recovered.allow_crossing = true;
+    recovered.sequence = "CCC" + strict.sequence + "GGG";
+    contained = strict;
+    contained.sequence = strict.sequence.substr(2, 10);
+    workflow.results_ = {{strict}, {recovered}, {contained}};
+    workflow.consolidate();
+    require(workflow.results_[0][0].extension_id != workflow.results_[1][0].extension_id,
+            "recovery cannot replace an accepted strict output during containment consolidation");
+    require(workflow.results_[0][0].extension_id == workflow.results_[2][0].extension_id,
+            "strict-pass containment still consolidates as before");
     std::cout << "Workflow arithmetic and context checks passed. No dataset was run.\n";
 }
 } // namespace mcaat::proto

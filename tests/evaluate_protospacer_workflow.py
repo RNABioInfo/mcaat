@@ -57,7 +57,7 @@ def write_json(path, data):
 def validate(folder):
     """Check all source/query outcomes, sequence identities, and association coordinates."""
     summary = json.loads((folder / "run_summary.json").read_text())
-    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2") or summary["status"] != "complete":
+    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2", "protospacer-workflow-v3", "protospacer-workflow-v4", "protospacer-workflow-v5") or summary["status"] != "complete":
         raise ValueError("evaluation requires a complete workflow run")
     sources = {r["source_id"]: r for r in table(folder / "sources.tsv")}
     queries = {r["query_id"]: r for r in table(folder / "queries.tsv")}
@@ -102,16 +102,19 @@ def validate(folder):
         assert identity+1e-9 >= summary["min_identity"] and coverage+1e-9 >= summary["min_query_coverage"]
         assert candidate["target_id"] == r["target_id"]
     for r in contexts:
+        if summary.get("target_mode") == "supplied":
+            continue  # Explicit supplied targets are not new discovery claims.
         # These are the selected flanks before the extension length filter;
         # a detected-but-unextended target must still retain this evidence.
         assert any(len(r[side+"_outward"]) >= max(summary["graph_k"], int(r[side+"_clear_at"]))+summary["graph_k"]+1
                    for side in ("left", "right"))
     for r in paths:
         c = accepted[r["query_id"]]
-        assert len(r["anchor_nodes"].split(",")) == len(c["sequence"])-summary["graph_k"]+1
+        padding = int(c.get("anchor_prefix_bp", 0))
+        assert len(r["anchor_nodes"].split(",")) == len(c["sequence"])+padding-summary["graph_k"]+1
         for side in ("left", "right"):
             nodes = r[side+"_nodes_outward"].split(",") if r[side+"_nodes_outward"] else []
-            assert len(nodes) in (int(c[side+"_bp"])+1, 0)
+            assert len(nodes) in (int(c[side+"_bp"])-(padding if side == "left" else 0)+1, 0)
             assert int(c[side+"_bp"]) <= summary["max_flank_length"]
     lengths = sorted(map(len, extensions.values()))
     return {"validation": "passed", "source_observations": len(sources), "distinct_corrected_spacers": len(queries),
@@ -126,12 +129,12 @@ def validate(folder):
             "coverage_observations": len(evidence)}
 
 
-def blast(fasta_path, database, destination, threads):
+def blast(fasta_path, database, destination, threads, word_size=7):
     """Search frozen predictions with the same BLAST settings for every comparison."""
     destination.mkdir(parents=True, exist_ok=True)
     output = destination / "hits.tsv"
     command = [shutil.which("blastn") or "/usr/local/bin/blastn", "-query", str(fasta_path), "-db", str(database),
-               "-task", "blastn-short", "-word_size", "7", "-dust", "no", "-soft_masking", "false",
+               "-task", "blastn-short", "-word_size", str(word_size), "-dust", "no", "-soft_masking", "false",
                "-evalue", "1000", "-perc_identity", "90", "-max_target_seqs", "1000000", "-num_threads", str(threads),
                "-outfmt", "6 qseqid sseqid qlen qstart qend sstart send length nident pident evalue bitscore", "-out", str(output)]
     write_json(destination / "command.json", command)
@@ -202,7 +205,11 @@ def main():
         (args.output/"reference_info.txt").write_text(subprocess.check_output([dbcmd, "-db", str(args.database), "-info"], text=True))
         for name, coverage in (("Protospacers", .85), ("ContiguousPaths", .50)):
             path = args.results / (name+".fasta")
-            hitfile = blast(path, args.database, args.output/name, args.threads)
+            # A qualifying extension HSP spans >=90 columns at >=90% identity,
+            # hence contains an exact run of at least nine matching bases.
+            # Keep shorter seeds for the short target intervals.
+            word_size = 9 if name == "ContiguousPaths" and all(len(s)>=180 for s in fasta(path).values()) else 7
+            hitfile = blast(path, args.database, args.output/name, args.threads, word_size)
             report[name] = summarize_matches(fasta(path), hitfile, coverage, args.output/(name+"_coverage.tsv"))
             write_json(args.output / "evaluation.json", report)
         queries = table(args.results/"queries.tsv")

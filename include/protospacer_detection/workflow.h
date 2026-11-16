@@ -15,17 +15,19 @@
 namespace mcaat::proto {
 
 struct WorkflowOptions {
-    std::filesystem::path arrays, graph, output;
+    std::filesystem::path arrays, graph, output, protospacers;
     size_t threads = 1, beam_width = 64, max_flank = 750, min_flank = 200;
     size_t max_work = 2000000, placement_work = 400000, max_placements = 128;
     size_t max_visits = 2, context_bases = 24;
     double identity = .90, coverage = .85, repeat_identity = .85;
     double boundary_support = .85, branch_ratio = 1.5;
-    bool correct_boundaries = true;
+    bool correct_boundaries = true, save_search = false, filter_artifacts = true;
+    bool source_array_crossing = true;
 };
 
 struct SpacerSource {
     std::string id, array, original_spacer, original_repeat, spacer, repeat;
+    std::string source_left, source_right;
     size_t trim_left = 0, trim_right = 0;
 };
 
@@ -36,7 +38,13 @@ struct GraphArc {
 
 struct Unitig {
     std::vector<GraphArc> arcs;
-    bool limited = false;
+    bool limited = false, shared = false;
+};
+
+struct CoverageBlock {
+    size_t begin = 0, end = 0;
+    double count = 0;
+    bool shared = false;
 };
 
 struct ExtensionWalk {
@@ -44,13 +52,21 @@ struct ExtensionWalk {
     std::string bases, stop = "dead_end";
     std::vector<double> counts, capacities;
     std::vector<size_t> sample_positions;
+    std::vector<CoverageBlock> blocks;
+    std::vector<double> coverage_window;
+    std::vector<uint64_t> branches;
+    size_t next_block = 0, profile_samples = 0;
+    double previous_median = 0, last_unshared = 0, deviation = 0;
     size_t clear_at = 0, work = 0, unitigs = 0;
+    size_t source_until = 0, source_last = 0, anchor_padding = 0;
     double flow = 0;
     bool external = false, limited = false;
+    bool crosses_source = false;
 };
 
 struct TargetCandidate {
-    size_t query = 0, begin = 0, end = 0, mismatches = 0;
+    size_t query = 0, placement = 0, begin = 0, end = 0, mismatches = 0;
+    size_t anchor_prefix = 0;
     std::vector<uint64_t> anchor;
     std::string target, sequence, status = "rejected", reason, target_id, extension_id;
     ExtensionWalk left, right;
@@ -58,6 +74,7 @@ struct TargetCandidate {
     size_t clear_left = 0, clear_right = 0;
     double identity = 0, coverage = 0;
     bool detected = false, extended = false, limited = false;
+    bool identified = false, allow_crossing = false;
 };
 
 // One owner for graph access, detection, extension, filtering and output.
@@ -72,6 +89,9 @@ class ProtospacerWorkflow {
     WorkflowOptions options_;
     std::unique_ptr<SDBG> graph_;
     std::vector<SpacerSource> sources_;
+    std::vector<std::pair<std::string, std::string>> supplied_;
+    std::map<std::string, std::set<uint64_t>> array_nodes_;
+    std::vector<std::set<uint64_t>> query_source_nodes_;
     std::vector<std::pair<std::string, std::vector<size_t>>> queries_;
     std::vector<std::vector<TargetCandidate>> results_;
     std::vector<std::string> query_status_;
@@ -93,6 +113,7 @@ class ProtospacerWorkflow {
     static double median(std::vector<double> values);
     static double triplet_entropy(const std::string &sequence);
     static bool informative(const std::string &sequence);
+    static size_t adapter_position(const std::string &sequence, bool backwards = false);
     static int repeat_context(const std::string &outward, const std::string &remainder,
                               const std::string &repeat, double identity);
 
@@ -108,20 +129,30 @@ class ProtospacerWorkflow {
 
     void verify_index() const;
     void load_sources();
+    void prepare_source_nodes();
+    void load_supplied_targets();
     void correct_boundaries();
     void group_queries();
     std::vector<TargetCandidate> map_spacer(size_t query, size_t &work, bool &limited) const;
     Unitig build_unitig(uint64_t start, const GraphArc &first, bool backwards, size_t &work,
                         size_t work_limit) const;
-    void update_flow(ExtensionWalk &walk, size_t counts_before) const;
+    void update_flow(ExtensionWalk &walk, size_t counts_before, bool shared = false) const;
+    void update_profile(ExtensionWalk &walk, bool finish = false) const;
+    void rank_walks(std::vector<ExtensionWalk> &walks, size_t limit, bool diverse) const;
+    bool retain_completed(std::vector<ExtensionWalk> &walks) const;
+    void save_walks(const TargetCandidate &candidate, bool backwards, const std::vector<ExtensionWalk> &walks,
+                    size_t &serial) const;
     int source_context(size_t query, const TargetCandidate &candidate, const std::string &outward,
                        bool backwards) const;
+    size_t source_clearance(size_t query, const TargetCandidate &candidate, bool backwards) const;
     ExtensionWalk extend_flank(size_t query, const TargetCandidate &candidate, bool backwards, size_t &work,
                                size_t work_limit) const;
     bool advance_walk(ExtensionWalk &walk, const GraphArc &arc, size_t query,
                       const TargetCandidate &candidate, bool backwards) const;
+    bool extension_barrier(ExtensionWalk &walk, const TargetCandidate &candidate, bool backwards) const;
     ExtensionWalk choose_walk(std::vector<ExtensionWalk> walks) const;
     void trim_walk(ExtensionWalk &walk, size_t length, const std::string &reason) const;
+    void select_candidate(std::vector<TargetCandidate> &candidates) const;
     void process_query(size_t query);
     void assemble_candidate(TargetCandidate &candidate) const;
     void consolidate();

@@ -1,9 +1,9 @@
 # Sequential native MCAAT batch
 
-Read the [experimental method’s measured results](protospacer-evaluation-SRR14017553.md)
+Read the [experimental method’s measured results](protospacer-evaluation-SRR14017553-v5.md)
 before using it broadly. A working batch does not establish prediction accuracy.
 
-The batch runs **one native v2 workflow invocation per SRR**. There is no separate
+The batch runs **one native v5 workflow invocation per SRR**. There is no separate
 supplied-protospacer preservation pass. Prediction uses no third-party assembler,
 aligner or solver. Python standard-library code orchestrates the bundled MCAAT graph
 builder; curl is used only for ENA downloads if a graph is missing.
