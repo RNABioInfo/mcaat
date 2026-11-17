@@ -15,7 +15,10 @@
 namespace mcaat::proto {
 
 struct WorkflowOptions {
-    std::filesystem::path arrays, graph, output, protospacers;
+    std::filesystem::path arrays, graph, output, protospacers, extension_seeds;
+    std::string coverage_method = "negbin";
+    double nb_dispersion = 10.;
+    size_t min_contig_length = 500;
     size_t threads = 1, beam_width = 64, max_flank = 750, min_flank = 200;
     size_t max_work = 2000000, placement_work = 400000, max_placements = 128;
     size_t max_visits = 2, context_bases = 24, context_width = 256, read_length = 150, min_external = 200;
@@ -25,7 +28,6 @@ struct WorkflowOptions {
     bool correct_boundaries = true, save_search = false, filter_artifacts = true;
     bool source_array_crossing = true;
 };
-
 struct SpacerSource {
     std::string id, array, original_spacer, original_repeat, spacer, repeat;
     std::string source_left, source_right;
@@ -54,8 +56,16 @@ struct ExtensionWalk {
     bool crosses_source = false, ambiguous = false, pre_context_fork = false;
     size_t competing_routes = 0, first_ambiguous_base = 0, first_context_fork = 0;
     double runner_up_score = -1.;
+    double coverage_baseline = 0., coverage_loss = 0.;
+    size_t coverage_seen = 0, local_tips = 0, local_bubbles = 0, local_weak_links = 0;
 };
-
+struct LocalSegment {
+    std::vector<GraphArc> arcs;
+    std::string bases;
+    double depth = 0.;
+    size_t depth_samples = 0, terminal_indegree = 0;
+    bool dead_end = false, complete = false;
+};
 struct TargetCandidate {
     size_t query = 0, placement = 0, begin = 0, end = 0, mismatches = 0;
     size_t anchor_prefix = 0;
@@ -153,6 +163,17 @@ class ProtospacerWorkflow {
     void consolidate();
     void write_outputs();
     void write_summary(const std::string &status, const std::string &error = "") const;
+    static double count_loss(double count, double mean, const std::string &method, double dispersion);
+    static double sequence_similarity(const std::string &a, const std::string &b, double minimum);
+    static bool same_graph_region(const std::string &a, const std::string &b, size_t k);
+    LocalSegment probe_segment(uint64_t from, GraphArc arc, size_t query, bool backwards,
+                               size_t maximum_edges, size_t &work, size_t limit) const;
+    void score_seeded_walk(ExtensionWalk &walk) const;
+    double seeded_walk_score(const ExtensionWalk &walk) const;
+    ExtensionWalk extend_seeded(size_t query, const TargetCandidate &candidate, bool backwards, size_t &work,
+                                size_t limit) const;
+    std::vector<TargetCandidate> load_extension_seeds() const;
+    int run_seeded();
 };
 } // namespace mcaat::proto
 #endif

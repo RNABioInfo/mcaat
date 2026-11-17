@@ -140,6 +140,15 @@ autoclean=true
 `input-files` accepts one or two paths separated by spaces, commas, or semicolons.
 
 ## v2.0.0 (planned)
+- **Seed-local extension comparison**: `phage-curate --extension-seeds DIR
+  --coverage-method all` extends every saved candidate directly through its
+  existing graph, up to **750 bases on each side**. Poisson deviance,
+  negative-binomial deviance and Huber log-ratio loss share local tip, bubble and
+  weak-link rules adapted from MEGAHIT. All input targets are preserved;
+  overlapping predictions are grouped while their individual sequences and
+  multiplicities remain in one evidence table. No whole-metagenome assembly or
+  reference-guided selection. See [commands, formulas, outputs and function
+  guide](docs/protospacer-extension.md#extend-from-saved-starts-three-coverage-models).
 - **CAS detection**: identify and annotate CAS genes flanking detected CRISPR arrays.
 - **Protospacer workflow (experimental)**: one native class performs connected
   spacer alignment, source-context and sequence-artifact filtering, bounded beam

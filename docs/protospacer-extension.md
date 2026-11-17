@@ -1,8 +1,121 @@
-# Native protospacer detection and extension (v9)
+# Native protospacer detection and seed-local extension
 
 MCAAT searches an existing de Bruijn graph for a possible target of an array spacer, extends that target through competing graph paths, filters source-only and technical paths, and saves the selected sequence with its evidence. All of this runs inside the single `ProtospacerWorkflow` class. The graph remains unchanged. No reference sequence or external aligner is consulted during prediction.
 
-Final protospacers now require an accepted extension. `Protospacers.fasta` and `associations.tsv` contain only targets supported by a saved region in `ContiguousPaths.fasta`. Detection without an accepted extension is retained in `CandidateProtospacers.fasta` and `candidate_associations.tsv` for diagnosis. The candidate FASTA includes the final targets; do not add these two counts together. This output rule is applied after the existing filters and does not change the selected routes or use reference matches.
+In ordinary discovery mode (v9), final protospacers require an accepted extension. `Protospacers.fasta` and `associations.tsv` contain only targets supported by a saved region in `ContiguousPaths.fasta`. Detection without an accepted extension is retained in `CandidateProtospacers.fasta` and `candidate_associations.tsv` for diagnosis. The candidate FASTA includes the final targets; do not add these two counts together. The new seeded comparison mode below preserves every input candidate independently of extension success.
+
+## Extend from saved starts: three coverage models
+
+This mode starts at the actual saved protospacer graph nodes. It constructs **only local paths, up to 750 added bases on each side**, without whole-graph assembly or rebuilding the graph. A full result contains the target plus up to 1,500 flank bases. It compares the same starts under three models, loading the graph once:
+
+```bash
+build/mcaat phage-curate \
+  --arrays /path/to/array_reports \
+  --graph /path/to/graph/graph \
+  --extension-seeds /path/to/previous_workflow_output \
+  --output /path/to/new_seeded_results \
+  --coverage-method all --max-flank-length 750 \
+  --min-contig-length 500 --threads 24
+```
+
+`--extension-seeds` requires the existing `queries.tsv`, `sources.tsv`, `candidates.tsv` and `graph_paths.tsv` together. All detected/extended saved starts are used, including those without an earlier accepted extension. Query sequences and corrected source boundaries must match the array input; every anchor must spell its target on the loaded graph. This format currently supports one saved placement per query. This is an extension comparison, not a new test of discovery sensitivity across every possible graph placement.
+
+Choose one model with `--coverage-method poisson`, `negbin` or `huber`. `all` runs them sequentially with identical limits. This option acts in seeded mode; ordinary discovery still uses the documented v9 workflow below.
+
+### Shared graph rules
+
+Follow unitigs directly from the target; at branches, probe only within the remaining flank budget. Apply local versions of the vendored MEGAHIT rules:
+
+- Remove a genuine dead-end arm shorter than `2*k`. A probe stopped by a length/work limit is **not** a dead end.
+- For alternatives reconverging at the same oriented node, keep the deepest simple bubble (`k+2` edges), or a longer bubble with at least 98% sequence similarity and the `20*k/0.98` length bound.
+- Discard a weak arm only after external baseline calibration: its mean depth must be at most 10% of the neighboring-arm total **and** below this target's baseline by more than `--max-coverage-fold`. This protects low-count source-exit bridges and rare paths compatible with their own local coverage. Depth-based decisions require complete probes and no masked source-repeat counts in the compared arms. Setting the fold limit to zero also disables weak-link pruning.
+
+These are local adaptations of [`bubble_remover.cpp`](../libs/megahit/src/assembly/bubble_remover.cpp), [`bubble_remover.h`](../libs/megahit/src/assembly/bubble_remover.h) and [`weak_link_remover.cpp`](../libs/megahit/src/assembly/weak_link_remover.cpp), not MEGAHIT's full global, iterative, multi-k assembly. Read-pair support is not available from this graph alone. The graph is never edited.
+
+Keep competing unresolved branches in a bounded beam: 64 mature and 256 pending states by default. Each state retains its own actual walk. A source region can be crossed once by an already identified target; source/anchor revisits and source-array re-entry are forbidden. Other nodes permit at most two visits. Mask the source passage when measuring external multiplicity. Stop at technical adapters, low complexity, saturated counts, dead ends, revisit bounds or 750 added bases.
+
+### Coverage loss and acceptance
+
+For each flank, estimate `mu` as the median of its first `R=max(k+1, read_length-k)` unmasked multiplicities and freeze it. At k=23 and read length=150, `R=127`. This initial window calibrates the baseline; count residuals are evaluated afterward. At each scored fork retain branch support `p=c/chosen_direction_total_count`. Before baseline calibration, rank by mean branch surprisal, breaking ties by adjacent log-count variation. After calibration, combine branch support with one of these per-position count losses:
+
+| Model | Loss | Interpretation |
+|---|---|---|
+| Poisson | `2*[c*ln(c/mu) - c + mu]` | Deviance for a count model with variance `mu`. |
+| Negative binomial | `2*[c*ln(c/mu) - (c+r)*ln((c+r)/(mu+r))]` | Allows variance `mu + mu²/r`; default `r=10`, adjustable with `--nb-dispersion`. |
+| Huber log-ratio | `z=abs(ln((c+0.5)/(mu+0.5))); z²/2 if z<=1, otherwise z-1/2` | Relative-count loss with reduced influence from extreme deviations. |
+
+Use the continuous limit `c*ln(c/mu)=0` at `c=0`. Count deviances follow the standard [GLM deviance definition](https://www.statsmodels.org/stable/generated/statsmodels.genmod.families.family.NegativeBinomial.deviance.html). Negative-binomial modeling has precedent for overdispersed k-mer spectra in [GenomeScope 2.0](https://pmc.ncbi.nlm.nih.gov/articles/PMC7080791/). The robust loss follows [Huber's location-estimation work](https://doi.org/10.1214/aoms/1177703732); applying it to log multiplicity ratios is our adaptation. These sources do not validate this particular extension workflow.
+
+The final flank score is:
+
+```
+S = sum(-ln(p)) / N + a * mean(count_loss_after_calibration) / R
+a = 1/2 for Poisson/NB deviance; 1 for Huber loss
+N = all unmasked external positions, including calibration
+```
+
+Branch terms use the same consecutive external-position mask as the established workflow. The denominator includes all valid neighboring arcs before local pruning. Coverage alone is insufficient: a flat, weakly supported count-1 route can otherwise beat a supported route near count 40. Branch surprisal penalizes that weak choice. The initial window is not also penalized as if it were a stationary test interval; source exits can change abundance before the baseline is established.
+
+`1/R` is an explicit conservative weighting for overlapping counts, **not** an exact effective-sample-size calculation. The median baseline, fixed NB dispersion, beam limits and log transformation are design choices. The combined score is a composite ranking rule, not a calibrated likelihood. **It does not supply probabilities of correct sequence or viral origin.** Each branch may establish a different initial baseline; ambiguous wrong branches remain possible.
+
+Filter terminal candidates before choosing a route: complete read-span block medians must remain within a twofold range (`--max-coverage-fold`). Prefer a qualifying full 750-base flank when available, otherwise a shorter supported flank. When joining sides would revisit forbidden source nodes or join incompatible depth baselines, retain the longer supported side, breaking equal-length ties by loss. Require at least 500 total bases and at least `max(min_external_bases, 2*read_span)` scored external positions. Close alternatives and search truncation are reported rather than presented as certainty.
+
+### Compact outputs
+
+| File | Contents |
+|---|---|
+| `protospacers.fasta` | Every input candidate target, including those without a retained extension. |
+| `viral_contigs_<method>.fasta` | One representative sequence per grouped region; only retained contigs of at least 500 bp by default. These are candidate viral regions, not confirmed phages. |
+| `extensions.tsv` | One row per input start per method: outcome, actual sequence, source observations, target coordinates, both count traces, scored positions, limits, stops and representative association. |
+| `summary.json` | Parameters, counts, timings and completion status. |
+
+Group directly to a representative when at least 90% of the shorter graph-node path is one identical contiguous run and overlapping sequence identity is at least 95%. Both orientations are checked. Grouping is not transitive. A representative need not contain every associated target variant: the **actual per-start sequence and its target coordinates remain in `extensions.tsv`**. Coordinates are zero-based, end-exclusive in that row's sequence. `*_counts` includes each added edge; `*_scored_positions` is a one-based index into that side's count vector, ordered outward from the seed.
+
+### Function guide and checks
+
+All search logic remains in `ProtospacerWorkflow`; `LocalSegment` only stores probe data.
+
+| Function | Responsibility |
+|---|---|
+| `load_extension_seeds` | Validate input identities, boundaries, node IDs, connected anchors and exact target spelling. |
+| `probe_segment` | Inspect one bounded unitig arm, recording multiplicity, junctions and genuine dead ends. |
+| `sequence_similarity` | Banded edit-distance comparison for longer local bubbles. |
+| `count_loss` | Evaluate the selected mathematical coverage penalty. |
+| `score_seeded_walk` | Freeze a flank's initial baseline and accumulate post-calibration loss; reset correctly after trimming. |
+| `seeded_walk_score` | Combine branch surprisal with the read-span-weighted coverage loss. |
+| `extend_seeded` | Apply local graph rules, explore bounded alternatives, filter and select one actual flank. |
+| `same_graph_region` | Test direct representative grouping using shared graph-node runs and sequence identity. |
+| `run_seeded` | Run the methods on identical starts, validate joined walks, group results and save compact outputs. |
+
+`tests/check_seeded_extension.py` builds a small temporary graph and checks both 750-base flanks, target preservation, bubble/tip/weak-link handling, source masking, bounded probes, and unchanged graph files. It also checks that a weak flat count-1 branch cannot displace a supported count-21 continuation after a low-count source exit, and that a rare correct arm survives an abundant neighbor both before and after calibration. `phage-curate --self-test` checks the loss formulas and region grouping. Temporary fixtures are removed automatically.
+
+`scripts/seeded_extension_benchmark.py` evaluates an already completed three-method run against a **local** BLAST database, adds per-start reference evidence to the existing table, and creates `coverage_models.png` and `multiplicities.png`. It never changes prediction paths or uses the reference during search. It compares matched starts with an earlier run and records exact gained/lost query IDs. The criterion is one HSP with at least 90% identity and 50% of the entire extension query covered; targets use 85% coverage. Unmatched candidates are not thereby proven false, and overlapping reference loci are not independent phage discoveries.
+
+The benchmark helpers have narrow roles: `fasta`/`rows` load records and tables, `canonical` normalizes strand, and `digest` fingerprints inputs. `same_region` mirrors native grouping so the baseline is counted consistently and each new association can be checked. `align` streams HSPs and retains the best qualifying match, or the best nonqualifying match when none passes. `reference_loci` groups overlapping best-hit intervals. `make_plots` draws the mathematical losses and observed traces; `write_report` writes the count tables and limitations. `main` verifies the unchanged input set, performs evaluation, and saves the augmented evidence and summary.
+
+Run the controlled check with `python3 tests/check_seeded_extension.py build/mcaat`. For a completed three-method run, evaluate with:
+
+```bash
+python3 scripts/seeded_extension_benchmark.py /path/to/new_seeded_results \
+  --baseline /path/to/previous_workflow_output \
+  --baseline-evaluation /path/to/previous_blast_evaluation \
+  --reference /path/to/local_blast_database_prefix --threads 2
+```
+
+### Measured development result: SRR14017553
+
+All three models were tested on the same 164 saved query/start records: 160 distinct oriented anchor paths and 159 candidate target sequences, originating from 398 distinct corrected spacers. All 159 targets were preserved. Extension matches require one HSP at 90% identity and 50% coverage of the whole predicted sequence; the reference was used only after prediction.
+
+| Method | Representative contigs | Matching representatives | Matching input records | Gained / lost records |
+|---|---:|---:|---:|---:|
+| Previous workflow, same grouping | 30 | 5 | 60 | — |
+| Poisson | 50 | 3 | 36 | +0 / −24 |
+| Negative binomial | 52 | 6 | 34 | +3 / −29 |
+| Huber log-ratio | 51 | 8 | 60 | +6 / −6 |
+
+Huber performed best among the three models but produced **no net increase in matching input records**. Multiple input records can describe the same region; representative contigs are partial candidate regions, not counts of distinct phages. The earlier workflow retained one flank, whereas these methods can join both; this changes the coverage denominator. This is a development comparison on one dataset, not independent validation or a reason to replace the ordinary workflow by default.
+
+All three searches together took 10.24 minutes with 2 threads and 2.54 GiB peak RSS. Accepted contigs were 773–1546 bp. The graph remained unchanged. Controlled tests passed for eight cases under each model. Early weak-link pruning was corrected after tracing 30 lost matching routes: source-exit branches must survive until the external baseline is established. Search limits and ambiguity remain recorded in the output table.
 
 ## Run on an existing graph
 
