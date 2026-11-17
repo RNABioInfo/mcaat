@@ -22,6 +22,57 @@ build/mcaat phage-curate \
 
 Choose one model with `--coverage-method poisson`, `negbin` or `huber`. `all` runs them sequentially with identical limits. This option acts in seeded mode; ordinary discovery still uses the documented v9 workflow below.
 
+### Joint local coverage fitting (experimental)
+
+Use `--coverage-method mixture` with `--extension-seeds`. Keep the ordinary/default workflow unchanged. Native generation protects the Huber candidate and its eligible independent flanks, then adds lookahead terminal routes, prefixes and its selected pair. Huber uses beam width `B` (default 64); lookahead uses `min(256,2*B)`. Each generator has its own `--max-query-states` budget. This is **two bounded searches per start**, not an exhaustive graph search. The 750-bp per-side maximum and 500-bp total minimum still apply.
+
+An optional `--candidate-pool FILE.tsv.gz` replays already generated routes. Its header must be exactly `query_id`, `sequence`, `seed_begin`, `seed_end`, `origin`, separated by tabs. Coordinates are zero-based, half-open. Other columns, including reference annotations, are rejected. Every cached route is replayed through graph edges and traversal barriers, checked for bounded revisits and verified by spelling its connected nodes. The origin string is diagnostic, never a fitting feature. Cache input is limited to 256 records per query. Empty candidate pools leave the original target intact and unextended.
+
+For candidate routes and nearby background routes, let `A[b,j]` be the number of visits by route `j` to an edge in block `b`, and `a[j] >= 0` its fitted abundance. The predicted multiplicity is:
+
+```
+mu[b] = sum_j A[b,j] * a[j]
+objective = sum_b w[b] * ((observed[b] - mu[b]) / sigma[b])^2
+            + log(1 + sum_b w[b]) * number_of_active_routes
+```
+
+Edges shared by two routes receive their **sum**, so a 10-copy and a 30-copy route can explain a shared 40-copy segment. This avoids forcing every segment into one flat target baseline. It cannot identify which equal-abundance entrance connects to which exit when both decompositions fit equally well.
+
+For fitting, combine all compatible maximal left and right flanks; shorter output prefixes do not become separate biological molecules. If this exceeds 1,024 model routes, mark the start unresolved instead of pruning competitors and claiming confidence. This matters: comparing one complete two-sided route against only one-sided alternatives can falsely favor that complete route. The local graph includes up to 64 background routes using actual off-candidate incoming/outgoing arms and an existing candidate boundary, with slots distributed round-robin across distinct flanks. Hitting this background limit is recorded in the candidate audit and the selected start’s limit flag. Removing the target alone does not create an artificial background boundary. Outside arms follow at most one read-span of nonbranching graph, with no revisit. Connected source `repeat + spacer + repeat` paths on both strands are additional nuisance components. They are never output as targets solely because they explain shared counts. This is a bounded approximation: some real background routes may be missing.
+
+Consecutive edges with identical route-incidence vectors form blocks, each at most `R=max(k+1,read_length-k)` edges. `observed` is the block median; `w=block_edges/R` gives overlapping k-mers read-span weight rather than counting them as independent reads. `sigma` is the larger of the scaled within-block MAD and `sqrt(max(1, observed + observed^2/dispersion))`, with `--nb-dispersion 10` by default. This is a weighted least-squares approximation using an overdispersed count variance, **not a negative-binomial likelihood**. The route-count penalty is complexity-inspired, not a proven BIC calibration for these correlated data.
+
+A native greedy nonnegative solver adds at most 12 routes, refitting abundances with at most 80 coordinate sweeps per addition. It is not an exact minimum-flow decomposition. Repeat fitting 16 times after deterministic Gaussian block perturbations at scale `sigma`, clipped at zero. Identical design columns share support rather than receiving artificial certainty from tie order. A reported candidate needs support in at least 80% of these trials, positive support in the unperturbed fit, and standardized global fit error at most 2. Support for an exact anchored prefix includes longer routes containing that prefix. These are explicit heuristics, **not probabilities that a contig is correct**.
+
+When both a prefix and its longer continuation pass, keep the longer continuation. Among other candidates, rank stability, fit error, fitted support and the existing tie-breakers. Keep one sequence per start, apply direct representative grouping, and save at most 50 representatives. Preserve all supplied target sequences irrespective of extension outcome. The fitter uses no reference, no read aligner and no external optimizer. Background abundance does not turn a graph route into a proven viral sequence.
+
+This follows the general idea of [inexact flow decomposition under noisy weights](https://pmc.ncbi.nlm.nih.gov/articles/PMC9700332/). It is not an implementation of that paper's exact optimization, nor of [Phables](https://pmc.ncbi.nlm.nih.gov/articles/PMC10563150/), which also uses evidence unavailable in this graph-only experiment.
+
+The native output adds no per-query file tree. `candidate_paths.tsv.gz` stores every model-eligible target route, its origin, stability, fitted support, eligibility, model/background route counts, background-limit flag and observed/fitted blocks intersecting that candidate. `base_abundance` is the sum of abundances of complete model routes containing the candidate, not necessarily one independent molecule. `extensions.tsv` retains one row per start, including unresolved starts. `protospacers.fasta` preserves all input targets; `viral_contigs_mixture.fasta` contains the selected representatives. The benchmark adds reference results **after** these files are frozen.
+
+| Function / struct | Responsibility |
+|---|---|
+| `SavedExtension` | Sequence, anchor coordinates and diagnostic origin of a cached route. |
+| `CoverageBlock` | One contiguous incidence-consistent block, observed median, noise scale, weight and visit vector. |
+| `CoverageFit` | Nonnegative route abundances, fitted block counts, objective and normalized error. |
+| `load_candidate_pool` | Read only the five allowed cache fields; reject unknown queries, malformed rows and evaluation columns. |
+| `replay_candidate` | Verify target coordinates, reconstruct the connected graph walk and multiplicities, enforce source/revisit/artifact barriers. |
+| `mixture_candidates` | Generate protected Huber routes and lookahead alternatives with separate work budgets and local mode overrides. |
+| `fit_coverage` | Approximate the sparse weighted nonnegative fit using greedy additions and coordinate refits; no graph or reference access. |
+| `select_mixture` | Build the local mixture, add background routes, form coverage blocks, perturb/refit, select a stable route and write its audit. |
+| `evaluation_cache` | After prediction, reuse exact canonical-sequence evaluations with source hashes and matching metrics/reference path; reject newer reference indexes. Earlier caches lack a reference-content hash, which is explicitly recorded as a limitation. |
+| `make_mixture_plots` / `write_mixture_report` | Show fixed-ranking performance, observed/fitted counts, actual multiplicities and exact outcome counts/limitations. |
+
+Native arithmetic tests include a 10+30 shared-segment example and an equal-depth ambiguity. `tests/check_seeded_extension.py --lookahead` also checks mixture live generation versus replay, 750-bp linear extension, an equal-abundance shared repeat that must not be resolved across its split, preserved targets, connected sequence spelling and unchanged graph files. The ordinary three-model checks remain separate.
+
+**SRR14017553 result (2026-11-17):** all **164** starts were tested and all **159** targets preserved. Joint fitting accepted **59** start records (58 distinct targets), giving **36** saved representatives of 519–1,539 bp. **7/36** representatives matched the reference at 90% identity / 50% full-query coverage in one HSP. This is worse than lookahead's **15/50**, and below the requested 25-of-50 goal. The method remains opt-in and is **not recommended as a replacement**.
+
+Per-input matches: **13**, versus lookahead's 26 (**7 gained, 20 lost, 6 retained**) and Huber's 60 (**3 gained, 50 lost, 10 retained**). The candidate audit retains all 148 previously accepted Huber sequences. Matching alternatives exist for 72 inputs; the filter leaves only 16 with an eligible matching alternative (7 inputs fail fit error; 49 fail stability/positive support). Selection loses 3 more, leaving 13. Two matching input sequences are associated with a nonmatching representative during grouping. These are distinct stages, not counts to add together.
+
+The complete bounded model uses at most 700 target-route combinations on this dataset. Background exploration reaches its cap for 135 starts; this is recorded, not treated as exhaustive. The real-data comparison replays the frozen Huber/lookahead routes through the actual graph. Live generation and replay agree on the controlled fixtures, including a shared repeat with equal-abundance entrances/exits that must remain unresolved. This does **not** substitute for a full live candidate-generation rerun of the real dataset. Both existing source searches were already bounded.
+
+The final run used two threads, 2.50 GiB peak sampled RSS and approximately 139 seconds including graph loading; local candidate replay/model fitting took 46.7 seconds. All 27 graph components stayed unchanged. A provisional asymmetric model scored 12/44 but failed the equal-abundance repeat fixture and was discarded; the final comparison includes compatible complete flank combinations and uses the same thresholds. Evaluation reused exact-sequence matches from verified prior output artifacts; the source evaluations used the same local reference and metrics. No reference was passed to MCAAT.
+
 ### Branch lookahead and independent prefixes (experimental)
 
 Use `--coverage-method lookahead` with the same saved seeds. The ordinary workflow and `all` remain unchanged. This experiment separates the candidate pool from the final reference-free selection. The real-graph test uses `--beam-width 128 --max-context-paths 256`, with up to 750 added bases per side.

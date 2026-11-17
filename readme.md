@@ -149,6 +149,7 @@ autoclean=true
   multiplicities remain in one evidence table. No whole-metagenome assembly or
   reference-guided selection. See [commands, formulas, outputs and function
   guide](docs/protospacer-extension.md#extend-from-saved-starts-three-coverage-models).
+- **Joint local coverage fitting (experimental)**: `--coverage-method mixture` combines protected Huber/lookahead candidates, fits shared segment counts as sums of nonnegative route abundances, and tests selection stability. It preserves every input target and saves at most 50 representative contigs. On SRR14017553 it gave **7 matches out of 36**, below lookahead’s 15/50; it is not recommended as a replacement. This is opt-in; see the [formula, limits and function guide](docs/protospacer-extension.md#joint-local-coverage-fitting-experimental).
 - **Branch-lookahead extension (experimental)**: `--coverage-method lookahead`
   retains competing early branches and supported flank prefixes, then saves up to
   50 graph-ranked representatives. Reference data is used only afterward by the

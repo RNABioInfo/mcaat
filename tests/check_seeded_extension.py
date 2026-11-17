@@ -103,12 +103,18 @@ def check_lookahead(binary):
         arrays = root / "arrays"
         arrays.mkdir()
         cases, records = {}, []
-        for name in ("linear", "bridge", "depth_change"):
+        for name in ("linear", "bridge", "depth_change", "equal_repeat"):
             repeat, spacer, left, right = dna(32), dna(35), dna(1050), dna(1050)
             seq = left + spacer + right
             cases[name] = dict(spacer=spacer, repeat=repeat, sequence=seq, start=len(left))
             depth = 1 if name == "bridge" else 20
             records.extend((f"{name}_{i}", seq) for i in range(depth))
+            if name == "equal_repeat":
+                # Two equally abundant entrances/exits around a shared segment.
+                # Counts cannot identify which exit belongs to this target.
+                shared = right[:300]
+                other = dna(1050) + shared + dna(1050)
+                records.extend((f"equal_other_{i}", other) for i in range(20))
             if name == "bridge":
                 p = len(left) + len(spacer) + 350
                 # Coverage 20 before the fork, 1 across a 40-base connection,
@@ -171,6 +177,41 @@ def check_lookahead(binary):
         assert len(fasta(result / "viral_contigs_lookahead.fasta")) <= 50
         assert all(hashlib.sha256(p.read_bytes()).hexdigest() == sha for p, sha in hashes.items())
         print("PASS: lookahead retains the correct 750-base low-depth bridge route; independent sides, targets, bounded paths and graph verified.")
+        run(base + ["--extension-seeds", str(root / "seeds"), "--coverage-method", "mixture",
+                    "--output", str(root / "mixture")])
+        mixture = root / "mixture"
+        mixed = table(mixture / "extensions.tsv")
+        assert fasta(mixture / "protospacers.fasta") == targets
+        assert len(mixed) == len(cases)
+        with gzip.open(mixture / "candidate_paths.tsv.gz", "rt") as stream:
+            pool = list(csv.DictReader(stream, delimiter="\t"))
+        for row in mixed + pool:
+            seq = row["sequence"]
+            b, e = int(row["seed_begin"]), int(row["seed_end"])
+            assert canonical(seq[b:e]) == targets[row["target_id"]]
+            assert b <= 750 and len(seq)-e <= 750
+        for row in mixed:
+            if names[targets[row["target_id"]]] == "linear":
+                assert row["accepted"] == "1" and int(row["left_bp"]) == int(row["right_bp"]) == 750, row
+            if row["accepted"] == "1":
+                assert float(row["mixture_stability"]) >= .8 and float(row["mixture_error"]) <= 2
+                if names[targets[row["target_id"]]] == "equal_repeat":
+                    actual = row["sequence"][int(row["seed_begin"]):int(row["seed_end"])]
+                    side = "right_bp" if actual == cases["equal_repeat"]["spacer"] else "left_bp"
+                    assert int(row[side]) <= 300, ("equal-depth repeat was falsely resolved", row)
+        cache = root / "candidates.tsv.gz"
+        with gzip.open(cache, "wt") as stream:
+            writer = csv.DictWriter(stream, fieldnames=["query_id", "sequence", "seed_begin", "seed_end", "origin"], delimiter="\t", lineterminator="\n", extrasaction="ignore")
+            writer.writeheader(); writer.writerows(pool)
+        run(base + ["--extension-seeds", str(root / "seeds"), "--coverage-method", "mixture",
+                    "--candidate-pool", str(cache), "--output", str(root / "replayed")])
+        replayed = table(root / "replayed/extensions.tsv")
+        for a, b in zip(mixed, replayed):
+            for field in ("sequence", "accepted", "mixture_stability", "mixture_abundance", "mixture_error", "reported"):
+                assert a[field] == b[field], (field, a, b)
+        assert all(hashlib.sha256(p.read_bytes()).hexdigest() == sha for p, sha in hashes.items())
+        print("PASS: mixture live generation/replay agree; linear reconstruction, retained targets, graph spelling and graph immutability verified.")
+
 
 
 def main():

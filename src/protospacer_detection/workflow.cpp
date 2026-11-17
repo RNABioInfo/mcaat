@@ -11,6 +11,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <random>
 #include <omp.h>
 #include <sstream>
 #include <stdexcept>
@@ -60,10 +61,11 @@ void ProtospacerWorkflow::print_help() {
                  "targets only, never discovery.\n"
                  "--extension-seeds DIR: extend ALL saved candidate starts from this "
                  "workflow directory.\n"
-                 "--coverage-method poisson|negbin|huber|flow|lookahead|all --nb-dispersion 10 "
+                 "--coverage-method poisson|negbin|huber|flow|lookahead|mixture|all --nb-dispersion 10 "
                  "--min-contig-length 500\n"
                  "Seeded mode uses local MEGAHIT-derived graph rules and keeps up to "
                  "max-flank-length on EACH side.\n"
+                 "--candidate-pool FILE.tsv.gz: optional prediction-only mixture cache; otherwise generate routes.\n"
                  "No reference-guided path selection.\n"
                  "Output must be new or empty. All counts and search limits are "
                  "recorded in run_summary.json (seeded mode: summary.json).\n"
@@ -89,9 +91,11 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
             o.output = value;
         else if (flag == "--extension-seeds")
             o.extension_seeds = value;
+        else if (flag == "--candidate-pool")
+            o.candidate_pool = value;
         else if (flag == "--coverage-method") {
-            if (value != "poisson" && value != "negbin" && value != "huber" && value != "flow" && value != "lookahead" && value != "all")
-                throw std::invalid_argument("coverage method must be poisson, negbin, huber, flow, lookahead or all");
+            if (value != "poisson" && value != "negbin" && value != "huber" && value != "flow" && value != "lookahead" && value != "mixture" && value != "all")
+                throw std::invalid_argument("coverage method must be poisson, negbin, huber, flow, lookahead, mixture or all");
             o.coverage_method = value;
         } else if (flag == "--correct-spacer-boundaries" || flag == "--save-search" ||
                    flag == "--filter-extension-artifacts" || flag == "--source-array-crossing") {
@@ -198,6 +202,8 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
                                         "with --protospacers");
         o.extension_seeds = fs::absolute(o.extension_seeds);
     }
+    if (!o.candidate_pool.empty() && (o.coverage_method != "mixture" || o.extension_seeds.empty() || !fs::is_regular_file(o.candidate_pool)))
+        throw std::invalid_argument("candidate pool requires mixture, saved seeds and a readable gzip TSV");
     if (!o.protospacers.empty()) {
         if (!fs::is_regular_file(o.protospacers))
             throw std::invalid_argument("supplied protospacer FASTA does not exist");
@@ -2328,7 +2334,7 @@ int ProtospacerWorkflow::run() {
 double ProtospacerWorkflow::count_loss(double count, double mean, const std::string &method,
                                        double dispersion) {
     mean = std::max(mean, 1e-9);
-    if (method == "huber" || method == "flow" || method == "lookahead") {
+    if (method == "huber" || method == "flow" || method == "lookahead" || method == "mixture") {
         double z = std::abs(std::log((count + .5) / (mean + .5)));
         return z <= 1. ? .5 * z * z : z - .5;
     }
@@ -2453,7 +2459,7 @@ double ProtospacerWorkflow::seeded_walk_score(const ExtensionWalk &walk) const {
     // This composite ranking score is not a calibrated path probability.
     double support = walk.counts.empty() ? 0. : std::log(2.) * walk.branch_loss / walk.counts.size();
     size_t tested = walk.coverage_seen > span ? walk.coverage_seen - span : 0;
-    double scale = (options_.coverage_method == "huber" || options_.coverage_method == "flow" || options_.coverage_method == "lookahead") ? 1. : .5;
+    double scale = (options_.coverage_method == "huber" || options_.coverage_method == "flow" || options_.coverage_method == "lookahead" || options_.coverage_method == "mixture") ? 1. : .5;
     return support + (tested ? scale * walk.coverage_loss / (tested * double(span)) : 0.);
 }
 
@@ -2489,6 +2495,11 @@ double ProtospacerWorkflow::support_cost(const TargetCandidate &candidate) {
 }
 
 bool ProtospacerWorkflow::supported_representative(const TargetCandidate &a, const TargetCandidate &b) {
+    if (a.uses_mixture && b.uses_mixture) {
+        if (a.mixture_stability != b.mixture_stability) return a.mixture_stability > b.mixture_stability;
+        if (a.mixture_error != b.mixture_error) return a.mixture_error < b.mixture_error;
+        if (a.mixture_abundance != b.mixture_abundance) return a.mixture_abundance > b.mixture_abundance;
+    }
     if (support_cost(a) != support_cost(b)) return support_cost(a) < support_cost(b);
     if (a.limited != b.limited) return !a.limited;
     bool aa = a.left.ambiguous || a.right.ambiguous, ba = b.left.ambiguous || b.right.ambiguous;
@@ -2682,8 +2693,9 @@ bool ProtospacerWorkflow::compatible_flanks(const TargetCandidate &seed, const E
 
 ExtensionWalk ProtospacerWorkflow::extend_seeded(size_t query, const TargetCandidate &candidate,
                                                  bool backwards, size_t &work, size_t limit,
-                                                 std::vector<ExtensionWalk> *alternatives) const {
-    const bool lookahead = options_.coverage_method == "lookahead";
+                                                 std::vector<ExtensionWalk> *alternatives, int lookahead_override, size_t beam_override) const {
+    const bool lookahead = lookahead_override < 0 ? options_.coverage_method == "lookahead" : lookahead_override != 0;
+    const size_t beam_width = beam_override ? beam_override : options_.beam_width;
     ExtensionWalk seed;
     seed.uses_lookahead = lookahead;
     seed.anchor_padding = backwards ? candidate.anchor_prefix : 0;
@@ -2922,7 +2934,7 @@ ExtensionWalk ProtospacerWorkflow::extend_seeded(size_t query, const TargetCandi
             }
         }
         keep(pending, options_.context_width, true);
-        keep(mature, options_.beam_width, true);
+        keep(mature, beam_width, true);
         frontier = std::move(pending);
         for (auto &w : mature)
             frontier.push_back(std::move(w));
@@ -2933,8 +2945,8 @@ ExtensionWalk ProtospacerWorkflow::extend_seeded(size_t query, const TargetCandi
             if (w.external && w.counts.size() >= options_.context_bases && w.flow > 0. && continuity(w))
                 (w.bases.size() + w.anchor_padding >= options_.max_flank ? full : partial)
                     .push_back(std::move(w));
-        keep(full, options_.beam_width * 4, false);
-        keep(partial, options_.beam_width * 4, false);
+        keep(full, beam_width * 4, false);
+        keep(partial, beam_width * 4, false);
         finished = std::move(full);
         for (auto &w : partial)
             finished.push_back(std::move(w));
@@ -3108,8 +3120,475 @@ std::vector<TargetCandidate> ProtospacerWorkflow::load_extension_seeds() const {
         throw std::runtime_error("saved candidate and path counts differ");
     return seeds;
 }
+std::map<size_t, std::vector<SavedExtension>> ProtospacerWorkflow::load_candidate_pool(
+    const std::vector<TargetCandidate> &seeds) const {
+    std::map<size_t, std::vector<SavedExtension>> result;
+    if (options_.candidate_pool.empty()) return result;
+    std::map<std::string, size_t> ids;
+    for (const auto &s : seeds) ids[numbered("Q", s.query + 1)] = s.query;
+    std::unique_ptr<gzFile_s, int (*)(gzFile)> file(gzopen(options_.candidate_pool.c_str(), "rb"), &gzclose);
+    if (!file) throw std::runtime_error("cannot open candidate pool");
+    char buffer[32768];
+    auto line = [&]() {
+        if (!gzgets(file.get(), buffer, sizeof(buffer))) return std::string{};
+        std::string s(buffer);
+        if (s.empty() || s.back() != '\n') throw std::runtime_error("candidate row too long or missing newline");
+        s.pop_back();
+        return s;
+    };
+    if (line() != "query_id\tsequence\tseed_begin\tseed_end\torigin")
+        throw std::runtime_error("candidate cache must contain only the five prediction fields; evaluation columns forbidden");
+    std::string s;
+    while (!(s = line()).empty()) {
+        std::istringstream in(s);
+        std::vector<std::string> fields;
+        std::string v;
+        while (std::getline(in, v, '\t')) fields.push_back(v);
+        if (fields.size() != 5 || !ids.count(fields[0]) || !dna(fields[1]) ||
+            fields[2].empty() || fields[3].empty() ||
+            fields[2].find_first_not_of("0123456789") != std::string::npos ||
+            fields[3].find_first_not_of("0123456789") != std::string::npos)
+            throw std::runtime_error("malformed candidate cache");
+        auto &pool = result[ids.at(fields[0])];
+        if (pool.size() >= 256) throw std::runtime_error("candidate cache exceeds 256 records per query");
+        pool.push_back({fields[1], fields[4], std::stoull(fields[2]), std::stoull(fields[3])});
+    }
+    if (!gzeof(file.get())) throw std::runtime_error("truncated candidate cache");
+    return result;
+}
+
+TargetCandidate ProtospacerWorkflow::replay_candidate(const TargetCandidate &seed, const SavedExtension &saved) const {
+    if (saved.end < saved.begin || saved.end > saved.sequence.size() || saved.begin < seed.anchor_prefix ||
+        saved.begin > options_.max_flank || saved.sequence.size() - saved.end > options_.max_flank ||
+        saved.sequence.substr(saved.begin, saved.end - saved.begin) != seed.target)
+        throw std::runtime_error("candidate has inconsistent target coordinates");
+    auto c = seed;
+    c.mixture_origin = saved.origin;
+    for (bool back : {true, false}) {
+        auto &w = back ? c.left : c.right;
+        w = ExtensionWalk{};
+        w.anchor_padding = back ? seed.anchor_prefix : 0;
+        w.nodes = {back ? seed.anchor.front() : seed.anchor.back()};
+        auto bases = back ? saved.sequence.substr(0, saved.begin - seed.anchor_prefix) : saved.sequence.substr(saved.end);
+        if (back) std::reverse(bases.begin(), bases.end());
+        for (size_t i = 0; i < bases.size(); ++i) {
+            auto arcs = neighbors(w.nodes.back(), back);
+            auto arc = std::find_if(arcs.begin(), arcs.end(), [&](const auto &a) { return added_base(a, back) == bases[i]; });
+            if (arc == arcs.end()) throw std::runtime_error("cached candidate is not connected in this graph");
+            bool more = advance_walk(w, *arc, c.query, c, back);
+            if (w.bases.size() != i + 1 || (!more && i + 1 != bases.size()))
+                throw std::runtime_error("cached candidate violates graph traversal rule: " + w.stop);
+        }
+        if (bases.empty()) w.stop = "side_not_selected";
+        else if (w.stop == "dead_end") w.stop = "retained_candidate";
+        update_profile(w, true);
+        score_seeded_walk(w);
+    }
+    std::vector<uint64_t> path(c.left.nodes.rbegin(), c.left.nodes.rend());
+    path.insert(path.end(), c.anchor.begin() + 1, c.anchor.end());
+    path.insert(path.end(), c.right.nodes.begin() + 1, c.right.nodes.end());
+    if (spell(path) != saved.sequence) throw std::runtime_error("cached sequence differs from graph spelling");
+    std::map<uint64_t, size_t> visits;
+    for (auto n : path) if (++visits[n] > (query_source_nodes_[c.query].count(n) ? 1 : options_.max_visits))
+        throw std::runtime_error("cached candidate exceeds combined visit limit");
+    c.sequence = saved.sequence;
+    return c;
+}
+
+std::vector<TargetCandidate> ProtospacerWorkflow::mixture_candidates(const TargetCandidate &seed, size_t &work) const {
+    std::vector<TargetCandidate> result;
+    std::set<std::tuple<std::string, size_t, size_t>> seen;
+    auto add = [&](const ExtensionWalk &left, const ExtensionWalk &right, const std::string &origin) {
+        auto bases = left.bases;
+        std::reverse(bases.begin(), bases.end());
+        auto sequence = bases + spell(seed.anchor) + right.bases;
+        if (sequence.size() < options_.min_contig_length) return;
+        size_t b = bases.size() + seed.anchor_prefix;
+        if (!seen.emplace(sequence, b, b + seed.target.size()).second) return;
+        // Reject a joined revisit, but do not impose single-path uniformity here.
+        std::map<uint64_t, size_t> visits;
+        for (auto n : seed.anchor) ++visits[n];
+        for (const auto *w : {&left, &right}) for (size_t j = 1; j < w->nodes.size(); ++j) {
+            auto n = w->nodes[j];
+            if (++visits[n] > (query_source_nodes_[seed.query].count(n) ? 1 : options_.max_visits)) return;
+        }
+        auto c = seed;
+        c.left = left; c.right = right; c.sequence = sequence; c.mixture_origin = origin;
+        result.push_back(std::move(c));
+    };
+    ExtensionWalk empty_left, empty_right;
+    empty_left.nodes = {seed.anchor.front()}; empty_right.nodes = {seed.anchor.back()};
+    empty_left.stop = empty_right.stop = "side_not_selected";
+    size_t used = 0;
+    auto left = extend_seeded(seed.query, seed, true, used, options_.max_work / 2, nullptr, 0, options_.beam_width);
+    auto right = extend_seeded(seed.query, seed, false, used, options_.max_work, nullptr, 0, options_.beam_width);
+    work += used;
+    // Protect the previous Huber result, including its established join rule.
+    if (!compatible_flanks(seed, left, right)) {
+        bool keep_left = left.bases.size() != right.bases.size() ? left.bases.size() > right.bases.size()
+            : seeded_walk_score(left) <= seeded_walk_score(right);
+        add(keep_left ? left : empty_left, keep_left ? empty_right : right, "huber");
+    } else add(left, right, "huber");
+    add(left, empty_right, "huber_left"); add(empty_left, right, "huber_right");
+    used = 0;
+    std::vector<ExtensionWalk> lp, rp;
+    left = extend_seeded(seed.query, seed, true, used, options_.max_work / 2, &lp, 1, std::min(size_t(256), 2 * options_.beam_width));
+    right = extend_seeded(seed.query, seed, false, used, options_.max_work, &rp, 1, std::min(size_t(256), 2 * options_.beam_width));
+    work += used;
+    for (const auto &w : lp) add(w, empty_right, "lookahead_left");
+    for (const auto &w : rp) add(empty_left, w, "lookahead_right");
+    lp.push_back(empty_left); rp.push_back(empty_right);
+    std::vector<std::tuple<double, size_t, size_t, size_t>> pairs;
+    for (size_t l = 0; l < lp.size(); ++l) for (size_t r = 0; r < rp.size(); ++r) {
+        size_t length = lp[l].bases.size() + rp[r].bases.size() + spell(seed.anchor).size();
+        if (length >= options_.min_contig_length)
+            pairs.emplace_back(std::max(lp[l].selection_metric, rp[r].selection_metric),
+                2 * options_.max_flank + seed.target.size() - length, l, r);
+    }
+    std::sort(pairs.begin(), pairs.end());
+    for (const auto &[score, length, l, r] : pairs) if (compatible_flanks(seed, lp[l], rp[r])) {
+        add(lp[l], rp[r], "lookahead_selected"); break;
+    }
+    return result;
+}
+
+CoverageFit ProtospacerWorkflow::fit_coverage(const std::vector<CoverageBlock> &blocks, size_t columns,
+                                              const std::vector<double> &observations) {
+    // Sparse nonnegative least squares. Greedy additions and coordinate refits
+    // approximate L0-penalised fitting; this is not an exact flow solver or posterior.
+    CoverageFit fit;
+    fit.abundance.assign(columns, 0.); fit.predicted.assign(blocks.size(), 0.);
+    std::vector<double> weight(blocks.size()), norm(columns, 0.);
+    double effective = 0.;
+    for (size_t r = 0; r < blocks.size(); ++r) {
+        effective += blocks[r].weight;
+        weight[r] = blocks[r].weight / (blocks[r].noise * blocks[r].noise);
+        for (size_t j = 0; j < columns; ++j) norm[j] += weight[r] * blocks[r].visits[j] * blocks[r].visits[j];
+    }
+    const double penalty = std::log(1. + effective);
+    std::vector<size_t> active;
+    for (size_t step = 0; step < std::min(columns, size_t(12)); ++step) {
+        size_t best = columns;
+        double gain = penalty;
+        for (size_t j = 0; j < columns; ++j) {
+            if (norm[j] <= 0. || std::find(active.begin(), active.end(), j) != active.end()) continue;
+            double dot = 0.;
+            for (size_t r = 0; r < blocks.size(); ++r) dot += weight[r] * blocks[r].visits[j] * (observations[r] - fit.predicted[r]);
+            double improvement = std::max(0., dot) * std::max(0., dot) / norm[j];
+            if (improvement > gain + 1e-10) { gain = improvement; best = j; }
+        }
+        if (best == columns) break;
+        active.push_back(best);
+        for (size_t sweep = 0; sweep < 80; ++sweep) {
+            double change = 0.;
+            for (auto j : active) {
+                double dot = 0.;
+                for (size_t r = 0; r < blocks.size(); ++r)
+                    dot += weight[r] * blocks[r].visits[j] * (observations[r] - fit.predicted[r]);
+                double next = std::max(0., fit.abundance[j] + dot / norm[j]);
+                double delta = next - fit.abundance[j];
+                change = std::max(change, std::abs(delta));
+                fit.abundance[j] = next;
+                for (size_t r = 0; r < blocks.size(); ++r) fit.predicted[r] += delta * blocks[r].visits[j];
+            }
+            if (change < 1e-6) break;
+        }
+    }
+    double squared = 0.;
+    for (size_t r = 0; r < blocks.size(); ++r) squared += weight[r] * std::pow(observations[r] - fit.predicted[r], 2);
+    size_t nonzero = std::count_if(fit.abundance.begin(), fit.abundance.end(), [](double a) { return a > 1e-6; });
+    fit.objective = squared + penalty * nonzero;
+    fit.error = std::sqrt(squared / std::max(1., effective));
+    return fit;
+}
+
+TargetCandidate ProtospacerWorkflow::select_mixture(const TargetCandidate &seed,
+    std::vector<TargetCandidate> candidates, std::string &audit, size_t &work) const {
+    auto none = seed;
+    none.uses_mixture = true;
+    none.left.nodes = {seed.anchor.front()}; none.right.nodes = {seed.anchor.back()};
+    none.left.stop = none.right.stop = "unresolved_mixture";
+    none.sequence = spell(seed.anchor);
+    none.reason = "no_stable_local_mixture";
+    const size_t span = std::max(size_t(graph_->k() + 1), options_.read_length > size_t(graph_->k()) ? options_.read_length - graph_->k() : size_t(1));
+    candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const auto &c) {
+        return c.sequence.size() < options_.min_contig_length ||
+            c.left.counts.size() + c.right.counts.size() < std::max(options_.min_external, 2 * span);
+    }), candidates.end());
+    std::sort(candidates.begin(), candidates.end(), [](const auto &a, const auto &b) {
+        return std::tie(a.sequence, a.mixture_origin) < std::tie(b.sequence, b.mixture_origin);
+    });
+    candidates.erase(std::unique(candidates.begin(), candidates.end(), [](const auto &a, const auto &b) {
+        return a.sequence == b.sequence && a.left.bases.size() == b.left.bases.size();
+    }), candidates.end());
+    if (candidates.empty()) { none.reason = "no_eligible_mixture_candidate"; return none; }
+    // Fitting a full paired path against only one-sided alternatives creates
+    // false certainty. Model every compatible combination of maximal flanks;
+    // shorter prefixes are reporting choices, not separate biological molecules.
+    std::vector<ExtensionWalk> flanks[2];
+    for (size_t side = 0; side < 2; ++side) {
+        std::map<std::string, ExtensionWalk> unique;
+        for (const auto &c : candidates) {
+            const auto &w = side ? c.right : c.left;
+            unique.emplace(w.bases, w);
+        }
+        for (const auto &[bases, w] : unique) {
+            bool prefix = false;
+            for (const auto &[other, v] : unique)
+                if (other.size() > bases.size() && other.compare(0, bases.size(), bases) == 0) prefix = true;
+            if (!prefix) flanks[side].push_back(w);
+        }
+    }
+    if (flanks[0].size() * flanks[1].size() > 1024) {
+        none.reason = "mixture_combination_limit"; none.limited = true;
+        none.mixture_candidates = candidates.size(); return none;
+    }
+    std::vector<TargetCandidate> model;
+    auto joinable = [&](const ExtensionWalk &left, const ExtensionWalk &right) {
+        std::map<uint64_t, size_t> visits;
+        for (auto n : seed.anchor) ++visits[n];
+        for (const auto *w : {&left, &right}) for (size_t j = 1; j < w->nodes.size(); ++j) {
+            auto n = w->nodes[j];
+            if (++visits[n] > (query_source_nodes_[seed.query].count(n) ? 1 : options_.max_visits)) return false;
+        }
+        return true;
+    };
+    for (const auto &left : flanks[0]) for (const auto &right : flanks[1]) if (joinable(left, right)) {
+        auto c = seed; c.left = left; c.right = right;
+        auto bases = left.bases; std::reverse(bases.begin(), bases.end());
+        c.sequence = bases + spell(seed.anchor) + right.bases;
+        model.push_back(std::move(c));
+    }
+    // Preserve routes with no compatible opposite flank as genuine local boundaries.
+    for (const auto &c : candidates) {
+        bool covered = std::any_of(model.begin(), model.end(), [&](const auto &a) {
+            return a.left.bases.compare(0, c.left.bases.size(), c.left.bases) == 0 &&
+                   a.right.bases.compare(0, c.right.bases.size(), c.right.bases) == 0;
+        });
+        if (!covered) model.push_back(c);
+    }
+    if (model.size() > 1024) {
+        none.reason = "mixture_combination_limit"; none.limited = true;
+        none.mixture_candidates = candidates.size(); return none;
+    }
+    std::vector<std::vector<uint64_t>> routes;
+    std::map<uint64_t, std::pair<uint64_t, uint64_t>> endpoints;
+    std::map<uint64_t, double> counts;
+    auto edge_path = [&](const std::vector<uint64_t> &nodes) {
+        std::vector<uint64_t> edges;
+        for (size_t i = 1; i < nodes.size(); ++i) {
+            ++work;
+            auto arcs = neighbors(nodes[i - 1], false);
+            auto a = std::find_if(arcs.begin(), arcs.end(), [&](const auto &v) { return v.node == nodes[i]; });
+            if (a == arcs.end()) throw std::runtime_error("mixture path is not connected");
+            edges.push_back(a->edge); endpoints[a->edge] = {nodes[i - 1], nodes[i]}; counts[a->edge] = a->count;
+        }
+        return edges;
+    };
+    for (const auto &c : model) {
+        std::vector<uint64_t> nodes(c.left.nodes.rbegin(), c.left.nodes.rend());
+        nodes.insert(nodes.end(), c.anchor.begin() + 1, c.anchor.end());
+        nodes.insert(nodes.end(), c.right.nodes.begin() + 1, c.right.nodes.end());
+        if (spell(nodes) != c.sequence) throw std::runtime_error("mixture candidate spelling differs");
+        routes.push_back(edge_path(nodes));
+    }
+    // Add genuine graph entry/exit arms. Removing the anchor alone must never
+    // manufacture a background boundary that explains away the target route.
+    std::set<uint64_t> union_edges, union_nodes, anchor_nodes(seed.anchor.begin(), seed.anchor.end());
+    for (const auto &r : routes) for (auto e : r) {
+        union_edges.insert(e); union_nodes.insert(endpoints.at(e).first); union_nodes.insert(endpoints.at(e).second);
+    }
+    std::set<std::vector<uint64_t>> seen(routes.begin(), routes.end());
+    const size_t targets = routes.size(), background_cap = 64;
+    auto outside_arm = [&](uint64_t node, const GraphArc &first, bool back) {
+        std::vector<uint64_t> path;
+        GraphArc arc = first;
+        std::set<uint64_t> visited{node};
+        for (size_t d = 0; d < span; ++d) {
+            if (union_edges.count(arc.edge) || union_nodes.count(arc.node) || !visited.insert(arc.node).second || anchor_nodes.count(arc.node)) break;
+            path.push_back(arc.edge); counts[arc.edge] = arc.count;
+            endpoints[arc.edge] = back ? std::make_pair(arc.node, node) : std::make_pair(node, arc.node);
+            node = arc.node; ++work;
+            auto next = neighbors(node, back);
+            if (next.size() != 1) break;
+            arc = next.front();
+        }
+        if (back) std::reverse(path.begin(), path.end());
+        return path;
+    };
+    std::vector<std::vector<std::vector<uint64_t>>> background_groups;
+    bool background_limited = false;
+    // A left/right combination repeats the same flank many times. Discover
+    // nuisance routes from distinct flanks and reserve slots round-robin.
+    for (size_t i = 0; i < std::max(flanks[0].size(), flanks[1].size()); ++i) for (size_t side = 0; side < 2; ++side) {
+        if (i >= flanks[side].size()) continue;
+        auto nodes = flanks[side][i].nodes;
+        if (!side) std::reverse(nodes.begin(), nodes.end());
+        auto route = edge_path(nodes);
+        std::vector<std::vector<uint64_t>> group;
+        for (size_t p = 0; p < route.size() && group.size() < background_cap; ++p) {
+            for (bool back : {true, false}) {
+                uint64_t node = back ? endpoints.at(route[p]).first : endpoints.at(route[p]).second;
+                if (anchor_nodes.count(node)) continue;
+                ++work;
+                for (const auto &a : neighbors(node, back)) if (!union_edges.count(a.edge)) {
+                    auto outside = outside_arm(node, a, back);
+                    if (outside.empty()) continue;
+                    std::vector<uint64_t> bg;
+                    if (back) { bg = outside; bg.insert(bg.end(), route.begin() + p, route.end()); }
+                    else { bg.assign(route.begin(), route.begin() + p + 1); bg.insert(bg.end(), outside.begin(), outside.end()); }
+                    bool contains_anchor = std::any_of(bg.begin(), bg.end(), [&](auto e) {
+                        return anchor_nodes.count(endpoints.at(e).first) || anchor_nodes.count(endpoints.at(e).second);
+                    });
+                    if (!contains_anchor && bg.size() >= span && seen.insert(bg).second) group.push_back(std::move(bg));
+                    if (group.size() >= background_cap) break;
+                }
+                if (group.size() >= background_cap) break;
+            }
+        }
+        background_limited |= group.size() >= background_cap;
+        background_groups.push_back(std::move(group));
+    }
+    size_t backgrounds_available = 0;
+    for (const auto &g : background_groups) backgrounds_available += g.size();
+    background_limited |= backgrounds_available > background_cap;
+    for (size_t depth = 0; depth < background_cap && routes.size() < targets + background_cap; ++depth)
+        for (auto &g : background_groups) if (depth < g.size() && routes.size() < targets + background_cap)
+            routes.push_back(std::move(g[depth]));
+    background_groups.clear();
+    // Known source-array paths are nuisance components, never reported targets.
+    for (auto source : queries_[seed.query].second) for (bool reverse : {false, true}) {
+        auto sequence = sources_[source].repeat + sources_[source].spacer + sources_[source].repeat;
+        if (reverse) sequence = reverse_complement(sequence);
+        if (sequence.size() <= size_t(graph_->k())) continue;
+        auto node = find_node(sequence.substr(0, graph_->k()));
+        if (node == missing) continue;
+        std::vector<uint64_t> nodes{node};
+        bool connected = true;
+        for (size_t p = graph_->k(); p < sequence.size(); ++p) {
+            ++work; auto arcs = neighbors(nodes.back(), false);
+            auto a = std::find_if(arcs.begin(), arcs.end(), [&](const auto &x) { return added_base(x, false) == sequence[p]; });
+            if (a == arcs.end()) { connected = false; break; }
+            nodes.push_back(a->node);
+        }
+        if (connected) {
+            auto edges = edge_path(nodes);
+            if (std::any_of(edges.begin(), edges.end(), [&](auto e) { return union_edges.count(e); }) && seen.insert(edges).second)
+                routes.push_back(std::move(edges));
+        }
+    }
+    const size_t columns = routes.size();
+    std::map<uint64_t, std::vector<double>> incidence;
+    for (size_t j = 0; j < columns; ++j) for (auto e : routes[j]) {
+        auto &v = incidence[e]; if (v.empty()) v.resize(columns, 0.); ++v[j];
+    }
+    // Independent weight is assigned per read-span, not per overlapping k-mer.
+    // Group consecutive edges only when their complete route incidence agrees.
+    std::vector<CoverageBlock> blocks;
+    std::vector<std::vector<uint64_t>> block_edges;
+    std::set<uint64_t> consumed;
+    auto median = [](std::vector<double> v) {
+        std::sort(v.begin(), v.end()); return .5 * (v[(v.size() - 1) / 2] + v[v.size() / 2]);
+    };
+    for (const auto &route : routes) for (size_t p = 0; p < route.size();) {
+        if (consumed.count(route[p])) { ++p; continue; }
+        CoverageBlock block; block.visits = incidence.at(route[p]);
+        std::vector<double> values;
+        std::vector<uint64_t> edges;
+        while (p < route.size() && values.size() < span && !consumed.count(route[p]) && incidence.at(route[p]) == block.visits) {
+            auto e = route[p++]; consumed.insert(e); values.push_back(counts.at(e)); edges.push_back(e);
+        }
+        block.observed = median(values); block.edges = values.size();
+        auto deviations = values;
+        for (auto &v : deviations) v = std::abs(v - block.observed);
+        // Overdispersed count noise + within-block variation; fixed before evaluation.
+        block.noise = std::max(1.4826 * median(deviations), std::sqrt(std::max(1., block.observed + block.observed * block.observed / options_.nb_dispersion)));
+        block.weight = double(block.edges) / span;
+        blocks.push_back(std::move(block)); block_edges.push_back(std::move(edges));
+    }
+    std::vector<double> observed;
+    for (const auto &b : blocks) observed.push_back(b.observed);
+    auto base = fit_coverage(blocks, columns, observed);
+    const size_t outputs = candidates.size();
+    std::vector<double> supported(outputs, 0.);
+    constexpr size_t trials = 16;
+    std::mt19937_64 rng(20261117 + seed.query);
+    std::normal_distribution<double> normal;
+    auto contains = [&](size_t whole, size_t prefix) {
+        const auto &a = model[whole], &b = candidates[prefix];
+        return a.left.bases.compare(0, b.left.bases.size(), b.left.bases) == 0 &&
+               a.right.bases.compare(0, b.right.bases.size(), b.right.bases) == 0;
+    };
+    std::vector<double> support_abundance(outputs, 0.);
+    std::vector<std::vector<size_t>> equivalent_columns(targets);
+    for (size_t a = 0; a < targets; ++a) for (size_t b = 0; b < columns; ++b)
+        if (std::all_of(blocks.begin(), blocks.end(), [&](const auto &block) { return block.visits[a] == block.visits[b]; }))
+            equivalent_columns[a].push_back(b);
+    for (size_t trial = 0; trial < trials; ++trial) {
+        auto noisy = observed;
+        for (size_t r = 0; r < blocks.size(); ++r) noisy[r] = std::max(0., noisy[r] + normal(rng) * blocks[r].noise);
+        auto fit = fit_coverage(blocks, columns, noisy);
+        for (size_t j = 0; j < outputs; ++j) {
+            double abundance = 0., support = 0.;
+            for (size_t a = 0; a < targets; ++a) if (fit.abundance[a] > 1e-6) {
+                size_t compatible = 0;
+                for (auto b : equivalent_columns[a]) compatible += b < targets && contains(b, j);
+                if (compatible) {
+                    double fraction = double(compatible) / equivalent_columns[a].size();
+                    support += fraction; abundance += fraction * fit.abundance[a];
+                }
+            }
+            supported[j] += std::min(1., support); support_abundance[j] += abundance / trials;
+        }
+    }
+    size_t chosen = outputs;
+    std::ostringstream out;
+    for (size_t j = 0; j < outputs; ++j) {
+        auto &c = candidates[j];
+        c.uses_mixture = true; c.mixture_stability = double(supported[j]) / trials;
+        c.mixture_abundance = support_abundance[j]; c.mixture_error = base.error;
+        c.mixture_candidates = outputs; c.mixture_backgrounds = columns - targets;
+        double unperturbed = 0.;
+        for (size_t a = 0; a < targets; ++a) if (contains(a, j)) unperturbed += base.abundance[a];
+        c.extended = c.mixture_stability >= .8 && base.error <= 2. && unperturbed > 1e-6;
+        c.reason = c.extended ? "accepted" : base.error > 2. ? "poor_local_mixture_fit" : "unstable_local_mixture";
+        c.limited = c.left.limited || c.right.limited || background_limited;
+        out << numbered("Q", c.query + 1) << '\t' << c.target_id << '\t' << j + 1 << '\t' << c.mixture_origin << '\t'
+            << c.sequence << '\t' << c.left.bases.size() + c.anchor_prefix << '\t'
+            << c.left.bases.size() + c.anchor_prefix + c.target.size() << '\t' << c.mixture_stability << '\t'
+            << c.mixture_abundance << '\t' << unperturbed << '\t' << base.error << '\t' << c.extended << '\t'
+            << outputs << '\t' << columns - targets << '\t' << targets << '\t' << background_limited << '\t';
+        bool first = true;
+        std::vector<uint64_t> path(c.left.nodes.rbegin(), c.left.nodes.rend());
+        path.insert(path.end(), c.anchor.begin() + 1, c.anchor.end());
+        path.insert(path.end(), c.right.nodes.begin() + 1, c.right.nodes.end());
+        auto edge_list = edge_path(path);
+        std::set<uint64_t> actual_edges(edge_list.begin(), edge_list.end());
+        for (size_t r = 0; r < blocks.size(); ++r) if (std::any_of(block_edges[r].begin(), block_edges[r].end(), [&](auto e) { return actual_edges.count(e); })) {
+            if (!first) out << ';'; first = false;
+            out << blocks[r].edges << ':' << blocks[r].observed << ':' << base.predicted[r] << ':' << blocks[r].noise;
+        }
+        out << '\n';
+    }
+    audit = out.str();
+    for (size_t j = 0; j < outputs; ++j) if (candidates[j].extended) {
+        bool shorter = false;
+        for (size_t a = 0; a < outputs; ++a)
+            if (candidates[a].extended && candidates[a].sequence.size() > candidates[j].sequence.size() &&
+                candidates[a].left.bases.compare(0, candidates[j].left.bases.size(), candidates[j].left.bases) == 0 &&
+                candidates[a].right.bases.compare(0, candidates[j].right.bases.size(), candidates[j].right.bases) == 0) shorter = true;
+        if (!shorter && (chosen == outputs || supported_representative(candidates[j], candidates[chosen]))) chosen = j;
+    }
+    if (chosen != outputs) return candidates[chosen];
+    none.mixture_candidates = outputs; none.mixture_backgrounds = columns - targets; none.mixture_error = base.error;
+    none.reason = base.error > 2. ? "poor_local_mixture_fit" : "unstable_local_mixture";
+    none.limited = background_limited;
+    return none;
+}
+
 int ProtospacerWorkflow::run_seeded() {
     auto seeds = load_extension_seeds();
+    const auto cached_candidates = load_candidate_pool(seeds);
     std::map<std::string, std::string> targets;
     for (const auto &c : seeds) {
         auto sequence = canonical(c.target);
@@ -3136,7 +3615,7 @@ int ProtospacerWorkflow::run_seeded() {
                 "limited\tambiguous\twork\t"
                 "tips_removed\tbubbles_removed\tweak_links_"
                 "removed\tsequence\tleft_counts\tright_counts\t"
-                "left_scored_positions\tright_scored_positions\tleft_branch_bits\tright_branch_bits\tselection_cost\tleft_seed_flow\tright_seed_flow\tleft_remaining_flow\tright_remaining_flow\tsupport_cost\tleft_flow_decisions\tright_flow_decisions\treported\trepresentative_rank\n";
+                "left_scored_positions\tright_scored_positions\tleft_branch_bits\tright_branch_bits\tselection_cost\tleft_seed_flow\tright_seed_flow\tleft_remaining_flow\tright_remaining_flow\tsupport_cost\tleft_flow_decisions\tright_flow_decisions\treported\trepresentative_rank\tmixture_stability\tmixture_abundance\tmixture_error\tmixture_candidates\tmixture_backgrounds\tmixture_origin\n";
     std::vector<std::string> summaries;
     std::unique_ptr<gzFile_s, int (*)(gzFile)> candidate_audit(nullptr, &gzclose);
     if (options_.coverage_method == "lookahead") {
@@ -3144,10 +3623,15 @@ int ProtospacerWorkflow::run_seeded() {
         if (!candidate_audit) throw std::runtime_error("cannot open candidate audit");
         gzputs(candidate_audit.get(), "query_id\ttarget_id\tside\tindex\tscore\tsequence\tseed_begin\tseed_end\tstop\tlimited\n");
     }
+    if (options_.coverage_method == "mixture") {
+        candidate_audit.reset(gzopen((options_.output / "candidate_paths.tsv.gz").c_str(), "wb"));
+        if (!candidate_audit) throw std::runtime_error("cannot open mixture candidate audit");
+        gzputs(candidate_audit.get(), "query_id\ttarget_id\tindex\torigin\tsequence\tseed_begin\tseed_end\tstability\tabundance\tbase_abundance\tfit_error\teligible\tcandidates\tbackgrounds\tmodel_routes\tbackground_limit\tblocks_edges_observed_fitted_noise\n");
+    }
     auto write_metadata = [&](const std::string &status) {
         std::ofstream out(options_.output / "summary.json");
         out.exceptions(std::ios::badbit | std::ios::failbit);
-        out << "{\n\"implementation\":\"protospacer-seeded-local-v5\",\"status\":" << json(status)
+        out << "{\n\"implementation\":\"protospacer-seeded-local-v6\",\"status\":" << json(status)
             << ",\n\"graph\":" << json(options_.graph.string()) << ",\"graph_k\":" << graph_->k()
             << ",\n\"seed_directory\":" << json(options_.extension_seeds.string())
             << ",\"input_starts\":" << seeds.size() << ",\"input_target_sequences\":" << targets.size()
@@ -3163,6 +3647,8 @@ int ProtospacerWorkflow::run_seeded() {
             << ",\"threads\":" << options_.threads
             << ",\n\"score_policy\":\"mean branch surprisal plus read-span-weighted coverage loss; initial window used for calibration only\""
             << ",\n\"lookahead_policy\":\"two read-spans, 256 unitig-entry edges, 512 operations per probe; at most one eighth of query work per flank for probing; first-two-fork family quotas; no hard weak-link pruning; independent prefix selection; top 50 regions\""
+            << ",\n\"candidate_pool\":" << json(options_.candidate_pool.string())
+            << ",\n\"mixture_policy\":\"Huber beam B plus lookahead beam min(256,2B), each with its own query-work budget; graph-verified candidates; all compatible maximal-flank combinations, <=1024 or unresolved; <=64 external-arm backgrounds with round-robin flank slots plus connected known array routes; read-span weighted sparse NNLS, <=12 active routes, <=80 coordinate sweeps; 16 block-noise perturbations; stability>=0.8, normalized error<=2; top50 regions; heuristic, not calibrated probabilities\""
             << ",\n\"flow_policy\":\"unique positive excess-flow continuation; cap by arm depth; no budget replenishment; stop before unresolved split\""
             << ",\n\"representative_policy\":\"lowest worst-flank support cost, then uncertainty, then length; no reference\""
             << ",\n\"weak_link_policy\":\"only after external calibration, and only below the local baseline by max_coverage_fold as well as <=10% neighbor depth\""
@@ -3210,6 +3696,23 @@ int ProtospacerWorkflow::run_seeded() {
                 continue;
             }
             try {
+                if (method == "mixture") {
+                    std::vector<TargetCandidate> pool;
+                    if (options_.candidate_pool.empty()) pool = mixture_candidates(c, work[i]);
+                    else {
+                        auto it = cached_candidates.find(c.query);
+                        if (it != cached_candidates.end()) for (const auto &saved : it->second) {
+                            pool.push_back(replay_candidate(c, saved));
+                            work[i] += saved.sequence.size();
+                        }
+                    }
+                    std::string audit;
+                    c = select_mixture(c, std::move(pool), audit, work[i]);
+                    int written = 0;
+#pragma omp critical(candidate_audit_write)
+                    written = gzwrite(candidate_audit.get(), audit.data(), unsigned(audit.size()));
+                    if (written != int(audit.size())) throw std::runtime_error("cannot write mixture audit");
+                } else {
                 std::vector<ExtensionWalk> left_pool, right_pool;
                 if (method == "lookahead") {
                     c.left = extend_seeded(c.query, c, true, work[i], options_.max_work / 2, &left_pool);
@@ -3333,6 +3836,7 @@ int ProtospacerWorkflow::run_seeded() {
                     written = gzwrite(candidate_audit.get(), text.data(), unsigned(text.size()));
                     if (written != int(text.size())) throw std::runtime_error("cannot write candidate audit");
                 }
+                }
             } catch (const std::exception &e) {
                 errors[i] = e.what();
             }
@@ -3410,7 +3914,7 @@ int ProtospacerWorkflow::run_seeded() {
         for (size_t rank = 0; rank < representatives.size(); ++rank) {
             size_t i = representatives[rank];
             ranks[predictions[i].extension_id] = rank + 1;
-            if (method != "lookahead" || rank < 50)
+            if ((method != "lookahead" && method != "mixture") || rank < 50)
                 fasta << '>' << predictions[i].extension_id << '\n' << predictions[i].sequence << '\n';
         }
         size_t accepted = 0, paired = 0, limited = 0;
@@ -3472,7 +3976,9 @@ int ProtospacerWorkflow::run_seeded() {
                 }
             }
             size_t rank = c.extended ? ranks.at(c.extension_id) : 0;
-            evidence << '\t' << (rank > 0 && (method != "lookahead" || rank <= 50)) << '\t' << rank << '\n';
+            evidence << '\t' << (rank > 0 && ((method != "lookahead" && method != "mixture") || rank <= 50)) << '\t' << rank
+                     << '\t' << c.mixture_stability << '\t' << c.mixture_abundance << '\t' << c.mixture_error
+                     << '\t' << c.mixture_candidates << '\t' << c.mixture_backgrounds << '\t' << c.mixture_origin << '\n';
         }
         evidence.flush();
         double grouping = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
@@ -3481,7 +3987,7 @@ int ProtospacerWorkflow::run_seeded() {
                << ",\"accepted_starts\":" << accepted
                << ",\"accepted_target_sequences\":" << accepted_targets.size()
                << ",\"viral_contig_representatives\":" << representatives.size()
-               << ",\"reported_representatives\":" << (method == "lookahead" ? std::min(size_t(50), representatives.size()) : representatives.size())
+               << ",\"reported_representatives\":" << ((method == "lookahead" || method == "mixture") ? std::min(size_t(50), representatives.size()) : representatives.size())
                << ",\"paired_flank_starts\":" << paired << ",\"limited_starts\":" << limited
                << ",\"extension_seconds\":" << seconds << ",\"grouping_output_seconds\":" << grouping << '}';
         summaries.push_back(result.str());
@@ -3520,6 +4026,27 @@ void ProtospacerWorkflow::self_test() {
     short_supported.left.seed_flow = long_weak.left.seed_flow = 20.;
     short_supported.left.remaining_flow = 18.; long_weak.left.remaining_flow = 2.;
     require(supported_representative(short_supported, long_weak), "support outranks representative length");
+    {
+        // A10 and B30 share a count40 segment; two crossed routes cannot explain
+        // both flanks with two nonnegative abundances.
+        std::vector<CoverageBlock> blocks;
+        const std::vector<std::vector<double>> incidence{{1,0,1,0},{0,1,0,1},{1,1,1,1},{1,0,0,1},{0,1,1,0}};
+        const std::vector<double> observed{10,30,40,10,30};
+        for (size_t i=0; i<observed.size(); ++i) blocks.push_back({incidence[i], observed[i], 1., 4., 127});
+        auto fit = fit_coverage(blocks, 4, observed);
+        require(std::abs(fit.abundance[0]-10.) < 1e-4 && std::abs(fit.abundance[1]-30.) < 1e-4,
+                "joint shared-segment abundance recovery");
+        require(fit.abundance[2] < 1e-4 && fit.abundance[3] < 1e-4 && fit.error < 1e-4,
+                "shared segment does not force a crossover");
+        // Equal-depth crossing has two equally good explanations: no uniqueness claim.
+        std::vector<double> equal{10,10,20,10,10};
+        auto eq = fit_coverage(blocks, 4, equal);
+        auto swapped = blocks;
+        for (auto &b: swapped) std::rotate(b.visits.begin(), b.visits.begin()+2, b.visits.end());
+        auto alt = fit_coverage(swapped, 4, equal);
+        require(std::abs(eq.objective-alt.objective)<1e-6, "equal-depth routes remain non-identifiable");
+    }
+
     for (const auto &method : {"poisson", "negbin", "huber"}) {
         require(count_loss(10, 10, method, 10) == 0., "coverage loss minimum");
         require(count_loss(3, 10, method, 10) > 0. && count_loss(30, 10, method, 10) > 0.,

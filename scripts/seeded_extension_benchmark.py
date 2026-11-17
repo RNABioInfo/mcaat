@@ -15,8 +15,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 METHODS = ("poisson", "negbin", "huber")
-LABELS = {"poisson": "Poisson", "negbin": "Negative binomial", "huber": "Huber log-ratio", "flow": "Flow-guided", "lookahead": "Branch lookahead"}
-COLORS = {"poisson": "#245b91", "negbin": "#b66925", "huber": "#6d5295", "flow": "#16806b", "lookahead": "#245b91"}
+LABELS = {"poisson": "Poisson", "negbin": "Negative binomial", "huber": "Huber log-ratio", "flow": "Flow-guided", "lookahead": "Branch lookahead", "mixture": "Joint local mixture"}
+COLORS = {"poisson": "#245b91", "negbin": "#b66925", "huber": "#6d5295", "flow": "#16806b", "lookahead": "#245b91", "mixture": "#245b91"}
 
 
 def fasta(path):
@@ -111,6 +111,44 @@ def align(records, args, target=False):
         return {key: best[key][1] if key in best else dict(passes=False, reference="", identity=0.,
                 coverage=0., query_begin=0, query_end=0, reference_begin=0, reference_end=0,
                 aligned_bases=0, alignment_length=0, identical_bases=0, bitscore=0.) for key in records}, command
+
+
+def evaluation_cache(directories, reference):
+    """Reuse evaluated exact sequences only, after checking files and database age.
+
+    This cache is opened by the evaluator after prediction, never by MCAAT.
+    """
+    cache, provenance = {}, []
+    db_files = list(reference.parent.glob(reference.name + ".*"))
+    assert db_files, "Reference index not found"
+    for directory in directories:
+        summary = json.loads((directory / "summary.json").read_text())
+        ev = summary["evaluation"]
+        assert ev["reference"] == str(reference.resolve()) and ev["identity"] == .90 and ev["extension_coverage"] == .50 and ev["single_hsp"]
+        paths = [directory / "extensions.tsv"]
+        if (directory / "candidate_paths.tsv.gz").exists(): paths.append(directory / "candidate_paths.tsv.gz")
+        for path in paths:
+            expected = summary["artifact_sha256"][path.name]
+            assert digest(path) == expected, ("Evaluation cache changed", path)
+            assert max(p.stat().st_mtime_ns for p in db_files) < path.stat().st_mtime_ns, "Reference index newer than cached evaluation"
+            opener = gzip.open if path.suffix == ".gz" else open
+            with opener(path, "rt") as stream:
+                for row in csv.DictReader(stream, delimiter="\t"):
+                    if "reference_evaluated" in row and row["reference_evaluated"] != "1": continue
+                    if "reference_pass" not in row: continue
+                    def val(name, kind=float):
+                        key = name if name in row else "reference_" + name
+                        return kind(row.get(key) or 0)
+                    hit = dict(passes=row["reference_pass"] == "1", reference=row.get("reference_record", ""),
+                        identity=val("reference_identity"), coverage=val("reference_coverage"),
+                        query_begin=val("reference_query_begin", int), query_end=val("reference_query_end", int),
+                        reference_begin=val("reference_begin", int), reference_end=val("reference_end", int),
+                        bitscore=val("reference_bitscore"), reused_from=str(path))
+                    seq = canonical(row["sequence"])
+                    if seq in cache: assert cache[seq]["passes"] == hit["passes"], "Conflicting cached classification"
+                    cache[seq] = hit
+            provenance.append(dict(path=str(path), sha256=expected))
+    return cache, provenance
 
 
 def reference_loci(hits):
@@ -618,6 +656,83 @@ def diagnose_lookahead_selection(output, evidence, summary):
             if r["query_id"] in matched and r["reported"] == "1" and reps[r["viral_contig_id"]]["reference_pass"] == "0"])
 
 
+def make_mixture_plots(output, evidence, audit, summary):
+    """Show actual multiplicities and the frozen joint-fit/ranking evaluation."""
+    make_lookahead_plots(output, evidence, summary)
+    import matplotlib.pyplot as plt
+    import numpy as np
+    reps = sorted((r for r in evidence if r["relation_to_representative"] == "representative" and r["reported"] == "1"), key=lambda r: int(r["representative_rank"]))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), constrained_layout=True)
+    axes[0].step(np.arange(1, len(reps)+1), np.cumsum([r["reference_pass"] == "1" for r in reps]), where="post", lw=2.5)
+    axes[0].plot([0, 50], [0, 25], "--", color="#8b9198", label="50% benchmark")
+    axes[0].scatter([50], [25], marker="*", s=130, color="#16806b", label="Goal: 25 of 50")
+    axes[0].set(xlabel="Saved representatives in prediction rank order", ylabel="Cumulative reference matches", xlim=(0, 51), ylim=(0, 30), title="Reference checked after prediction")
+    axes[0].legend(frameon=False)
+    example = reps[0] if reps else None
+    if example:
+        selected = next(r for r in audit if r["query_id"] == example["query_id"] and r["sequence"] == example["sequence"])
+        blocks = [list(map(float, b.split(":"))) for b in selected["blocks_edges_observed_fitted_noise"].split(";") if b]
+        observed = np.array([b[1] for b in blocks]); fitted = np.array([b[2] for b in blocks])
+        sizes = [max(12, b[0]) for b in blocks]
+        axes[1].scatter(observed, fitted, s=sizes, alpha=.65, color="#245b91")
+        high = max(max(observed, default=1), max(fitted, default=1)) * 1.05
+        axes[1].plot([0, high], [0, high], "--", color="#8b9198", label="Perfect fit: y = x")
+        axes[1].set(title=f"{example['query_id']}: joint coverage fit", xlabel="Observed block median multiplicity", ylabel="Fitted multiplicity: sum of route contributions", xlim=(0, high), ylim=(0, high))
+        axes[1].legend(frameon=False)
+    for ax in axes: ax.grid(alpha=.15)
+    fig.savefig(output / "selection.png", dpi=180); plt.close(fig)
+
+
+def write_mixture_report(output, summary):
+    """Report populations, all comparisons, and the limits of this experiment."""
+    ev = summary["evaluation"]; m = ev["methods"]["mixture"]
+    h = m.get("versus_previous_huber", {})
+    look = m.get("versus_lookahead", {})
+    text = f"""# Joint local coverage fitting — one-dataset test
+
+All {summary['input_starts']} saved start records were processed. All {ev['target_count']} candidate protospacer sequences were preserved; {ev['target_matches']} match the reference at 90% identity / 85% query coverage.
+
+| Measure | Result |
+|---|---:|
+| Accepted input/start records | {m['accepted_starts']} |
+| Matching selected input extensions | {m['matched_starts']} |
+| Representative contigs before the cap | {m['pre_cap_representatives']} |
+| Saved representative contigs | {m['representative_contigs']} |
+| Matching saved contigs | {m['matched_representatives']} |
+| Matching input extensions gained versus Huber | {len(h.get('gained_starts', []))} |
+| Matching input extensions lost versus Huber | {len(h.get('lost_starts', []))} |
+| Matching input extensions gained versus lookahead | {len(look.get('gained_starts', []))} |
+| Matching input extensions lost versus lookahead | {len(look.get('lost_starts', []))} |
+
+Extensions require at least 90% identity and 50% **full-query coverage in one HSP**. The matching HSP need not span the protospacer. A matching extension is not proof that the whole contig is correct or a distinct phage. An unmatched extension is not a proven false positive.
+
+## What was done
+
+1. Preserve Huber and lookahead candidates, including independent flanks. For this benchmark, replay a prediction-only cache through the actual graph; reject disconnected sequences and forbidden revisits. Native generation without a cache is also implemented and checked on synthetic graphs.
+2. Form all compatible combinations of maximal flanks for the model, then fit nonnegative abundances of several routes jointly. A full path must compete against full alternatives, not only shorter one-sided paths. Shared edges receive the sum of route contributions. Nearby non-target entry/exit routes and connected source-array routes are nuisance components.
+3. Use consecutive read-span blocks, overdispersed count variance and a penalty on active routes. A bounded greedy solver with coordinate refits approximates the objective; it is not an exact flow decomposition.
+4. Repeat fitting after 16 deterministic block-noise perturbations. Retain routes supported in at least 80% of trials with standardized fit error no greater than 2. Keep a longer supported continuation over its shorter prefix. These thresholds and scores are heuristics, not correctness probabilities.
+5. Select one route per start, group directly overlapping regions, save at most 50 representatives, and only then evaluate against the reference.
+
+## Limits
+
+The candidate pool is bounded and inherits earlier search pruning. Model combinations are capped at 1,024 (otherwise unresolved). Background routes are local and capped at 64 plus known source-array routes; limit flags identify truncated background exploration. This is not a complete metagenome mixture. The graph contains no read linkage that can resolve every repeat. Noise assumptions and stability thresholds have not been calibrated on independent datasets. The existing default method was not replaced.
+
+The 25-of-50 goal was {'met' if m['goal_25_of_50_met'] else 'not met'}. This experiment is not recommended as a replacement for the previous lookahead method (15 matching contigs out of 50).
+
+## Where matching candidates were lost
+
+The retained candidate pool contains matching routes for {ev['decision_stages']['matching_candidate_inputs']} inputs. The filter leaves a matching eligible route for {ev['decision_stages']['matching_eligible_inputs']} of those inputs. Of the rejected matching inputs, {len(ev['decision_stages'].get('matching_inputs_rejected_by_fit_error', []))} fail the global fit-error limit and {len(ev['decision_stages'].get('matching_inputs_rejected_by_stability_or_zero_support', []))} fail the stability/positive-support rule. Selection then loses {len(ev['decision_stages']['inputs_with_matching_eligible_alternative_not_selected'])} more despite an eligible matching alternative, leaving {ev['decision_stages']['selected_matching_inputs']} matching per-input predictions. {len(ev['decision_stages'].get('matching_inputs_assigned_nonmatching_representative', []))} matching input sequences are assigned to a nonmatching representative by the region grouping rule. Remaining overlaps also reduce the count of saved representatives.
+
+All {ev.get('protected_huber_candidates', {}).get('accepted_input_sequences', 0)} previously accepted Huber sequences were retained in the model-eligible candidate audit. The main failure here is filtering/selection, not disappearance of those candidates from the search pool. This does not prove every rejected graph path is wrong or unrecoverable.
+
+A first diagnostic produced 12 matches among 44 saved contigs, but failed the controlled equal-abundance repeat test because it compared complete paths asymmetrically against one-sided alternatives. It was discarded. The reported result uses complete compatible flank combinations and passes that test; no threshold was changed in response to the reference labels.
+
+See `summary.json` for exact gains/losses, provenance, work limits and cached-evaluation verification. `candidate_paths.tsv.gz` contains every graph-verified, length-eligible candidate evaluated by the joint model, its fitting evidence, and reference annotations added afterward. `extensions.tsv` has one row per input/start.
+"""
+    (output / "REPORT.md").write_text(text)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
@@ -626,6 +741,8 @@ def main():
     parser.add_argument("--previous-seeded", type=Path, help="Frozen seeded run to compare against (Huber)")
     parser.add_argument("--reference", type=Path, required=True, help="Local BLAST database prefix")
     parser.add_argument("--blastn", default="blastn")
+    parser.add_argument("--reuse-evaluation", type=Path, action="append", default=[])
+    parser.add_argument("--compare-run", type=Path, action="append", default=[])
     parser.add_argument("--threads", type=int, default=2)
     args = parser.parse_args()
     output = args.output.resolve()
@@ -659,12 +776,12 @@ def main():
                 unique[key] = sequence
                 sequence_ids[sequence] = key
     audit = []
-    if methods == ("lookahead",):
+    if methods in (("lookahead",), ("mixture",)):
         summary.setdefault("frozen_prediction_sha256", {name: digest(output / name) for name in
-            ("extensions.tsv", "candidate_paths.tsv.gz", "viral_contigs_lookahead.fasta", "protospacers.fasta")})
+            ("extensions.tsv", "candidate_paths.tsv.gz", f"viral_contigs_{methods[0]}.fasta", "protospacers.fasta")})
         with gzip.open(output / "candidate_paths.tsv.gz", "rt") as stream:
             audit = list(csv.DictReader(stream, delimiter="\t"))
-        audit.sort(key=lambda row: (row["query_id"], row["side"], int(row["index"])))
+        audit.sort(key=lambda row: (row["query_id"], row.get("side", ""), int(row["index"])))
         for row in audit:
             seq = row["sequence"]
             b, e = int(row["seed_begin"]), int(row["seed_end"])
@@ -676,7 +793,13 @@ def main():
                 unique[key] = sequence
                 sequence_ids[sequence] = key
     print(f"Evaluating {len(unique)} distinct retained extension sequences; paths already fixed.", flush=True)
-    hits, extension_command = align(unique, args)
+    cache, cache_provenance = evaluation_cache(args.reuse_evaluation, args.reference)
+    pending = {key: seq for key, seq in unique.items() if seq not in cache}
+    print(f"Reusing {len(unique)-len(pending)} exact-sequence evaluations; BLASTing {len(pending)} new sequences.", flush=True)
+    fresh_hits, extension_command = align(pending, args)
+    hits = {key: cache[seq] if seq in cache else fresh_hits[key] for key, seq in unique.items()}
+    summary["evaluation_cache"] = dict(files=cache_provenance, reused=len(unique)-len(pending), fresh=len(pending),
+        verification="Source artifact hashes, exact canonical sequences, identical metrics/reference path, reference index older than cache; reference content was not hashed by earlier runs.")
     print(f"Evaluating {len(targets)} unchanged input targets.", flush=True)
     target_hits, target_command = align(targets, args, target=True)
     for row in evidence:
@@ -759,8 +882,24 @@ def main():
             new = {r["query_id"] for r in evidence if r["method"] == method and r["accepted"] == "1" and r["reference_pass"] == "1"}
             evaluation["methods"][method]["versus_previous_huber"] = dict(
                 gained_starts=sorted(new - old), lost_starts=sorted(old - new), retained_starts=sorted(new & old))
-    if methods == ("lookahead",):
-        own = evaluation["methods"]["lookahead"]
+    for directory in args.compare_run:
+        previous = json.loads((directory / "summary.json").read_text())
+        assert previous["status"] == "complete" and len(previous["methods"]) == 1
+        old_method = previous["methods"][0]["method"]
+        assert previous["evaluation"]["reference"] == evaluation["reference"]
+        assert previous["evaluation"]["identity"] == .90 and previous["evaluation"]["extension_coverage"] == .50
+        assert digest(directory / "extensions.tsv") == previous["artifact_sha256"]["extensions.tsv"]
+        old_rows = rows(directory / "extensions.tsv")
+        assert {r["query_id"] for r in old_rows} == tested_queries
+        assert fasta(directory / "protospacers.fasta") == targets
+        old = {r["query_id"] for r in old_rows if r["accepted"] == "1" and r["reference_pass"] == "1"}
+        for method in methods:
+            new = {r["query_id"] for r in evidence if r["method"] == method and r["accepted"] == "1" and r["reference_pass"] == "1"}
+            evaluation["methods"][method]["versus_" + old_method] = dict(directory=str(directory),
+                gained_starts=sorted(new-old), lost_starts=sorted(old-new), retained_starts=sorted(old & new),
+                previous_results=previous["evaluation"]["methods"][old_method])
+    if methods in (("lookahead",), ("mixture",)):
+        own = evaluation["methods"][methods[0]]
         rep_rows = sorted((r for r in evidence if r["relation_to_representative"] == "representative"),
                           key=lambda r: int(r["representative_rank"]))
         own["top_k"] = [dict(requested=n, saved=min(n, len(rep_rows)),
@@ -793,13 +932,35 @@ def main():
                 writer = csv.DictWriter(stream, fieldnames=list(audit[0]), delimiter="\t", lineterminator="\n")
                 writer.writeheader()
                 writer.writerows(audit)
+    if methods == ("mixture",):
+        selected = {r["query_id"]: r for r in evidence}
+        passing_pool = {r["query_id"] for r in audit if int(r["reference_pass"]) == 1}
+        eligible_pool = {r["query_id"] for r in audit if int(r["reference_pass"]) == 1 and r["eligible"] == "1"}
+        chosen_matching = {q for q, r in selected.items() if r["accepted"] == "1" and r["reference_pass"] == "1"}
+        evaluation["decision_stages"] = dict(matching_candidate_inputs=len(passing_pool),
+            matching_eligible_inputs=len(eligible_pool), selected_matching_inputs=len(chosen_matching),
+            inputs_losing_all_matching_candidates_at_filter=sorted(passing_pool-eligible_pool),
+            inputs_with_matching_eligible_alternative_not_selected=sorted(eligible_pool-chosen_matching))
+        stage = evaluation["decision_stages"]
+        stage["matching_inputs_rejected_by_fit_error"] = sorted(q for q in passing_pool-eligible_pool if float(selected[q]["mixture_error"]) > 2)
+        stage["matching_inputs_rejected_by_stability_or_zero_support"] = sorted((passing_pool-eligible_pool)-set(stage["matching_inputs_rejected_by_fit_error"]))
+        representatives = {r["viral_contig_id"]: r for r in evidence if r["relation_to_representative"] == "representative"}
+        stage["matching_inputs_assigned_nonmatching_representative"] = sorted(q for q in chosen_matching if representatives[selected[q]["viral_contig_id"]]["reference_pass"] != "1")
+        if args.previous_seeded:
+            old_rows = [r for r in rows(args.previous_seeded / "extensions.tsv") if r["method"] == "huber" and r["accepted"] == "1"]
+            pool = {(r["query_id"], r["sequence"], int(r["seed_begin"]), int(r["seed_end"])) for r in audit}
+            missing = [r["query_id"] for r in old_rows if (r["query_id"], r["sequence"], int(r["seed_begin"]), int(r["seed_end"])) not in pool]
+            assert not missing, ("Protected Huber candidates lost", missing)
+            evaluation["protected_huber_candidates"] = dict(accepted_input_sequences=len(old_rows), missing=missing)
     summary["evaluation"] = evaluation
     if methods == ("lookahead",):
         diagnose_lookahead_selection(output, evidence, summary)
     summary["input_and_prediction_hashes"] = {str(p.resolve()): digest(p) for p in
         [seed_dir / "queries.tsv", seed_dir / "sources.tsv", seed_dir / "graph_paths.tsv", seed_dir / "candidates.tsv",
          output / "protospacers.fasta", *(output / f"viral_contigs_{m}.fasta" for m in methods)]}
-    if methods == ("lookahead",):
+    if methods == ("mixture",):
+        make_mixture_plots(output, evidence, audit, summary)
+    elif methods == ("lookahead",):
         make_lookahead_plots(output, evidence, summary)
     elif methods == ("flow",):
         make_flow_plots(output, evidence, summary)
@@ -810,7 +971,9 @@ def main():
         writer.writeheader()
         writer.writerows(evidence)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    if methods == ("lookahead",):
+    if methods == ("mixture",):
+        write_mixture_report(output, summary)
+    elif methods == ("lookahead",):
         write_lookahead_report(output, summary)
     elif methods == ("flow",):
         write_flow_report(output, summary)

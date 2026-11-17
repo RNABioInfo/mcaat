@@ -15,7 +15,7 @@
 namespace mcaat::proto {
 
 struct WorkflowOptions {
-    std::filesystem::path arrays, graph, output, protospacers, extension_seeds;
+    std::filesystem::path arrays, graph, output, protospacers, extension_seeds, candidate_pool;
     std::string coverage_method = "negbin";
     double nb_dispersion = 10.;
     size_t min_contig_length = 500;
@@ -79,6 +79,19 @@ struct LocalSegment {
     size_t depth_samples = 0, terminal_indegree = 0;
     bool dead_end = false, complete = false;
 };
+struct SavedExtension {
+    std::string sequence, origin;
+    size_t begin = 0, end = 0;
+};
+struct CoverageBlock {
+    std::vector<double> visits;
+    double observed = 0., noise = 1., weight = 1.;
+    size_t edges = 0;
+};
+struct CoverageFit {
+    std::vector<double> abundance, predicted;
+    double objective = 0., error = 0.;
+};
 struct TargetCandidate {
     size_t query = 0, placement = 0, begin = 0, end = 0, mismatches = 0;
     size_t anchor_prefix = 0;
@@ -94,6 +107,10 @@ struct TargetCandidate {
     double identity = 0, coverage = 0;
     bool detected = false, extended = false, limited = false;
     bool identified = false, allow_crossing = false;
+    bool uses_mixture = false;
+    double mixture_stability = 0., mixture_abundance = 0., mixture_error = 0.;
+    size_t mixture_candidates = 0, mixture_backgrounds = 0;
+    std::string mixture_origin;
 };
 
 // One owner for graph access, detection, extension, filtering and output.
@@ -184,7 +201,8 @@ class ProtospacerWorkflow {
     void score_seeded_walk(ExtensionWalk &walk) const;
     double seeded_walk_score(const ExtensionWalk &walk) const;
     ExtensionWalk extend_seeded(size_t query, const TargetCandidate &candidate, bool backwards, size_t &work,
-                                size_t limit, std::vector<ExtensionWalk> *alternatives = nullptr) const;
+                                size_t limit, std::vector<ExtensionWalk> *alternatives = nullptr,
+                                int lookahead_override = -1, size_t beam_override = 0) const;
     std::vector<double> future_depths(size_t query, uint64_t from, const GraphArc &first, bool backwards,
                                       size_t distance, size_t &work, size_t limit) const;
     static void reserve_branch_families(std::vector<ExtensionWalk> &walks, size_t width);
@@ -196,6 +214,13 @@ class ProtospacerWorkflow {
     ExtensionWalk extend_flow(size_t query, const TargetCandidate &candidate, bool backwards, size_t &work,
                               size_t limit) const;
     std::vector<TargetCandidate> load_extension_seeds() const;
+    std::map<size_t, std::vector<SavedExtension>> load_candidate_pool(const std::vector<TargetCandidate> &seeds) const;
+    TargetCandidate replay_candidate(const TargetCandidate &seed, const SavedExtension &saved) const;
+    std::vector<TargetCandidate> mixture_candidates(const TargetCandidate &seed, size_t &work) const;
+    static CoverageFit fit_coverage(const std::vector<CoverageBlock> &blocks, size_t columns,
+                                   const std::vector<double> &observations);
+    TargetCandidate select_mixture(const TargetCandidate &seed, std::vector<TargetCandidate> candidates,
+                                   std::string &audit, size_t &work) const;
     int run_seeded();
 };
 } // namespace mcaat::proto
