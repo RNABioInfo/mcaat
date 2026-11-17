@@ -26,7 +26,7 @@ struct WorkflowOptions {
     double boundary_support = .85, branch_ratio = 1.5;
     double max_coverage_fold = 2.;
     bool correct_boundaries = true, save_search = false, filter_artifacts = true;
-    bool source_array_crossing = true;
+    bool source_array_crossing = true, expand_candidates = false;
 };
 struct SpacerSource {
     std::string id, array, original_spacer, original_repeat, spacer, repeat;
@@ -70,7 +70,7 @@ struct ExtensionWalk {
     std::vector<FlowDecision> flow_decisions;
     std::vector<uint64_t> branch_family;
     bool uses_lookahead = false;
-    double selection_metric = 0.;
+    double selection_metric = 0., reverse_branch_loss = 0.;
 };
 struct LocalSegment {
     std::vector<GraphArc> arcs;
@@ -83,6 +83,13 @@ struct SavedExtension {
     std::string sequence, origin;
     size_t begin = 0, end = 0;
 };
+struct CandidateEvidence {
+    size_t query = 0, begin = 0, end = 0, left_source = 0, right_source = 0;
+    std::string sequence, origin;
+    std::array<double, 4> features{}; // branch cost, negative coding, negative array/target support
+    double rank = 0.;
+    bool limited = false;
+};
 struct CoverageBlock {
     std::vector<double> visits;
     double observed = 0., noise = 1., weight = 1.;
@@ -94,7 +101,8 @@ struct CoverageFit {
 };
 struct TargetCandidate {
     size_t query = 0, placement = 0, begin = 0, end = 0, mismatches = 0;
-    size_t anchor_prefix = 0;
+    size_t anchor_prefix = 0, evidence_rank = size_t(-1);
+    double evidence_score = -1., array_support = -1., target_support = -1.;
     std::vector<uint64_t> anchor;
     std::string target, sequence, status = "rejected", reason, target_id, extension_id;
     ExtensionWalk left, right, withheld;
@@ -215,8 +223,16 @@ class ProtospacerWorkflow {
                               size_t limit) const;
     std::vector<TargetCandidate> load_extension_seeds() const;
     std::map<size_t, std::vector<SavedExtension>> load_candidate_pool(const std::vector<TargetCandidate> &seeds) const;
-    TargetCandidate replay_candidate(const TargetCandidate &seed, const SavedExtension &saved) const;
+    TargetCandidate replay_candidate(const TargetCandidate &seed, const SavedExtension &saved, bool branch_evidence = false) const;
+    void add_evidence_windows(std::vector<TargetCandidate> &candidates) const;
+    std::vector<TargetCandidate> evidence_candidates(const TargetCandidate &seed, size_t &work) const;
     std::vector<TargetCandidate> mixture_candidates(const TargetCandidate &seed, size_t &work) const;
+    TargetCandidate select_evidence(const TargetCandidate &seed, std::vector<TargetCandidate> candidates,
+                                    std::string &audit, size_t &work, std::vector<CandidateEvidence> *evidence = nullptr) const;
+    void select_evidence_regions(const std::vector<TargetCandidate> &seeds,
+                                 std::vector<std::vector<CandidateEvidence>> &evidence,
+                                 std::vector<TargetCandidate> &predictions) const;
+    static double coding_evidence(const std::string &sequence);
     static CoverageFit fit_coverage(const std::vector<CoverageBlock> &blocks, size_t columns,
                                    const std::vector<double> &observations);
     TargetCandidate select_mixture(const TargetCandidate &seed, std::vector<TargetCandidate> candidates,

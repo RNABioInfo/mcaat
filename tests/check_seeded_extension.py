@@ -211,7 +211,87 @@ def check_lookahead(binary):
                 assert a[field] == b[field], (field, a, b)
         assert all(hashlib.sha256(p.read_bytes()).hexdigest() == sha for p, sha in hashes.items())
         print("PASS: mixture live generation/replay agree; linear reconstruction, retained targets, graph spelling and graph immutability verified.")
+        run(base + ["--extension-seeds", str(root / "seeds"), "--coverage-method", "evidence",
+                    "--candidate-pool", str(cache), "--output", str(root / "evidence")])
+        assert fasta(root / "evidence/protospacers.fasta") == targets
+        with gzip.open(root / "evidence/candidate_paths.tsv.gz", "rt") as stream:
+            scored = list(csv.DictReader(stream, delimiter="\t"))
+        assert scored
+        for row in scored:
+            assert float(row["bidirectional_branch_cost"]) + 1e-6 >= float(row["branch_mean"]) >= 0.
+            assert float(row["reverse_branch_cost"]) >= 0. and float(row["coding_score"]) >= 0.
+            n = sum(len([v for v in row[side+"_scored_positions"].split(",") if v]) for side in ("left", "right"))
+            assert int(row["external_bases"]) == n
+        print("PASS: reference-free candidate branch/coverage/coding evidence; all targets preserved.")
+        run(base + ["--extension-seeds", str(root / "seeds"), "--coverage-method", "evidence",
+                    "--candidate-pool", str(cache), "--expand-candidates", "true", "--output", str(root / "expanded")])
+        assert fasta(root / "expanded/protospacers.fasta") == targets
+        with gzip.open(root / "expanded/candidate_paths.tsv.gz", "rt") as stream:
+            expanded = list(csv.DictReader(stream, delimiter="\t"))
+        old = {(r["query_id"],r["sequence"],r["seed_begin"]) for r in scored}
+        new = {(r["query_id"],r["sequence"],r["seed_begin"]) for r in expanded}
+        assert old <= new, old-new
+        assert any(r["origin"].startswith("bidirectional") for r in expanded)
+        for r in expanded:
+            b,e=int(r["seed_begin"]),int(r["seed_end"])
+            assert b<=750 and len(r["sequence"])-e<=750
+            assert canonical(r["sequence"][b:e]) == targets[r["target_id"]]
+        assert all(hashlib.sha256(p.read_bytes()).hexdigest() == sha for p,sha in hashes.items())
+        print("PASS: expanded search preserves cached candidates and targets; bounded flanks and immutable graph.")
 
+
+
+
+def check_evidence_cap(binary):
+    """Eligible candidates omitted by the output cap must remain valid audit rows."""
+    rng = random.Random(2026111709)
+    dna = lambda n: "".join(rng.choice("ACGT") for _ in range(n))
+    with tempfile.TemporaryDirectory(prefix="mcaat-output-cap-") as temporary:
+        root = Path(temporary)
+        arrays = root / "arrays"
+        arrays.mkdir()
+        cases = [(dna(32), dna(35), dna(1050), dna(1050)) for _ in range(51)]
+        (arrays / "CRISPR_Arrays_1.txt").write_text("".join(
+            f">Array_{i}\n{repeat}\n{'-' * 32}\t{spacer}\n"
+            for i, (repeat, spacer, left, right) in enumerate(cases)))
+        reads = root / "reads.fasta"
+        reads.write_text("".join(f">case_{i}_{copy}\n{left + spacer + right}\n"
+            for i, (_, spacer, left, right) in enumerate(cases) for copy in range(3)))
+        (root / "graph_build/graph").mkdir(parents=True)
+        def run(command):
+            result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            assert result.returncode == 0, result.stdout[-10000:]
+        for command in graph_commands(root, binary, reads).values():
+            run(command)
+        graph = root / "graph_build/graph/graph"
+        base = [str(binary), "phage-curate", "--arrays", str(arrays), "--graph", str(graph),
+                "--threads", "2", "--max-flank-length", "750", "--correct-spacer-boundaries", "false",
+                "--min-identity", "1", "--min-query-coverage", "1", "--filter-extension-artifacts", "false"]
+        run(base + ["--output", str(root / "seeds")])
+        seeds = table(root / "seeds/candidates.tsv")
+        eligible = [r for r in seeds if r["status"] in ("detected", "extended")]
+        assert len(eligible) == 51
+        molecules = {canonical(spacer): left + spacer + right for _, spacer, left, right in cases}
+        cache = root / "candidates.tsv.gz"
+        with gzip.open(cache, "wt") as stream:
+            stream.write("query_id\tsequence\tseed_begin\tseed_end\torigin\n")
+            for row in eligible:
+                molecule = molecules[canonical(row["sequence"])]
+                if molecule[1050:1085] != row["sequence"]:
+                    molecule = reverse_complement(molecule)
+                stream.write(f"{row['query_id']}\t{molecule[300:1835]}\t750\t785\tlinear\n")
+        run(base + ["--extension-seeds", str(root / "seeds"), "--candidate-pool", str(cache),
+                    "--coverage-method", "evidence", "--output", str(root / "result")])
+        rows = table(root / "result/extensions.tsv")
+        assert len(rows) == 51 and sum(r["accepted"] == "1" for r in rows) == 51
+        assert sum(r["reported"] == "1" for r in rows) == 50
+        assert all(float(r["array_support"]) == 0. and float(r["target_support"]) == 0.
+                   for r in rows if r["reported"] == "1"), "Independent sequences must not manufacture cross-support"
+        withheld = [r for r in rows if r["reported"] == "0"]
+        assert len(withheld) == 1 and withheld[0]["relation_to_representative"] == "candidate_not_saved"
+        assert len(fasta(root / "result/protospacers.fasta")) == 51
+        assert len(fasta(root / "result/viral_contigs_evidence.fasta")) == 50
+        print("PASS: 51 eligible inputs, 50 saved contigs, complete unsaved-candidate audit, all targets preserved.")
 
 
 def main():
@@ -219,8 +299,12 @@ def main():
     parser.add_argument("binary", type=Path)
     parser.add_argument("--flow", action="store_true", help="Run the flow-specific controlled graphs")
     parser.add_argument("--lookahead", action="store_true")
+    parser.add_argument("--evidence-cap", action="store_true")
     args = parser.parse_args()
     binary = args.binary.resolve()
+    if args.evidence_cap:
+        check_evidence_cap(binary)
+        return
     if args.lookahead:
         check_lookahead(binary)
         return

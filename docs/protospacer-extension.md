@@ -4,9 +4,9 @@ MCAAT searches an existing de Bruijn graph for a possible target of an array spa
 
 In ordinary discovery mode (v9), final protospacers require an accepted extension. `Protospacers.fasta` and `associations.tsv` contain only targets supported by a saved region in `ContiguousPaths.fasta`. Detection without an accepted extension is retained in `CandidateProtospacers.fasta` and `candidate_associations.tsv` for diagnosis. The candidate FASTA includes the final targets; do not add these two counts together. The new seeded comparison mode below preserves every input candidate independently of extension success.
 
-## Extend from saved starts: three coverage models
+## Extend from saved starts
 
-This mode starts at the actual saved protospacer graph nodes. It constructs **only local paths, up to 750 added bases on each side**, without whole-graph assembly or rebuilding the graph. A full result contains the target plus up to 1,500 flank bases. It compares the same starts under three models, loading the graph once:
+This mode starts at the actual saved protospacer graph nodes. It constructs **only local paths, up to 750 added bases on each side**, without whole-graph assembly or rebuilding the graph. A full result contains the target plus up to 1,500 flank bases. The `evidence` mode generates competing routes, scores shared external sequence across targets and arrays, and preserves all input targets:
 
 ```bash
 build/mcaat phage-curate \
@@ -14,13 +14,58 @@ build/mcaat phage-curate \
   --graph /path/to/graph/graph \
   --extension-seeds /path/to/previous_workflow_output \
   --output /path/to/new_seeded_results \
-  --coverage-method all --max-flank-length 750 \
-  --min-contig-length 500 --threads 24
+  --coverage-method evidence --max-flank-length 750 \
+  --min-contig-length 500 --beam-width 64 --max-context-paths 256 --threads 24
 ```
 
 `--extension-seeds` requires the existing `queries.tsv`, `sources.tsv`, `candidates.tsv` and `graph_paths.tsv` together. All detected/extended saved starts are used, including those without an earlier accepted extension. Query sequences and corrected source boundaries must match the array input; every anchor must spell its target on the loaded graph. This format currently supports one saved placement per query. This is an extension comparison, not a new test of discovery sensitivity across every possible graph placement.
 
-Choose one model with `--coverage-method poisson`, `negbin` or `huber`. `all` runs them sequentially with identical limits. This option acts in seeded mode; ordinary discovery still uses the documented v9 workflow below.
+For the earlier coverage-model comparison, choose `--coverage-method poisson`, `negbin` or `huber`. `all` runs those three sequentially with identical limits; it does not include the evidence selector. This option acts in seeded mode; ordinary discovery still uses the documented v9 workflow below.
+
+### Select supported extension regions
+
+Use `--coverage-method evidence` with the same saved starts. The native workflow preserves every protospacer, generates local candidates from the existing graph, and saves at most 50 nonredundant extension regions. No reference sequence, external assembler or gene caller is used to choose a path.
+
+The bounded generator keeps the Huber result and its retained flanks, plus lookahead terminal routes, prefixes and the selected compatible pair. Huber uses the requested beam width (64 by default); lookahead uses twice that width, capped at 256. They have separate query-work budgets. The graph is read-only. Source nodes cannot be revisited; other nodes retain the existing bounded-repeat rule. Actual graph spelling, source masks, technical-sequence barriers, sufficient external sequence and the 750-base per-side limit remain enforced.
+
+Keep complete candidates and add seed-containing windows of 500 and 625 bp at the default limits: one facing left, one facing right and one centered on the target, where those windows fit. More generally, use `min_contig_length` and `(min_contig_length + max_flank_length)/2`. The target and its complete graph anchor must remain inside every window. Shortening a candidate never joins disconnected graph segments.
+
+Rank candidates by external sequence supported by **distinct canonical protospacers** and **distinct source arrays**. Index every canonical `(2*k+5)`-base word outside the source mask (51 bases at k=23). Each target and each array votes once per word, regardless of how many competing path variants contain it. For a candidate's distinct external words W, calculate:
+
+```
+target_support = mean(log2(number of distinct targets supporting w))  for w in W
+array_support  = mean(log2(number of distinct source arrays supporting w))
+```
+
+Average the percentile midranks of these two support features, preferring higher support. First retain five distinct candidate families per input; then rank those families globally and choose up to 50 regions, with at most one contig per target. The existing direct 90%-shared-graph-run / 95%-overlap-identity grouping rule remains in force. Equal scores prefer lower mean raw branch penalty, then longer sequence and deterministic sequence/query ordering. Feature values and combined ranks use nine-decimal rounding for stable ties. Stop-free coding potential and other multiplicity features remain diagnostic audit columns; they do not contribute to this final support score.
+
+The rationale is that competing branches reached from different spacer targets can corroborate an external sequence, while counting each target/array once prevents a large candidate pool from manufacturing votes. Multiple spacer hits have also been associated with more reliable virus–host links in [Roux et al. (2026)](https://pmc.ncbi.nlm.nih.gov/articles/PMC13739734/). Our shared-path score is an inference inspired by that idea: it uses graph candidates, not their reference alignments, and is neither that paper's method nor a calibrated probability. Related arrays, host sequence and shared repeats can still create correlated support.
+
+`evidence_rank`, `evidence_score`, `target_support` and `array_support` identify saved choices and their support. Support values are −1 when no globally selected choice was assigned. Eligible but unsaved candidates have `candidate_not_saved` and rank −1; they do not count as FASTA outputs. All original targets remain in `protospacers.fasta`. The candidate audit retains per-position multiplicities, source-mask boundaries and branch/coding features. Retained alternative families are marked as competing routes rather than silently described as unique.
+
+An optional five-column `--candidate-pool` replays frozen graph-generated candidates. Every route is checked against the actual graph. Evaluation columns are rejected. Evidence mode accepts at most 512 cached rows per input; mixture mode retains its 256-row bound. A cache omits original search-limit flags, which is recorded by `original_search_limits_known: false`; replay is not proof of exhaustive graph search.
+
+`--expand-candidates true` is a separate experimental comparison. It preserves the base pool and adds bidirectional-support and local-variation searches, with an endpoint/abundance-stratified beam and postponed twofold coverage gate. The broader pool did not improve the measured result; it is not part of the recommended bounded method.
+
+| Function | Responsibility |
+|---|---|
+| `mixture_candidates` | Generate the protected Huber and lookahead base pool; Huber uses width B and lookahead uses min(256, 2*B). |
+| `add_evidence_windows` | Trim actual graph walks to the fixed seed-containing windows while keeping full candidates. |
+| `evidence_candidates` | Add the two optional broader searches, preserving bounded repeats and source-node barriers. |
+| `select_evidence` | Replay graph routes, calculate source-masked features and write the compact audit. |
+| `coding_evidence` | Compare the longest stop-free run on either strand with a composition-adjusted background; this is not gene calling. |
+| `select_evidence_regions` | Count distinct target/array support, rank local families, then save nonredundant globally ranked regions with one contig per target. |
+| `same_graph_region` | Apply the unchanged grouping criterion using an exact central-core search; exhaustive-offset tests check equivalence. |
+
+Run `tests/check_seeded_extension.py build/mcaat --lookahead` for route preservation, source masks, replay and window bounds. `--evidence-cap` tests 51 eligible inputs, 50 outputs, a complete omitted-candidate row and preservation of all 51 targets. The original three-model fixtures remain applicable.
+
+Evaluate a completed run with `scripts/evaluate_protospacer_evidence.py`. Its `load_hit_cache` checks frozen prediction hashes before reusing evaluations; `figures` plots top-K matches, the logarithmic shared-word support function and observed multiplicities; `main` validates inputs/FASTA counts, evaluates the frozen outputs, computes gains/losses and writes the report. The predictor never reads the reference or these evaluation columns.
+
+**SRR14017553, direct native run (2026-11-17):** all **164 starts** were processed and all **159 input protospacers** preserved. The workflow generated 12,179 eligible route/window candidates and saved **50 contigs, 29 matching** the curated reference at 90% identity / 50% full-query coverage in one HSP. The strongest earlier saved-output baseline had **15/50** matches; fresh BLAST searches confirmed both sets. Saved matching inputs: **22 gained, 8 lost, 7 retained**. The short targets retain **53/159** matches at 90% identity / 85% coverage.
+
+The saved contigs are **500–791 bp**, with at most 750 added bases per side; this result favors supported partial regions and does not establish reconstruction of both complete flanks. Best qualifying HSPs span **seven overlapping reference intervals across six records**, not 29 independent phage genomes. This is a development result on one dataset: the reference was used after prediction to compare methods, and a held-out dataset has not validated the selected method.
+
+The tested executable generated routes directly from the existing graph, without a candidate cache. Its 12,179 candidates matched the preceding direct-run control exactly, and its final 50 choices matched the frozen selector experiment exactly. Prediction used four local threads, took **8.9 minutes**, and peaked at **2.62 GiB** sampled RSS. All 27 graph components retained their original SHA-256 hashes, sizes and modification times. Controlled graph tests covered route replay, bounded flanks, source masks, preservation of targets, output capping and zero cross-support for unrelated targets.
 
 ### Joint local coverage fitting (experimental)
 
