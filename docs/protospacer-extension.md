@@ -22,6 +22,29 @@ build/mcaat phage-curate \
 
 Choose one model with `--coverage-method poisson`, `negbin` or `huber`. `all` runs them sequentially with identical limits. This option acts in seeded mode; ordinary discovery still uses the documented v9 workflow below.
 
+### Flow-guided extension and stopping at ambiguity
+
+Use the same command with `--coverage-method flow`. This experimental mode follows one supported prefix from each saved anchor. It does not use a beam to guess across an unresolved split. `all` retains its original meaning (the three coverage-loss models).
+
+Initial support `F` is the minimum observed multiplicity along the complete saved anchor. A one-node anchor uses the smaller total of its incoming and outgoing multiplicities. Probe nonbranching arms only within the remaining 750-bp flank budget. An arm's mean multiplicity supplies its weight `c[i]`; when it contains masked source-repeat positions, use its first edge count instead. At each junction:
+
+```
+leak[i] = sum(c[j] for j != i)
+next[i] = min(c[i], F - leak[i])
+```
+
+Continue only when **exactly one** `next[i]` is positive. Several positive continuations cause `unresolved_flow_branch`; none cause `insufficient_seed_flow`. Both stops occur before adding the next edge, leaving the supported prefix intact. Set `F` to the chosen residual. Merges and high-copy repeats never replenish it. Genuine short tips are removed locally. A reconverging sequence bubble is simplified only when its strongest arm exceeds the runner-up by `--branch-ratio` (default 1.5); tied variants stay unresolved. Other weak arms consume flow rather than being silently discarded.
+
+The excess-flow idea follows [Sena et al., Flowtigs (2024)](https://doi.org/10.1016/j.isci.2024.111208). Unitig depth estimates, the cap on residual flow, local graph simplifications and requiring a unique continuation are our conservative adaptations. This is **not exhaustive flowtig enumeration or a correctness guarantee for noisy sequencing counts**. Real counts need not obey flow conservation, and several genuine continuations can share one anchor. Either condition can cause early termination. No reference is consulted by this code.
+
+Keep the existing source-crossing, source-revisit, bounded-repeat and technical-sequence barriers. When sides conflict, prefer the side retaining a larger fraction of its seed support, then length. As in the comparison modes, output requires at least 500 total bases and sufficient external coverage. All 159 input targets in the development set remain in the target FASTA regardless of this minimum; shorter attempted extensions remain in the evidence table.
+
+Representative selection now ranks the **worst flank's support** before search truncation, ambiguity, relative-count variation and length. For flow, cost is `1 - remaining_flow / seed_flow`; for the other modes it is branch surprisal per external position. Taking the worse flank prevents a strong side from diluting a weak side. A longer prediction no longer wins merely by being longer. This ranking is evidence-based, not a probability of correctness.
+
+`extensions.tsv` adds initial/residual flow, representative support cost and both decision traces. A trace entry is `position:node:incoming:outgoing_weights:choice:remaining`. Position is the number of added bases before the decision; weights are in retained-arm order; choice −2 means multiple supported arms, −1 means none. The retained prefix excludes that unresolved edge. Trimming restores the prefix's flow evidence rather than retaining decisions from discarded sequence.
+
+Use `python3 tests/check_seeded_extension.py build/mcaat --flow` for four controlled graphs: a linear route, an unresolved split, a supported split and high-copy count inflation. Native self-tests also verify the formula and that support outranks representative length. To compare a completed flow run against a frozen Huber run, add `--previous-seeded /path/to/three_model_results` to the evaluation command below. This reuses the same identity/coverage definition and reports exact gained/lost input IDs.
+
 ### Shared graph rules
 
 Follow unitigs directly from the target; at branches, probe only within the remaining flank budget. Apply local versions of the vendored MEGAHIT rules:
@@ -73,7 +96,7 @@ Group directly to a representative when at least 90% of the shorter graph-node p
 
 ### Function guide and checks
 
-All search logic remains in `ProtospacerWorkflow`; `LocalSegment` only stores probe data.
+All search logic remains in `ProtospacerWorkflow`; `LocalSegment` and `FlowDecision` only store evidence.
 
 | Function | Responsibility |
 |---|---|
@@ -86,12 +109,16 @@ All search logic remains in `ProtospacerWorkflow`; `LocalSegment` only stores pr
 | `extend_seeded` | Apply local graph rules, explore bounded alternatives, filter and select one actual flank. |
 | `same_graph_region` | Test direct representative grouping using shared graph-node runs and sequence identity. |
 | `run_seeded` | Run the methods on identical starts, validate joined walks, group results and save compact outputs. |
+| `flow_choice` | Compute residual support for each arm and require a unique positive continuation. |
+| `extend_flow` | Follow a single prefix with local simplifications, flow accounting and explicit ambiguity stops. |
+| `support_cost` | Measure the least-supported retained flank without rewarding extra length. |
+| `supported_representative` | Rank actual predictions by support, uncertainty, variation, then length. |
 
 `tests/check_seeded_extension.py` builds a small temporary graph and checks both 750-base flanks, target preservation, bubble/tip/weak-link handling, source masking, bounded probes, and unchanged graph files. It also checks that a weak flat count-1 branch cannot displace a supported count-21 continuation after a low-count source exit, and that a rare correct arm survives an abundant neighbor both before and after calibration. `phage-curate --self-test` checks the loss formulas and region grouping. Temporary fixtures are removed automatically.
 
 `scripts/seeded_extension_benchmark.py` evaluates an already completed three-method run against a **local** BLAST database, adds per-start reference evidence to the existing table, and creates `coverage_models.png` and `multiplicities.png`. It never changes prediction paths or uses the reference during search. It compares matched starts with an earlier run and records exact gained/lost query IDs. The criterion is one HSP with at least 90% identity and 50% of the entire extension query covered; targets use 85% coverage. Unmatched candidates are not thereby proven false, and overlapping reference loci are not independent phage discoveries.
 
-The benchmark helpers have narrow roles: `fasta`/`rows` load records and tables, `canonical` normalizes strand, and `digest` fingerprints inputs. `same_region` mirrors native grouping so the baseline is counted consistently and each new association can be checked. `align` streams HSPs and retains the best qualifying match, or the best nonqualifying match when none passes. `reference_loci` groups overlapping best-hit intervals. `make_plots` draws the mathematical losses and observed traces; `write_report` writes the count tables and limitations. `main` verifies the unchanged input set, performs evaluation, and saves the augmented evidence and summary.
+The benchmark helpers have narrow roles: `fasta`/`rows` load records and tables, `canonical` normalizes strand, and `digest` fingerprints inputs. `same_region` mirrors native grouping so the baseline is counted consistently and each new association can be checked. `align` streams HSPs and retains the best qualifying match, or the best nonqualifying match when none passes. `reference_loci` groups overlapping best-hit intervals. `make_plots` draws the mathematical losses and observed traces; `write_report` writes the count tables and limitations. `main` verifies the unchanged input set, performs evaluation, and saves the augmented evidence and summary. `make_flow_plots` draws excess-flow curves and measured multiplicities; `write_flow_report` reports strict-flow outcomes and gains/losses against frozen Huber results. `check_flow` in the existing test script builds and removes the four controlled fixtures.
 
 Run the controlled check with `python3 tests/check_seeded_extension.py build/mcaat`. For a completed three-method run, evaluate with:
 
@@ -104,7 +131,7 @@ python3 scripts/seeded_extension_benchmark.py /path/to/new_seeded_results \
 
 ### Measured development result: SRR14017553
 
-All three models were tested on the same 164 saved query/start records: 160 distinct oriented anchor paths and 159 candidate target sequences, originating from 398 distinct corrected spacers. All 159 targets were preserved. Extension matches require one HSP at 90% identity and 50% coverage of the whole predicted sequence; the reference was used only after prediction.
+The v3 comparison below predates the support-first representative change. All three models were tested on the same 164 saved query/start records: 160 distinct oriented anchor paths and 159 candidate target sequences, originating from 398 distinct corrected spacers. All 159 targets were preserved. Extension matches require one HSP at 90% identity and 50% coverage of the whole predicted sequence; the reference was used only after prediction.
 
 | Method | Representative contigs | Matching representatives | Matching input records | Gained / lost records |
 |---|---:|---:|---:|---:|
@@ -116,6 +143,10 @@ All three models were tested on the same 164 saved query/start records: 160 dist
 Huber performed best among the three models but produced **no net increase in matching input records**. Multiple input records can describe the same region; representative contigs are partial candidate regions, not counts of distinct phages. The earlier workflow retained one flank, whereas these methods can join both; this changes the coverage denominator. This is a development comparison on one dataset, not independent validation or a reason to replace the ordinary workflow by default.
 
 All three searches together took 10.24 minutes with 2 threads and 2.54 GiB peak RSS. Accepted contigs were 773–1546 bp. The graph remained unchanged. Controlled tests passed for eight cases under each model. Early weak-link pruning was corrected after tracing 30 lost matching routes: source-exit branches must survive until the external baseline is established. Search limits and ambiguity remain recorded in the output table.
+
+The subsequent strict flow test processed all 164 records and preserved all 159 targets, but only four records reached the output requirements. They produced three representative contigs, one matching the reference, representing two matching input records. Against the frozen Huber run this is **0 gained, 58 lost, 2 retained**. Stops across both sides were mostly exhausted support (192) or multiple supported continuations (70). The method is too restrictive for this graph; it remains opt-in. These results do not establish that the discarded routes are absent: the conservative rule refuses to choose among them.
+
+An isolated representative-selection control reran Huber on all 164 inputs. Every per-input sequence and acceptance decision was identical to v3. Support-first grouping yielded **44 representatives / 8 reference matches**, versus 51 / 8 previously; all 60 matching input records remained. This changes saved representatives, not the underlying predicted paths. Existing reference evidence was reused only after exact sequence verification. The new strict-flow run took 1.48 minutes including initialization, with 2 threads and 2.34 GiB peak sampled RSS.
 
 ## Run on an existing graph
 

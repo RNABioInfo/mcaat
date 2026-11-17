@@ -149,6 +149,12 @@ autoclean=true
   multiplicities remain in one evidence table. No whole-metagenome assembly or
   reference-guided selection. See [commands, formulas, outputs and function
   guide](docs/protospacer-extension.md#extend-from-saved-starts-three-coverage-models).
+- **Flow-guided extension (experimental)**: `--coverage-method flow` follows
+  only a uniquely supported continuation and stops before unresolved branches.
+  Representative selection ranks support before length. On the 164-start
+  development set this strict rule retained only 2 matching inputs versus 60
+  with Huber; it is available for evaluation, not enabled by default. All 159
+  candidate protospacers remain saved. See the [flow rule and tests](docs/protospacer-extension.md#flow-guided-extension-and-stopping-at-ambiguity).
 - **CAS detection**: identify and annotate CAS genes flanking detected CRISPR arrays.
 - **Protospacer workflow (experimental)**: one native class performs connected
   spacer alignment, source-context and sequence-artifact filtering, bounded beam

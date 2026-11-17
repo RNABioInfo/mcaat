@@ -14,8 +14,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 METHODS = ("poisson", "negbin", "huber")
-LABELS = {"poisson": "Poisson", "negbin": "Negative binomial", "huber": "Huber log-ratio"}
-COLORS = {"poisson": "#245b91", "negbin": "#b66925", "huber": "#6d5295"}
+LABELS = {"poisson": "Poisson", "negbin": "Negative binomial", "huber": "Huber log-ratio", "flow": "Flow-guided"}
+COLORS = {"poisson": "#245b91", "negbin": "#b66925", "huber": "#6d5295", "flow": "#16806b"}
 
 
 def fasta(path):
@@ -333,11 +333,147 @@ def write_report(output, summary):
     (output / "REPORT.md").write_text("\n".join(lines))
 
 
+def make_flow_plots(output, evidence, summary):
+    """Show the flow rule and observed results after paths have been fixed."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), constrained_layout=True)
+    leakage = np.linspace(0, 60, 301)
+    for initial, color in ((10, "#b66925"), (30, "#245b91"), (50, "#16806b")):
+        axes[0].plot(leakage, initial - leakage, color=color, lw=2, label=f"Initial flow {initial}")
+    axes[0].axhline(0, color="#555555", ls="--", lw=1)
+    axes[0].axhspan(-60, 0, color="#eeeeee")
+    axes[0].set(xlabel="Cumulative competing-exit flow", ylabel="Excess flow = initial − leakage",
+                title="Continue only with one positive continuation", ylim=(-20, 52), xlim=(0, 60))
+    axes[0].legend(frameon=False)
+    representatives = [r for r in evidence if r["relation_to_representative"] == "representative"]
+    for passed, color in ((False, "#949da6"), (True, "#16806b")):
+        subset = [r for r in representatives if (r["reference_pass"] == "1") == passed]
+        fractions = [1 - float(r["support_cost"]) for r in subset]
+        if fractions:
+            axes[1].hist(fractions, bins=np.linspace(0, 1, 21), histtype="step", lw=2, color=color,
+                         label="Reference match" if passed else "No qualifying match")
+    axes[1].set(xlabel="Worst retained flank: remaining / initial flow", ylabel="Representative contigs",
+                xlim=(0, 1), title="Measured support; references evaluated afterward")
+    if representatives: axes[1].legend(frameon=False)
+    for ax in axes: ax.grid(alpha=.15)
+    fig.suptitle("Flow-guided extension: competing exits consume seed support", fontsize=14)
+    fig.savefig(output / "flow_support.png", dpi=180)
+    plt.close(fig)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), constrained_layout=True)
+    populations = {True: [], False: []}
+    for row in representatives:
+        for side in ("left", "right"):
+            counts = [float(x) for x in row[f"{side}_counts"].split(",") if x]
+            positions = [int(x) for x in row[f"{side}_scored_positions"].split(",") if x]
+            populations[row["reference_pass"] == "1"].extend(counts[p - 1] for p in positions)
+    maximum = max([v for values in populations.values() for v in values] or [2])
+    for passed, color in ((False, "#949da6"), (True, "#16806b")):
+        values = populations[passed]
+        if values:
+            axes[0].hist(values, bins=np.geomspace(1, max(2, maximum + 1), 35),
+                         weights=np.ones(len(values)) / len(values), histtype="step", lw=2,
+                         color=color, label="Reference match" if passed else "No qualifying match")
+    axes[0].set_xscale("log")
+    axes[0].set(xlabel="External edge multiplicity", ylabel="Fraction of positions / bin",
+                title="Observed multiplicities of saved representatives")
+    if representatives: axes[0].legend(frameon=False)
+    example = min(representatives or evidence, key=lambda r: r["query_id"])
+    summary["plot_example_query"] = example["query_id"]
+    summary["plot_example_policy"] = "First saved representative by query ID; no reference-dependent example selection."
+    seed_length = int(example["seed_end"]) - int(example["seed_begin"])
+    for side, color in (("left", "#245b91"), ("right", "#b66925")):
+        counts = np.array([float(x) for x in example[f"{side}_counts"].split(",") if x])
+        padding = int(example["left_bp"]) - len(counts) if side == "left" else 0
+        xs = -padding - np.arange(1, len(counts) + 1) if side == "left" else seed_length + np.arange(len(counts))
+        if len(counts): axes[1].plot(xs, counts, color=color, lw=1.5, label=f"{side.capitalize()} flank")
+    axes[1].axvspan(0, seed_length, color="#64845b", alpha=.18)
+    axes[1].set(xlabel="Position relative to target start (bp)", ylabel="Edge multiplicity",
+                title=f"{example['query_id']}: actual retained path", xlim=(-750, seed_length + 750))
+    axes[1].set_yscale("symlog", linthresh=1)
+    axes[1].set_ylim(bottom=0)
+    if example["left_counts"] or example["right_counts"]: axes[1].legend(frameon=False)
+    for ax in axes: ax.grid(alpha=.15)
+    fig.suptitle("Observed graph counts; the 750-bp limit is a maximum", fontsize=14)
+    fig.savefig(output / "multiplicities.png", dpi=180)
+    plt.close(fig)
+
+
+def write_flow_report(output, summary):
+    e = summary["evaluation"]
+    r = e["methods"]["flow"]
+    previous = e.get("previous_huber", {})
+    delta = r.get("versus_previous_huber", {})
+    lines = ["# Flow-guided extension: SRR14017553", "",
+        f"Processed **{summary['input_starts']} input records**, preserving all **{summary['input_target_sequences']} candidate protospacers**. "
+        "Prediction starts at the saved graph anchors. Reference sequences are used only for evaluation after prediction.", "",
+        "| Method | Saved representative contigs | Matching representatives | Matching input records |",
+        "|---|---:|---:|---:|",
+        f"| Previous Huber | {previous.get('representative_contigs', '—')} | {previous.get('matched_representatives', '—')} | {previous.get('matched_starts', '—')} |",
+        f"| Flow-guided | {r['representative_contigs']} | {r['matched_representatives']} | {r['matched_starts']} |", "",
+        f"Compared with Huber: **{len(delta.get('gained_starts', []))} gained, {len(delta.get('lost_starts', []))} lost**, "
+        f"{len(delta.get('retained_starts', []))} retained matching input records. Exact IDs are in `summary.json`.", "",
+        f"{r['accepted_starts']}/{summary['input_starts']} input records have an accepted extension, covering "
+        f"{r['accepted_target_sequences']} distinct candidate targets. Saved contigs: {r['representative_length_min']}–{r['representative_length_max']} bp. "
+        f"{r['full_two_flank_starts']} records reach 750 added bases on both sides. Shorter prefixes remain in `extensions.tsv` even when they fail the 500-bp output minimum.", "",
+        "Matches require one HSP with at least 90% identity and 50% coverage of the entire query. "
+        "The alignment need not cover the target. Matching input records can share a region; representative contigs are not distinct phage counts. "
+        "An unmatched sequence is not automatically proven false.", "",
+        f"Unchanged target sequences: {e['target_matches']}/{e['target_count']} match at 90% identity and 85% coverage.", "",
+        "## Implemented rule", "",
+        "1. Start with the minimum observed flow along the saved anchor. A one-node anchor uses the smaller incident directional total.",
+        "2. Probe nonbranching arms within the remaining flank budget. Use their mean multiplicity; masked source-repeat arms use the first edge count instead.",
+        "3. For each continuation, subtract the other retained arms from remaining seed flow and cap at that arm's depth. Continue only if exactly one result is positive. Otherwise stop BEFORE the split.",
+        "4. Never replenish flow at a merge or source repeat. Keep the existing source-revisit, repeat-bound and artifact barriers. Short tips and clearly dominant reconverging bubbles are local simplifications; tied bubbles remain unresolved.",
+        "5. Save qualifying prefixes, up to 750 bp per side. Select representatives by worst-flank support before uncertainty, coverage variation and length. No reference score enters this choice.", "",
+        "This is a seeded, conservative adaptation of excess-flow reasoning, not exhaustive flowtig enumeration or a correctness guarantee on noisy counts. "
+        "No beam searches through unresolved forks. Low seed support, competing genuine routes and nonconserved observed counts can make it stop early. "
+        "Support lost at a stopping edge is not attributed to the retained prefix.", "",
+        "## Stopping reasons (left and right counted separately)", ""]
+    lines.extend(f"- {reason}: {count}" for reason, count in sorted(r['stop_reasons'].items()))
+    diagnosis = summary.get("lost_match_diagnosis")
+    if diagnosis:
+        lines.extend(["", f"All lost matching inputs stop below the output minimum: retained prefixes are "
+            f"{diagnosis['retained_prefix_length_min']}–{diagnosis['retained_prefix_length_max']} bp "
+            f"(median {diagnosis['retained_prefix_length_median']:g} bp). "
+            "For Q000008, the right side stops after one base: incoming flow 52 and outgoing weights 3 and 49 "
+            "leave two positive continuations. This is a refusal to choose, not proof that longer graph routes do not exist.", "",
+            "**Decision:** the strict unique-flow rule loses too much sensitivity on this dataset and should not replace Huber."])
+    control = summary.get("representative_selection_control")
+    if control:
+        lines.extend(["", "## Representative selection isolated from flow stopping", "",
+            f"Reran Huber on all {control['input_records']} records using only the new representative ranking. "
+            "Every per-input sequence and acceptance decision was unchanged; prior BLAST evidence was reused only after exact sequence verification. "
+            f"The saved output changed from {control['old_representatives']} representatives / {control['old_matching_representatives']} matches "
+            f"to {control['new_representatives']} representatives / {control['new_matching_representatives']} matches. "
+            f"Matching input records remain {control['matching_input_records']}: no gains or losses of predicted paths. "
+            "The optional `viral_contigs_huber_control.fasta` preserves these control representatives separately from flow predictions."])
+    if "resource_measurements" in summary:
+        m = summary["resource_measurements"]
+        lines.extend(["", f"Prediction: {m['elapsed_seconds'] / 60:.2f} min, {m['peak_rss_gib']:.2f} GiB peak sampled RSS, "
+                      f"{m['threads']} threads. Memory guard stop: {m['memory_guard_stop']}."])
+    lines.extend(["", "## Files", "",
+        "`protospacers.fasta` preserves all inputs. `viral_contigs_flow.fasta` contains accepted representatives. "
+        "`extensions.tsv` keeps all outcomes, actual sequences, target positions, multiplicities and flow decisions; "
+        "`summary.json` holds parameters, exact gains/losses, measurements and provenance. `run.log` contains stage progress.", "",
+        "Flow decisions are `position:node:incoming:outgoing_weights:choice:remaining`, separated by semicolons. "
+        "Position is the number of added bases before the decision; choices index the retained arms (−2 means multiple supported arms, −1 means none). "
+        "Native target coordinates are zero-based/end-exclusive. BLAST coordinates refer to the canonical evaluation sequence; orientation is recorded.", "",
+        "![Flow support](flow_support.png)", "", "![Multiplicities](multiplicities.png)", "",
+        "Validation: native arithmetic and representative-selection tests plus controlled flow graphs. "
+        "Each output sequence is checked against its connected graph walk and saved target. "
+        "The original graph is read-only. This remains a single-dataset development test.", ""])
+    (output / "REPORT.md").write_text("\n".join(lines))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
     parser.add_argument("--baseline", type=Path, required=True, help="Previous prediction directory")
     parser.add_argument("--baseline-evaluation", type=Path, required=True, help="Previous BLAST evaluation directory")
+    parser.add_argument("--previous-seeded", type=Path, help="Frozen seeded run to compare against (Huber)")
     parser.add_argument("--reference", type=Path, required=True, help="Local BLAST database prefix")
     parser.add_argument("--blastn", default="blastn")
     parser.add_argument("--threads", type=int, default=2)
@@ -346,8 +482,9 @@ def main():
     summary = json.loads((output / "summary.json").read_text())
     assert summary["status"] == "complete", "Evaluate only a completed run"
     evidence = rows(output / "extensions.tsv")
-    assert len(evidence) == 3 * summary["input_starts"]
-    assert set(row["method"] for row in evidence) == set(METHODS)
+    methods = tuple(m["method"] for m in summary["methods"])
+    assert len(evidence) == len(methods) * summary["input_starts"]
+    assert set(row["method"] for row in evidence) == set(methods)
     targets = fasta(output / "protospacers.fasta")
     seed_dir = Path(summary["seed_directory"])
     saved_anchors = {r["query_id"]: r["anchor_nodes"] for r in rows(seed_dir / "graph_paths.tsv")}
@@ -409,7 +546,7 @@ def main():
                       target_matches=sum(h["passes"] for h in target_hits.values()),
                       target_count=len(targets), target_hits=target_hits,
                       commands=[extension_command, target_command], methods={})
-    for method in METHODS:
+    for method in methods:
         own = [r for r in evidence if r["method"] == method]
         assert len({r["query_id"] for r in own}) == summary["input_starts"]
         accepted = [r for r in own if r["accepted"] == "1"]
@@ -436,17 +573,39 @@ def main():
             best_hit_reference_loci=reference_loci(rep_hits),
             stop_reasons=dict(Counter(r[f"{side}_stop"] for r in own for side in ("left", "right"))),
             local_rule_events={field: sum(int(r[field]) for r in own) for field in ("tips_removed", "bubbles_removed", "weak_links_removed")})
+    if args.previous_seeded:
+        previous = json.loads((args.previous_seeded / "summary.json").read_text())
+        previous_rows = [r for r in rows(args.previous_seeded / "extensions.tsv") if r["method"] == "huber"]
+        assert {r["query_id"] for r in previous_rows} == tested_queries, "Different starting population"
+        assert fasta(args.previous_seeded / "protospacers.fasta") == targets, "Different target population"
+        assert previous["evaluation"]["identity"] == .90 and previous["evaluation"]["extension_coverage"] == .50
+        for name, expected in previous.get("artifact_sha256", {}).items():
+            assert digest(args.previous_seeded / name) == expected, "Previous evidence changed"
+        old = {r["query_id"] for r in previous_rows if r["accepted"] == "1" and r["reference_pass"] == "1"}
+        evaluation["previous_huber"] = dict(directory=str(args.previous_seeded.resolve()),
+            matched_starts=len(old), representative_contigs=previous["evaluation"]["methods"]["huber"]["representative_contigs"],
+            matched_representatives=previous["evaluation"]["methods"]["huber"]["matched_representatives"])
+        for method in methods:
+            new = {r["query_id"] for r in evidence if r["method"] == method and r["accepted"] == "1" and r["reference_pass"] == "1"}
+            evaluation["methods"][method]["versus_previous_huber"] = dict(
+                gained_starts=sorted(new - old), lost_starts=sorted(old - new), retained_starts=sorted(new & old))
     summary["evaluation"] = evaluation
     summary["input_and_prediction_hashes"] = {str(p.resolve()): digest(p) for p in
         [seed_dir / "queries.tsv", seed_dir / "sources.tsv", seed_dir / "graph_paths.tsv", seed_dir / "candidates.tsv",
-         output / "protospacers.fasta", *(output / f"viral_contigs_{m}.fasta" for m in METHODS)]}
-    make_plots(output, evidence, summary)
+         output / "protospacers.fasta", *(output / f"viral_contigs_{m}.fasta" for m in methods)]}
+    if methods == ("flow",):
+        make_flow_plots(output, evidence, summary)
+    else:
+        make_plots(output, evidence, summary)
     with (output / "extensions.tsv").open("w") as stream:
         writer = csv.DictWriter(stream, fieldnames=list(evidence[0]), delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(evidence)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    write_report(output, summary)
+    if methods == ("flow",):
+        write_flow_report(output, summary)
+    else:
+        write_report(output, summary)
     print(json.dumps({"baseline": evaluation["baseline"], "target_matches": evaluation["target_matches"],
                       "methods": evaluation["methods"]}, indent=2))
 

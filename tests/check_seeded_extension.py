@@ -16,11 +16,91 @@ from pathlib import Path
 from check_source_crossing import canonical, fasta, graph_commands, reverse_complement, table
 
 
+def check_flow(binary):
+    """Check resolved flow, excluded ambiguous edges, and count inflation."""
+    rng = random.Random(2026111704)
+    dna = lambda n: "".join(rng.choice("ACGT") for _ in range(n))
+    with tempfile.TemporaryDirectory(prefix="mcaat-flow-test-") as tmp:
+        root = Path(tmp)
+        arrays = root / "arrays"
+        arrays.mkdir()
+        cases, records = {}, []
+        for name in ("linear", "ambiguous", "supported", "merge"):
+            repeat, spacer, left, right = dna(32), dna(35), dna(1000), dna(1000)
+            seq = left + spacer + right
+            cases[name] = dict(spacer=spacer, repeat=repeat, sequence=seq)
+            records.extend((f"{name}_{i}", seq) for i in range(20))
+            p = len(left) + len(spacer) + 250
+            if name == "ambiguous":
+                alternative = seq[:p] + next(b for b in "ACGT" if b != seq[p]) + dna(1000)
+                records.extend((f"alternate_{i}", alternative) for i in range(20))
+            if name == "supported":
+                records.append(("weak_alternative", seq[p - 23:p] + next(b for b in "ACGT" if b != seq[p]) + dna(1000)))
+            if name == "merge":
+                records.extend((f"high_copy_{i}", seq[p:p + 100]) for i in range(100))
+        (arrays / "CRISPR_Arrays_1.txt").write_text("".join(
+            f">Array_{name}\n{c['repeat']}\n{'-' * 32}\t{c['spacer']}\n" for name, c in cases.items()))
+        reads = root / "construction.fasta"
+        reads.write_text("".join(f">{name}\n{seq}\n" for name, seq in records))
+        (root / "graph_build/graph").mkdir(parents=True)
+        def run(command):
+            result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            assert result.returncode == 0, result.stdout[-10000:]
+        for command in graph_commands(root, binary, reads).values():
+            run(command)
+        graph = root / "graph_build/graph/graph"
+        hashes = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in graph.parent.glob("graph.sdbg*")}
+        base = [str(binary), "phage-curate", "--arrays", str(arrays), "--graph", str(graph),
+                "--threads", "2", "--max-flank-length", "750", "--correct-spacer-boundaries", "false",
+                "--min-identity", "1", "--min-query-coverage", "1", "--filter-extension-artifacts", "false"]
+        run(base + ["--output", str(root / "seeds")])
+        run(base + ["--extension-seeds", str(root / "seeds"), "--coverage-method", "flow",
+                    "--output", str(root / "result")])
+        result = root / "result"
+        targets = fasta(result / "protospacers.fasta")
+        rows = table(result / "extensions.tsv")
+        assert len(targets) == len(cases) == len(rows), rows
+        names = {canonical(c["spacer"]): name for name, c in cases.items()}
+        for row in rows:
+            seq = row["sequence"]
+            begin, end = int(row["seed_begin"]), int(row["seed_end"])
+            assert canonical(seq[begin:end]) == targets[row["target_id"]]
+            name = names[canonical(seq[begin:end])]
+            assert row["accepted"] == "1", (name, row)
+            assert seq in cases[name]["sequence"] or reverse_complement(seq) in cases[name]["sequence"], (name, row)
+            flanks = sorted([int(row["left_bp"]), int(row["right_bp"])])
+            if name == "ambiguous":
+                assert flanks == [250, 750], row
+                assert "unresolved_flow_branch" in (row["left_stop"], row["right_stop"]), row
+            else:
+                assert flanks == [750, 750], (name, row)
+            assert row["search_limited"] == "0" and row["ambiguous"] == "0", row
+            for side in ("left", "right"):
+                initial = float(row[f"{side}_seed_flow"])
+                assert 0 <= float(row[f"{side}_remaining_flow"]) <= initial
+                last = initial
+                for entry in row[f"{side}_flow_decisions"].split(";"):
+                    if not entry: continue
+                    position, node, incoming, outgoing, chosen, remaining = entry.split(":")
+                    assert float(incoming) <= last + 1e-5
+                    if int(chosen) >= 0:
+                        last = float(remaining)
+                        assert last > 0
+                    else:
+                        assert int(position) == int(row[f"{side}_bp"]), row
+        assert all(hashlib.sha256(p.read_bytes()).hexdigest() == sha for p, sha in hashes.items())
+        print("PASS: four flow graphs; supported branch, stop BEFORE unresolved split, no flow inflation, both 750-bp flanks, preserved targets and unchanged graph.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=Path)
+    parser.add_argument("--flow", action="store_true", help="Run the flow-specific controlled graphs")
     args = parser.parse_args()
     binary = args.binary.resolve()
+    if args.flow:
+        check_flow(binary)
+        return
     rng = random.Random(2026111703)
     dna = lambda n: "".join(rng.choice("ACGT") for _ in range(n))
     with tempfile.TemporaryDirectory(prefix="mcaat-seeded-test-") as tmp:

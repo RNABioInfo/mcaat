@@ -39,6 +39,14 @@ struct GraphArc {
     double count = 0;
 };
 
+struct FlowDecision {
+    size_t position = 0;
+    uint64_t node = 0;
+    double incoming = 0., remaining = 0.;
+    std::vector<double> outgoing;
+    int chosen = -1;
+};
+
 struct ExtensionWalk {
     std::vector<uint64_t> nodes;
     std::string bases, stop = "dead_end";
@@ -58,6 +66,8 @@ struct ExtensionWalk {
     double runner_up_score = -1.;
     double coverage_baseline = 0., coverage_loss = 0.;
     size_t coverage_seen = 0, local_tips = 0, local_bubbles = 0, local_weak_links = 0;
+    double seed_flow = 0., remaining_flow = 0.;
+    std::vector<FlowDecision> flow_decisions;
 };
 struct LocalSegment {
     std::vector<GraphArc> arcs;
@@ -172,6 +182,11 @@ class ProtospacerWorkflow {
     double seeded_walk_score(const ExtensionWalk &walk) const;
     ExtensionWalk extend_seeded(size_t query, const TargetCandidate &candidate, bool backwards, size_t &work,
                                 size_t limit) const;
+    static std::pair<int, double> flow_choice(double incoming, const std::vector<double> &outgoing);
+    static double support_cost(const TargetCandidate &candidate);
+    static bool supported_representative(const TargetCandidate &a, const TargetCandidate &b);
+    ExtensionWalk extend_flow(size_t query, const TargetCandidate &candidate, bool backwards, size_t &work,
+                              size_t limit) const;
     std::vector<TargetCandidate> load_extension_seeds() const;
     int run_seeded();
 };
