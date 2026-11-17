@@ -7,6 +7,7 @@ Temporary query FASTAs are deleted; best-hit evidence is added to extensions.tsv
 import argparse
 import csv
 import hashlib
+import gzip
 import json
 import subprocess
 import tempfile
@@ -14,8 +15,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 METHODS = ("poisson", "negbin", "huber")
-LABELS = {"poisson": "Poisson", "negbin": "Negative binomial", "huber": "Huber log-ratio", "flow": "Flow-guided"}
-COLORS = {"poisson": "#245b91", "negbin": "#b66925", "huber": "#6d5295", "flow": "#16806b"}
+LABELS = {"poisson": "Poisson", "negbin": "Negative binomial", "huber": "Huber log-ratio", "flow": "Flow-guided", "lookahead": "Branch lookahead"}
+COLORS = {"poisson": "#245b91", "negbin": "#b66925", "huber": "#6d5295", "flow": "#16806b", "lookahead": "#245b91"}
 
 
 def fasta(path):
@@ -468,6 +469,155 @@ def write_flow_report(output, summary):
     (output / "REPORT.md").write_text("\n".join(lines))
 
 
+
+def make_lookahead_plots(output, evidence, summary):
+    """Plot frozen ranking performance, mathematical loss and actual multiplicities."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    plt.rcParams.update({"font.size": 11, "axes.spines.top": False, "axes.spines.right": False})
+    reps = sorted((r for r in evidence if r["relation_to_representative"] == "representative" and r["reported"] == "1"),
+                  key=lambda r: int(r["representative_rank"]))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), constrained_layout=True)
+    ranks = np.arange(1, len(reps) + 1)
+    axes[0].step(ranks, np.cumsum([r["reference_pass"] == "1" for r in reps]), where="post", lw=2.5, color="#245b91")
+    axes[0].plot([0, 50], [0, 25], "--", color="#8b9198", label="50% benchmark")
+    axes[0].scatter([50], [25], marker="*", s=140, color="#16806b", label="Goal: 25 of 50")
+    axes[0].set(xlabel="Saved representatives in prediction rank order", ylabel="Cumulative reference matches", xlim=(0, 51), ylim=(0, 30), title="Reference checked only after ranking")
+    axes[0].legend(frameon=False)
+    ratio = np.linspace(.02, 4, 400)
+    z = np.abs(np.log(ratio))
+    loss = np.where(z <= 1, z*z/2, z-.5)
+    axes[1].plot(ratio, loss, lw=2.3, label="Huber loss", color="#245b91")
+    axes[1].plot(ratio, np.exp(-loss), lw=2.3, label="Lookahead weight: exp(−loss)", color="#b66925")
+    axes[1].axvline(1, color="#a4acb4", lw=1)
+    axes[1].set(xlabel="Smoothed multiplicity ratio: (depth + 0.5) / (baseline + 0.5)", ylabel="Loss or relative branch weight", title="Ranking quantities, not correctness probabilities")
+    axes[1].legend(frameon=False)
+    for ax in axes: ax.grid(alpha=.15)
+    fig.savefig(output / "selection.png", dpi=180)
+    plt.close(fig)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), constrained_layout=True)
+    populations = {True: [], False: []}
+    for row in reps:
+        for side in ("left", "right"):
+            counts = [float(x) for x in row[f"{side}_counts"].split(",") if x]
+            positions = [int(x) for x in row[f"{side}_scored_positions"].split(",") if x]
+            populations[row["reference_pass"] == "1"].extend(counts[p-1] for p in positions)
+    high = max([v for values in populations.values() for v in values] or [2])
+    bins = np.geomspace(1, max(2, high + 1), 35)
+    for passed, color in ((False, "#949da6"), (True, "#16806b")):
+        values = populations[passed]
+        if values: axes[0].hist(values, bins=bins, weights=np.ones(len(values))/len(values), histtype="step", lw=2,
+            color=color, label="Reference match" if passed else "No qualifying match")
+    axes[0].set_xscale("log")
+    axes[0].set(xlabel="External edge multiplicity (log scale)", ylabel="Fraction of positions per bin", title="Selected representatives")
+    axes[0].legend(frameon=False)
+    example = (reps or evidence)[0]
+    summary["plot_example_query"] = example["query_id"]
+    summary["plot_example_policy"] = "First prediction-ranked representative; no reference-dependent choice."
+    seed_length = int(example["seed_end"]) - int(example["seed_begin"])
+    for side, color in (("left", "#245b91"), ("right", "#b66925")):
+        counts = np.array([float(x) for x in example[f"{side}_counts"].split(",") if x])
+        positions = np.array([int(x) for x in example[f"{side}_scored_positions"].split(",") if x], dtype=int)
+        padding = int(example["left_bp"]) - len(counts) if side == "left" else 0
+        xs = -padding - np.arange(1, len(counts)+1) if side == "left" else seed_length+np.arange(len(counts))
+        if len(counts): axes[1].plot(xs, counts, color="#c8cdd3", lw=.8)
+        if len(positions): axes[1].plot(xs[positions-1], counts[positions-1], color=color, lw=1.5, label=side.capitalize())
+    axes[1].axvspan(0, seed_length, color="#64845b", alpha=.2)
+    axes[1].set(xlabel="Position relative to target start (bp)", ylabel="Edge multiplicity", title=f"{example['query_id']}: highest-ranked output", xlim=(-750, seed_length+750))
+    axes[1].set_yscale("symlog", linthresh=1)
+    axes[1].set_ylim(bottom=0)
+    axes[1].legend(frameon=False)
+    for ax in axes: ax.grid(alpha=.15)
+    fig.savefig(output / "multiplicities.png", dpi=180)
+    plt.close(fig)
+
+
+def write_lookahead_report(output, summary):
+    """Keep candidate availability, selected output and input-record changes distinct."""
+    e = summary["evaluation"]
+    r = e["methods"]["lookahead"]
+    pool = e["candidate_pool"]
+    delta = r.get("versus_previous_huber", {})
+    lines = ["# Branch lookahead: SRR14017553", "",
+        f"**Final output: {r['representative_contigs']} representative contigs; {r['matched_representatives']} match the reference.** "
+        + ("The target of at least 25 matches within 50 outputs was reached." if r['goal_25_of_50_met'] else "The target of at least 25 matches within 50 outputs was not reached."), "",
+        f"All **{summary['input_starts']} input records** were processed and all **{summary['input_target_sequences']} candidate protospacers** preserved. "
+        f"These inputs contain {summary['distinct_oriented_anchor_paths']} distinct oriented anchors; multiple inputs can describe the same region. "
+        "The existing graph was used directly, with at most 750 added bases per side and a 500-bp minimum saved contig.", "",
+        "## Fixed ranking evaluated afterward", "", "| Top requested | Saved | Reference matches |", "|---:|---:|---:|"]
+    lines.extend(f"| {v['requested']} | {v['saved']} | {v['matching']} |" for v in r["top_k"])
+    lines.extend(["", f"Before the 50-output cap: {r['pre_cap_representatives']} representatives from {r['accepted_starts']} accepted input records. "
+        f"Final lengths: {r['representative_length_min']}–{r['representative_length_max']} bp.", "",
+        "## What the search retained", "",
+        f"The compressed audit contains {pool['audit_records']} one-sided alternatives. Together with accepted per-input predictions, "
+        f"this is {pool['unique_sequences']} distinct sequences, of which {pool['matching_unique_sequences']} match. "
+        f"At least one matching retained sequence exists for {pool['matching_inputs']} input records. "
+        f"Grouping only the matching sequences retrospectively gives {pool['retrospective_matching_sequence_groups']} sequence groups. Several groups can come from the same input or reference region; this is not that many independent recoveries. "
+        "That last number is a diagnostic of this saved pool, not reference-free output and not a proof that all recoverable graph routes were found.", "",
+        "## Change against Huber", "",
+        f"The selected per-input sequences in the audit have {r['matched_starts']} matching input records: "
+        f"{len(delta.get('gained_starts', []))} gained, {len(delta.get('lost_starts', []))} lost, "
+        f"{len(delta.get('retained_starts', []))} retained versus the frozen Huber run. "
+        "These are input-record counts before grouping and the output cap; they must not be reported as distinct matching contigs. Exact IDs are in `summary.json`.", "",
+        f"The unchanged short targets have {e['target_matches']}/{e['target_count']} reference matches at 90% identity and 85% coverage.", "",
+        "## Method", "",
+        "1. Extend each saved anchor directly in the graph. Preserve competing families defined by the first two unresolved forks; use a bounded beam, local short-tip handling and clearly dominant reconverging bubbles.",
+        "2. At a fork, inspect downstream unitig depths within two read spans, at most 256 unitig-entry edges and 512 graph operations per probe. Probe work is capped at one eighth of the query budget per flank; exhausted probes fall back to immediate counts. After calibration, compare those depths with the flank baseline using Huber log-ratio loss; before calibration, use the largest available downstream depth. Short low-count connections are not hard-pruned.",
+        "3. Keep terminal routes and supported prefixes separately. Retain at most 16 of each per side, with family quotas. Select compatible left/right prefixes, allowing either side alone, by the worse flank score; length breaks score ties.",
+        "4. Rank direct region representatives by graph-derived support and save at most 50. Save all input targets, per-input outcomes and a single compressed alternative-path audit.",
+        "5. Freeze predictions, then BLAST against the local curated database. No reference score or hit status selects a path, flank length or representative.", "",
+        "This graph-only coverage heuristic is inspired by looking beyond short connections in metagenomic assembly. It lacks read-pair linkage and is not equivalent to a complete assembler or a calibrated probability model. "
+        "A stable multiplicity does not establish viral origin. Similar-coverage paths can remain indistinguishable.", "",
+        f"Search limits affected {r['accepted_limited_starts']} accepted inputs; {r['accepted_ambiguous_starts']} have competing routes flagged. "
+        "The retained pool is bounded, not exhaustive. Source-array nodes cannot be revisited; non-source nodes retain the configured visit bound. "
+        "All saved sequences were checked against their connected graph walks.", "",
+        f"The final matching representatives cover {len(r['best_hit_reference_loci'])} overlapping-best-hit reference interval groups; these are not distinct phage counts.", "",
+        "Matches use one HSP with at least 90% identity and 50% of the full query covered, including its target. "
+        "The HSP need not cover the target. Unmatched sequences are not automatically false; representative regions are not counts of distinct phages. This is a single-dataset development experiment.", "",
+        "## Files", "",
+        "`protospacers.fasta`: all 159 candidate targets. `viral_contigs_lookahead.fasta`: final selected representatives. "
+        "`extensions.tsv`: all 164 input outcomes with sequences, counts, scores, ranks and reference evidence. "
+        "`candidate_paths.tsv.gz`: retained one-sided alternatives with reference evaluation added afterward. "
+        "`summary.json`: thresholds, input hashes, measurements and exact gains/losses. `run.log`: native progress.", "",
+        "![Selection curve and coverage loss](selection.png)", "", "![Observed multiplicities](multiplicities.png)", ""])
+    diagnosis = e.get("selection_diagnosis")
+    if diagnosis:
+        lines.extend(["## Where retained matches were lost", "",
+            f"{len(diagnosis['previous_huber_matches_missing_from_retained_pool'])} previously matching Huber inputs have no qualifying match among this retained pool. "
+            f"For {len(diagnosis['matching_pool_inputs_not_chosen'])} inputs, a retained alternative matched but the chosen per-input sequence did not. "
+            f"Before the output cap, {diagnosis['matching_representatives_before_cap']} representative sequences matched; "
+            f"{len(diagnosis['matching_representatives_below_cap'])} were ranked below the saved top 50. "
+            f"{len(diagnosis['matching_input_paths_grouped_under_nonmatching_representative'])} matching input sequences were grouped under saved representatives that did not pass the same whole-query coverage criterion. "
+            "These are distinct stages, and their counts should not be added together as distinct regions. Exact IDs are in the summary.", ""])
+    if "resource_measurements" in summary:
+        m = summary["resource_measurements"]
+        lines.extend([f"Native prediction: {m['elapsed_seconds']/60:.2f} minutes, {m['peak_rss_gib']:.2f} GiB peak sampled RSS, {m['threads']} threads. "
+                      f"Memory guard stop: {m['memory_guard_stop']}.", ""])
+    (output / "REPORT.md").write_text("\n".join(lines))
+
+
+
+def diagnose_lookahead_selection(output, evidence, summary):
+    """Attribute saved-pool misses after evaluation, without changing any prediction."""
+    e = summary["evaluation"]
+    reps = {r["viral_contig_id"]: r for r in evidence if r["relation_to_representative"] == "representative"}
+    matched = {r["query_id"] for r in evidence if r["accepted"] == "1" and r["reference_pass"] == "1"}
+    available = set(e["candidate_pool"]["matching_input_ids"])
+    old = set(e.get("previous_huber", {}).get("matching_input_ids", []))
+    e["selection_diagnosis"] = dict(
+        previous_huber_matches_missing_from_retained_pool=sorted(old - available),
+        previous_huber_matches_present_in_retained_pool=sorted(old & available),
+        new_matching_inputs_available_in_pool=sorted(available - old),
+        matching_pool_inputs_not_chosen=sorted(available - matched),
+        matching_representatives_before_cap=sum(r["reference_pass"] == "1" for r in reps.values()),
+        matching_representatives_below_cap=[key for key, r in reps.items() if r["reference_pass"] == "1" and r["reported"] == "0"],
+        matching_input_paths_excluded_by_cap=[r["query_id"] for r in evidence if r["query_id"] in matched and r["reported"] == "0"],
+        matching_input_paths_grouped_under_nonmatching_representative=[r["query_id"] for r in evidence
+            if r["query_id"] in matched and r["reported"] == "1" and reps[r["viral_contig_id"]]["reference_pass"] == "0"])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
@@ -508,7 +658,24 @@ def main():
                 key = f"S{len(unique) + 1:06d}"
                 unique[key] = sequence
                 sequence_ids[sequence] = key
-    print(f"Evaluating {len(unique)} distinct accepted extension sequences; paths already fixed.", flush=True)
+    audit = []
+    if methods == ("lookahead",):
+        summary.setdefault("frozen_prediction_sha256", {name: digest(output / name) for name in
+            ("extensions.tsv", "candidate_paths.tsv.gz", "viral_contigs_lookahead.fasta", "protospacers.fasta")})
+        with gzip.open(output / "candidate_paths.tsv.gz", "rt") as stream:
+            audit = list(csv.DictReader(stream, delimiter="\t"))
+        audit.sort(key=lambda row: (row["query_id"], row["side"], int(row["index"])))
+        for row in audit:
+            seq = row["sequence"]
+            b, e = int(row["seed_begin"]), int(row["seed_end"])
+            assert canonical(seq[b:e]) == targets[row["target_id"]]
+            assert 0 <= b <= 750 and 0 <= len(seq) - e <= 750 and len(seq) >= summary["min_contig_length"]
+            sequence = canonical(seq)
+            if sequence not in sequence_ids:
+                key = f"S{len(unique) + 1:06d}"
+                unique[key] = sequence
+                sequence_ids[sequence] = key
+    print(f"Evaluating {len(unique)} distinct retained extension sequences; paths already fixed.", flush=True)
     hits, extension_command = align(unique, args)
     print(f"Evaluating {len(targets)} unchanged input targets.", flush=True)
     target_hits, target_command = align(targets, args, target=True)
@@ -553,13 +720,16 @@ def main():
         matched_queries = {r["query_id"] for r in accepted if r["reference_pass"] == "1"}
         reps = fasta(output / f"viral_contigs_{method}.fasta")
         rep_rows = [r for r in own if r["relation_to_representative"] == "representative"]
-        assert reps == {r["viral_contig_id"]: r["sequence"] for r in rep_rows}
+        all_reps = {r["viral_contig_id"]: r["sequence"] for r in rep_rows}
+        reported_rows = [r for r in rep_rows if r.get("reported", "1") == "1"]
+        assert reps == {r["viral_contig_id"]: r["sequence"] for r in reported_rows}
         assert len(set(map(canonical, reps.values()))) == len(reps), "Duplicate representative sequences"
-        assert all(same_region(reps[r["viral_contig_id"]], r["sequence"], summary["graph_k"]) for r in accepted), "Invalid native representative association"
+        assert all(same_region(all_reps[r["viral_contig_id"]], r["sequence"], summary["graph_k"]) for r in accepted), "Invalid native representative association"
         rep_hits = [hits[sequence_ids[canonical(seq)]] for seq in reps.values()]
         passing_reps = [hit for hit in rep_hits if hit["passes"]]
         lengths = [len(seq) for seq in reps.values()]
         evaluation["methods"][method] = dict(
+            pre_cap_representatives=len(all_reps), reported_starts=sum(r.get("reported", "1") == "1" for r in accepted),
             accepted_starts=len(accepted), accepted_target_sequences=len({r["target_id"] for r in accepted}),
             representative_contigs=len(reps), matched_representatives=len(passing_reps),
             reference_match_fraction=len(passing_reps) / len(reps) if reps else 0.,
@@ -583,17 +753,55 @@ def main():
             assert digest(args.previous_seeded / name) == expected, "Previous evidence changed"
         old = {r["query_id"] for r in previous_rows if r["accepted"] == "1" and r["reference_pass"] == "1"}
         evaluation["previous_huber"] = dict(directory=str(args.previous_seeded.resolve()),
-            matched_starts=len(old), representative_contigs=previous["evaluation"]["methods"]["huber"]["representative_contigs"],
+            matched_starts=len(old), matching_input_ids=sorted(old), representative_contigs=previous["evaluation"]["methods"]["huber"]["representative_contigs"],
             matched_representatives=previous["evaluation"]["methods"]["huber"]["matched_representatives"])
         for method in methods:
             new = {r["query_id"] for r in evidence if r["method"] == method and r["accepted"] == "1" and r["reference_pass"] == "1"}
             evaluation["methods"][method]["versus_previous_huber"] = dict(
                 gained_starts=sorted(new - old), lost_starts=sorted(old - new), retained_starts=sorted(new & old))
+    if methods == ("lookahead",):
+        own = evaluation["methods"]["lookahead"]
+        rep_rows = sorted((r for r in evidence if r["relation_to_representative"] == "representative"),
+                          key=lambda r: int(r["representative_rank"]))
+        own["top_k"] = [dict(requested=n, saved=min(n, len(rep_rows)),
+            matching=sum(r["reference_pass"] == "1" for r in rep_rows[:n])) for n in (10, 20, 30, 40, 50)]
+        own["goal_25_of_50_met"] = own["representative_contigs"] <= 50 and own["matched_representatives"] >= 25
+        accepted = [r for r in evidence if r["accepted"] == "1"]
+        pool_queries = {r["query_id"] for r in audit if hits[sequence_ids[canonical(r["sequence"]) ]]["passes"]}
+        pool_queries.update(r["query_id"] for r in accepted if r["reference_pass"] == "1")
+        matching_unique = [seq for key, seq in unique.items() if hits[key]["passes"]]
+        # Availability diagnostic only: matching paths are grouped retrospectively.
+        # This is not a predictor and not proof of a recovery ceiling in the graph.
+        groups = []
+        for seq in sorted(matching_unique, key=lambda seq: (-len(seq), seq)):
+            if not any(same_region(rep, seq, summary["graph_k"]) for rep in groups): groups.append(seq)
+        evaluation["candidate_pool"] = dict(audit_records=len(audit), unique_sequences=len(unique),
+            matching_unique_sequences=len(matching_unique), matching_inputs=len(pool_queries),
+            matching_input_ids=sorted(pool_queries), retrospective_matching_sequence_groups=len(groups),
+            retrospective_grouping_policy="Matching sequences only, longest-first direct similarity grouping; variants from one input or reference region can form multiple groups. Diagnostic, not independent recoveries or selection.",
+            exhaustive=False)
+        summary["frozen_pool_blast_input_sha256"] = hashlib.sha256("".join(f">{key}\n{seq}\n" for key, seq in unique.items()).encode()).hexdigest()
+        if audit:
+            for row in audit:
+                hit = hits[sequence_ids[canonical(row["sequence"])]]
+                row.update(reference_pass=int(hit["passes"]), reference_record=hit["reference"],
+                    reference_identity=hit["identity"], reference_coverage=hit["coverage"],
+                    reference_query_begin=hit["query_begin"], reference_query_end=hit["query_end"],
+                    reference_begin=hit["reference_begin"], reference_end=hit["reference_end"],
+                    reference_query_orientation="+" if row["sequence"] == canonical(row["sequence"]) else "-")
+            with gzip.open(output / "candidate_paths.tsv.gz", "wt") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(audit[0]), delimiter="\t", lineterminator="\n")
+                writer.writeheader()
+                writer.writerows(audit)
     summary["evaluation"] = evaluation
+    if methods == ("lookahead",):
+        diagnose_lookahead_selection(output, evidence, summary)
     summary["input_and_prediction_hashes"] = {str(p.resolve()): digest(p) for p in
         [seed_dir / "queries.tsv", seed_dir / "sources.tsv", seed_dir / "graph_paths.tsv", seed_dir / "candidates.tsv",
          output / "protospacers.fasta", *(output / f"viral_contigs_{m}.fasta" for m in methods)]}
-    if methods == ("flow",):
+    if methods == ("lookahead",):
+        make_lookahead_plots(output, evidence, summary)
+    elif methods == ("flow",):
         make_flow_plots(output, evidence, summary)
     else:
         make_plots(output, evidence, summary)
@@ -602,7 +810,9 @@ def main():
         writer.writeheader()
         writer.writerows(evidence)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    if methods == ("flow",):
+    if methods == ("lookahead",):
+        write_lookahead_report(output, summary)
+    elif methods == ("flow",):
         write_flow_report(output, summary)
     else:
         write_report(output, summary)

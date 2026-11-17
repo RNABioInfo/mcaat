@@ -68,6 +68,9 @@ struct ExtensionWalk {
     size_t coverage_seen = 0, local_tips = 0, local_bubbles = 0, local_weak_links = 0;
     double seed_flow = 0., remaining_flow = 0.;
     std::vector<FlowDecision> flow_decisions;
+    std::vector<uint64_t> branch_family;
+    bool uses_lookahead = false;
+    double selection_metric = 0.;
 };
 struct LocalSegment {
     std::vector<GraphArc> arcs;
@@ -181,7 +184,12 @@ class ProtospacerWorkflow {
     void score_seeded_walk(ExtensionWalk &walk) const;
     double seeded_walk_score(const ExtensionWalk &walk) const;
     ExtensionWalk extend_seeded(size_t query, const TargetCandidate &candidate, bool backwards, size_t &work,
-                                size_t limit) const;
+                                size_t limit, std::vector<ExtensionWalk> *alternatives = nullptr) const;
+    std::vector<double> future_depths(size_t query, uint64_t from, const GraphArc &first, bool backwards,
+                                      size_t distance, size_t &work, size_t limit) const;
+    static void reserve_branch_families(std::vector<ExtensionWalk> &walks, size_t width);
+    bool compatible_flanks(const TargetCandidate &seed, const ExtensionWalk &left,
+                           const ExtensionWalk &right) const;
     static std::pair<int, double> flow_choice(double incoming, const std::vector<double> &outgoing);
     static double support_cost(const TargetCandidate &candidate);
     static bool supported_representative(const TargetCandidate &a, const TargetCandidate &b);

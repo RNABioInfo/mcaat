@@ -149,6 +149,12 @@ autoclean=true
   multiplicities remain in one evidence table. No whole-metagenome assembly or
   reference-guided selection. See [commands, formulas, outputs and function
   guide](docs/protospacer-extension.md#extend-from-saved-starts-three-coverage-models).
+- **Branch-lookahead extension (experimental)**: `--coverage-method lookahead`
+  retains competing early branches and supported flank prefixes, then saves up to
+  50 graph-ranked representatives. Reference data is used only afterward by the
+  evaluation script. The first test yielded 15/50 matching outputs and lost many
+  previously matching inputs; it is not a recommended replacement. See the [method and limits](docs/protospacer-extension.md#branch-lookahead-and-independent-prefixes-experimental).
+
 - **Flow-guided extension (experimental)**: `--coverage-method flow` follows
   only a uniquely supported continuation and stops before unresolved branches.
   Representative selection ranks support before length. On the 164-start

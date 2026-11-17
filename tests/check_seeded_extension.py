@@ -7,6 +7,7 @@ are deleted on exit. The expected molecules below are used only in assertions.
 import argparse
 import csv
 import hashlib
+import gzip
 import json
 import random
 import subprocess
@@ -92,12 +93,96 @@ def check_flow(binary):
         print("PASS: four flow graphs; supported branch, stop BEFORE unresolved split, no flow inflation, both 750-bp flanks, preserved targets and unchanged graph.")
 
 
+
+def check_lookahead(binary):
+    """Keep a low-count bridge, preserve alternative routes and choose flank prefixes."""
+    rng = random.Random(2026111705)
+    dna = lambda n: "".join(rng.choice("ACGT") for _ in range(n))
+    with tempfile.TemporaryDirectory(prefix="mcaat-lookahead-test-") as tmp:
+        root = Path(tmp)
+        arrays = root / "arrays"
+        arrays.mkdir()
+        cases, records = {}, []
+        for name in ("linear", "bridge", "depth_change"):
+            repeat, spacer, left, right = dna(32), dna(35), dna(1050), dna(1050)
+            seq = left + spacer + right
+            cases[name] = dict(spacer=spacer, repeat=repeat, sequence=seq, start=len(left))
+            depth = 1 if name == "bridge" else 20
+            records.extend((f"{name}_{i}", seq) for i in range(depth))
+            if name == "bridge":
+                p = len(left) + len(spacer) + 350
+                # Coverage 20 before the fork, 1 across a 40-base connection,
+                # and 20 downstream. The competing arm has depth 20 throughout.
+                records.extend((f"bridge_prefix_{i}", seq[:p]) for i in range(19))
+                records.extend((f"bridge_tail_{i}", seq[p + 40:]) for i in range(19))
+                alternate = seq[p - 23:p] + next(b for b in "ACGT" if b != seq[p]) + dna(1100)
+                records.extend((f"bridge_alternate_{i}", alternate) for i in range(20))
+            if name == "depth_change":
+                # An incompatible high-depth left flank must not spoil the
+                # stable right flank. Right changes sharply after 550 bases.
+                records.extend((f"deep_left_{i}", left) for i in range(60))
+                p = len(left) + len(spacer) + 550
+                records.extend((f"deep_tail_{i}", seq[p:]) for i in range(180))
+        (arrays / "CRISPR_Arrays_1.txt").write_text("".join(
+            f">Array_{name}\n{c['repeat']}\n{'-' * 32}\t{c['spacer']}\n" for name, c in cases.items()))
+        reads = root / "construction.fasta"
+        reads.write_text("".join(f">{name}\n{seq}\n" for name, seq in records))
+        (root / "graph_build/graph").mkdir(parents=True)
+        def run(command):
+            result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            assert result.returncode == 0, result.stdout[-10000:]
+        for command in graph_commands(root, binary, reads).values():
+            run(command)
+        graph = root / "graph_build/graph/graph"
+        hashes = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in graph.parent.glob("graph.sdbg*")}
+        base = [str(binary), "phage-curate", "--arrays", str(arrays), "--graph", str(graph),
+                "--threads", "2", "--max-flank-length", "750", "--correct-spacer-boundaries", "false",
+                "--min-identity", "1", "--min-query-coverage", "1", "--filter-extension-artifacts", "false"]
+        run(base + ["--output", str(root / "seeds")])
+        run(base + ["--extension-seeds", str(root / "seeds"), "--coverage-method", "lookahead",
+                    "--output", str(root / "result")])
+        result = root / "result"
+        targets = fasta(result / "protospacers.fasta")
+        evidence = table(result / "extensions.tsv")
+        with gzip.open(result / "candidate_paths.tsv.gz", "rt") as stream:
+            audit = list(csv.DictReader(stream, delimiter="\t"))
+        assert len(targets) == len(cases) == len(evidence)
+        names = {canonical(c["spacer"]): name for name, c in cases.items()}
+        correct_bridge = False
+        for row in evidence + audit:
+            seq = row["sequence"]
+            b, e = int(row["seed_begin"]), int(row["seed_end"])
+            assert canonical(seq[b:e]) == targets[row["target_id"]]
+            assert b <= 750 and len(seq) - e <= 750 and len(seq) >= 500
+            name = names[canonical(seq[b:e])]
+            if name == "bridge" and "side" in row:
+                if max(b, len(seq) - e) == 750 and (seq in cases[name]["sequence"] or reverse_complement(seq) in cases[name]["sequence"]):
+                    # Both true directions must exist, including the fork side.
+                    if seq in cases[name]["sequence"][cases[name]["start"]:] or reverse_complement(seq) in cases[name]["sequence"][cases[name]["start"]:]:
+                        correct_bridge = True
+        assert correct_bridge, "low-count bridge lost its true full-length continuation"
+        for row in evidence:
+            name = names[targets[row["target_id"]]]
+            assert row["accepted"] == row["reported"] == "1"
+            if name == "linear":
+                assert int(row["left_bp"]) == int(row["right_bp"]) == 750, row
+            if name == "depth_change":
+                assert min(int(row["left_bp"]), int(row["right_bp"])) == 0, row
+        assert len(fasta(result / "viral_contigs_lookahead.fasta")) <= 50
+        assert all(hashlib.sha256(p.read_bytes()).hexdigest() == sha for p, sha in hashes.items())
+        print("PASS: lookahead retains the correct 750-base low-depth bridge route; independent sides, targets, bounded paths and graph verified.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=Path)
     parser.add_argument("--flow", action="store_true", help="Run the flow-specific controlled graphs")
+    parser.add_argument("--lookahead", action="store_true")
     args = parser.parse_args()
     binary = args.binary.resolve()
+    if args.lookahead:
+        check_lookahead(binary)
+        return
     if args.flow:
         check_flow(binary)
         return
