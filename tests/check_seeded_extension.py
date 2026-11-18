@@ -280,18 +280,27 @@ def check_evidence_cap(binary):
                 if molecule[1050:1085] != row["sequence"]:
                     molecule = reverse_complement(molecule)
                 stream.write(f"{row['query_id']}\t{molecule[300:1835]}\t750\t785\tlinear\n")
-        run(base + ["--extension-seeds", str(root / "seeds"), "--candidate-pool", str(cache),
-                    "--coverage-method", "evidence", "--output", str(root / "result")])
+        command = base + ["--extension-seeds", str(root / "seeds"), "--candidate-pool", str(cache),
+                          "--coverage-method", "evidence"]
+        run(command + ["--output", str(root / "uncapped")])
+        uncapped = fasta(root / "uncapped/viral_contigs_evidence.fasta")
+        assert len(uncapped) == 51
+        run(command + ["--max-reported-contigs", "50", "--output", str(root / "result")])
         rows = table(root / "result/extensions.tsv")
         assert len(rows) == 51 and sum(r["accepted"] == "1" for r in rows) == 51
         assert sum(r["reported"] == "1" for r in rows) == 50
         assert all(float(r["array_support"]) == 0. and float(r["target_support"]) == 0.
                    for r in rows if r["reported"] == "1"), "Independent sequences must not manufacture cross-support"
         withheld = [r for r in rows if r["reported"] == "0"]
-        assert len(withheld) == 1 and withheld[0]["relation_to_representative"] == "candidate_not_saved"
+        assert len(withheld) == 1 and int(withheld[0]["representative_rank"]) == 51
         assert len(fasta(root / "result/protospacers.fasta")) == 51
-        assert len(fasta(root / "result/viral_contigs_evidence.fasta")) == 50
-        print("PASS: 51 eligible inputs, 50 saved contigs, complete unsaved-candidate audit, all targets preserved.")
+        assert list(fasta(root / "result/viral_contigs_evidence.fasta").items()) == list(uncapped.items())[:50]
+        run(command + ["--max-contig-length", "1534", "--output", str(root / "short_only")])
+        assert not fasta(root / "short_only/viral_contigs_evidence.fasta")
+        run(command + ["--min-flank-per-side", "750", "--min-branch-support", "1",
+                       "--output", str(root / "supported")])
+        assert fasta(root / "supported/viral_contigs_evidence.fasta") == uncapped
+        print("PASS: uncapped and top-50 outputs, maximum length, minimum flank and branch support filters; all targets preserved.")
 
 
 def main():

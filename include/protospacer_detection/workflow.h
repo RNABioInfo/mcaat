@@ -18,7 +18,9 @@ struct WorkflowOptions {
     std::filesystem::path arrays, graph, output, protospacers, extension_seeds, candidate_pool;
     std::string coverage_method = "negbin";
     double nb_dispersion = 10.;
-    size_t min_contig_length = 500;
+    size_t min_contig_length = 500, max_contig_length = 0, min_flank_per_side = 0;
+    size_t max_reported_contigs = 0;
+    double min_branch_support = 0.;
     size_t threads = 1, beam_width = 64, max_flank = 750, min_flank = 200;
     size_t max_work = 2000000, placement_work = 400000, max_placements = 128;
     size_t max_visits = 2, context_bases = 24, context_width = 256, read_length = 150, min_external = 200;
@@ -103,6 +105,7 @@ struct TargetCandidate {
     size_t query = 0, placement = 0, begin = 0, end = 0, mismatches = 0;
     size_t anchor_prefix = 0, evidence_rank = size_t(-1);
     double evidence_score = -1., array_support = -1., target_support = -1.;
+    size_t same_start_representative = size_t(-1);
     std::vector<uint64_t> anchor;
     std::string target, sequence, status = "rejected", reason, target_id, extension_id;
     ExtensionWalk left, right, withheld;

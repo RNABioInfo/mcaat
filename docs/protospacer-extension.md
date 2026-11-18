@@ -6,7 +6,7 @@ In ordinary discovery mode (v9), final protospacers require an accepted extensio
 
 ## Extend from saved starts
 
-This mode starts at the actual saved protospacer graph nodes. It constructs **only local paths, up to 750 added bases on each side**, without whole-graph assembly or rebuilding the graph. A full result contains the target plus up to 1,500 flank bases. The `evidence` mode generates competing routes, scores shared external sequence across targets and arrays, and preserves all input targets:
+This mode starts at the actual saved protospacer graph nodes. It constructs **only local paths, up to 750 added bases on each side**, without whole-graph assembly or rebuilding the graph. A full result contains the target plus up to 1,500 flank bases. The `evidence` mode generates competing routes, scores branch support, coding coherence and shared external sequence across arrays, and preserves all input targets:
 
 ```bash
 build/mcaat phage-curate \
@@ -24,9 +24,9 @@ For the earlier coverage-model comparison, choose `--coverage-method poisson`, `
 
 ### Select supported extension regions
 
-Use `--coverage-method evidence` with the same saved starts. The native workflow preserves every protospacer, generates local candidates from the existing graph, and saves at most 50 nonredundant extension regions. No reference sequence, external assembler or gene caller is used to choose a path.
+Use `--coverage-method evidence` with the same saved starts. The native workflow preserves every protospacer, generates local candidates from the existing graph, and saves nonredundant extension regions. No reference sequence, external assembler or gene caller is used to choose a path.
 
-The bounded generator keeps the Huber result and its retained flanks, plus lookahead terminal routes, prefixes and the selected compatible pair. Huber uses the requested beam width (64 by default); lookahead uses twice that width, capped at 256. They have separate query-work budgets. The graph is read-only. Source nodes cannot be revisited; other nodes retain the existing bounded-repeat rule. Actual graph spelling, source masks, technical-sequence barriers, sufficient external sequence and the 750-base per-side limit remain enforced.
+The bounded generator keeps the Huber result and its retained flanks, plus lookahead terminal routes, prefixes and the selected compatible pair. Huber and lookahead both use the requested beam width (64 by default). They have separate query-work budgets. The graph is read-only. Source nodes cannot be revisited; other nodes retain the existing bounded-repeat rule. Actual graph spelling, source masks, technical-sequence barriers, sufficient external sequence and the 750-base per-side limit remain enforced.
 
 Keep complete candidates and add seed-containing windows of 500 and 625 bp at the default limits: one facing left, one facing right and one centered on the target, where those windows fit. More generally, use `min_contig_length` and `(min_contig_length + max_flank_length)/2`. The target and its complete graph anchor must remain inside every window. Shortening a candidate never joins disconnected graph segments.
 
@@ -37,7 +37,7 @@ target_support = mean(log2(number of distinct targets supporting w))  for w in W
 array_support  = mean(log2(number of distinct source arrays supporting w))
 ```
 
-Average the percentile midranks of these two support features, preferring higher support. First retain five distinct candidate families per input; then rank those families globally and choose up to 50 regions, with at most one contig per target. The existing direct 90%-shared-graph-run / 95%-overlap-identity grouping rule remains in force. Equal scores prefer lower mean raw branch penalty, then longer sequence and deterministic sequence/query ordering. Feature values and combined ranks use nine-decimal rounding for stable ties. Stop-free coding potential and other multiplicity features remain diagnostic audit columns; they do not contribute to this final support score.
+Average the percentile midranks for lower mean branch surprisal, higher stop-free coding coherence, and higher source-array support. Distinct protospacer support stays in the audit. First retain five distinct candidate families per input; then rank those families globally, keeping at most one representative per distinct target and canonical graph anchor. The direct 90%-shared-graph-run / 95%-overlap-identity grouping rule applies across starts. Equal scores prefer lower mean raw branch penalty, then longer sequence and deterministic sequence/query ordering. Feature values and combined ranks use nine-decimal rounding for stable ties. Other multiplicity features remain diagnostic audit columns.
 
 The rationale is that competing branches reached from different spacer targets can corroborate an external sequence, while counting each target/array once prevents a large candidate pool from manufacturing votes. Multiple spacer hits have also been associated with more reliable virus–host links in [Roux et al. (2026)](https://pmc.ncbi.nlm.nih.gov/articles/PMC13739734/). Our shared-path score is an inference inspired by that idea: it uses graph candidates, not their reference alignments, and is neither that paper's method nor a calibrated probability. Related arrays, host sequence and shared repeats can still create correlated support.
 
@@ -61,11 +61,34 @@ Run `tests/check_seeded_extension.py build/mcaat --lookahead` for route preserva
 
 Evaluate a completed run with `scripts/evaluate_protospacer_evidence.py`. Its `load_hit_cache` checks frozen prediction hashes before reusing evaluations; `figures` plots top-K matches, the logarithmic shared-word support function and observed multiplicities; `main` validates inputs/FASTA counts, evaluates the frozen outputs, computes gains/losses and writes the report. The predictor never reads the reference or these evaluation columns.
 
-**SRR14017553, direct native run (2026-11-17):** all **164 starts** were processed and all **159 input protospacers** preserved. The workflow generated 12,179 eligible route/window candidates and saved **50 contigs, 29 matching** the curated reference at 90% identity / 50% full-query coverage in one HSP. The strongest earlier saved-output baseline had **15/50** matches; fresh BLAST searches confirmed both sets. Saved matching inputs: **22 gained, 8 lost, 7 retained**. The short targets retain **53/159** matches at 90% identity / 85% coverage.
+**SRR14017553 archived result (2026-11-17):** 164 starts, 159 preserved target sequences, 50 saved contigs and 19 reference matches. The 19 distinct sequences had best qualifying alignments in nine intervals across seven reference records. A match used at least 90% identity and 50% full-query coverage in one HSP. This configuration permits shorter windows and single-sided paths.
 
-The saved contigs are **500–791 bp**, with at most 750 added bases per side; this result favors supported partial regions and does not establish reconstruction of both complete flanks. Best qualifying HSPs span **seven overlapping reference intervals across six records**, not 29 independent phage genomes. This is a development result on one dataset: the reference was used after prediction to compare methods, and a held-out dataset has not validated the selected method.
+For a different sample, run ordinary discovery against that sample's existing graph. Pass its output directory to the seeded command above. Each dataset needs its own array reports, graph and saved discovery output:
 
-The tested executable generated routes directly from the existing graph, without a candidate cache. Its 12,179 candidates matched the preceding direct-run control exactly, and its final 50 choices matched the frozen selector experiment exactly. Prediction used four local threads, took **8.9 minutes**, and peaked at **2.62 GiB** sampled RSS. All 27 graph components retained their original SHA-256 hashes, sizes and modification times. Controlled graph tests covered route replay, bounded flanks, source masks, preservation of targets, output capping and zero cross-support for unrelated targets.
+```bash
+sample=/vol/d/data/copsac/SRR14017553
+build/mcaat phage-curate --arrays "$sample" --graph "$sample/graph/graph" \
+  --output "$sample/evidence19_seeds" --threads 24
+build/mcaat phage-curate --arrays "$sample" --graph "$sample/graph/graph" \
+  --extension-seeds "$sample/evidence19_seeds" --output "$sample/evidence19_extensions" \
+  --coverage-method evidence --max-flank-length 750 --min-contig-length 500 \
+  --beam-width 64 --max-context-paths 256 --threads 24
+```
+
+Both output directories must be new or empty. The seeded FASTA is ordered by rank. Use its first 50 entries for the fixed-count benchmark. Add `--max-reported-contigs 50` to save just that subset. The default `0` saves every eligible representative, bounded by the number of distinct protospacers and graph starts.
+
+| Flag | Meaning |
+|---|---|
+| `--min-contig-length 500` | Minimum total length including the target. |
+| `--max-contig-length 0` | Maximum total length. Zero disables this filter. |
+| `--max-flank-length 750` | Maximum bases to search on each side. |
+| `--min-flank-per-side 0` | Minimum added bases required on each side. Zero allows a single flank. |
+| `--min-branch-support 0` | Optional minimum `2^(-mean branch penalty in bits)` across scored external positions. A path with no scored forks can reach 1, so treat this as a graph statistic. |
+| `--max-reported-contigs 0` | Optional FASTA output limit applied after ranking and grouping. |
+
+Length and support filters run before ranking and can change which candidate wins. The optional FASTA limit takes a prefix of the same rank order. `extensions.tsv` reports `branch_support` and `same_start_representative_query`; the latter links input queries with the same graph anchor to the representative query. Use the representative's `reported` field to determine whether it was included in the FASTA.
+
+A direct rerun of the restored search reproduced the 11,295 archived SRR14017553 routes and all 50 ranked contigs. Replaying those routes with the new selector saved 117 representatives with 28 matches. Its first 50 contained the archived 50 sequences and 19 matches, with a small order difference. A pre-ranking cutoff of `--min-branch-support 0.998` saved 87 representatives with 24 matches and retained seven of the original 19 matching sequences. The cutoff is opt-in because path selection changed on the test sample.
 
 ### Joint local coverage fitting (experimental)
 

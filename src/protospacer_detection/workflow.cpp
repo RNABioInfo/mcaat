@@ -66,7 +66,9 @@ void ProtospacerWorkflow::print_help() {
                  "Seeded mode uses local MEGAHIT-derived graph rules and keeps up to "
                  "max-flank-length on EACH side.\n"
                  "evidence: bounded Huber/lookahead candidates and seed-containing windows; "
-                 "preserve all targets, save up to 50 regions with one contig per target.\n"
+                 "preserve all targets, keep one contig per target and graph start.\n"
+                 "Evidence filters: --max-contig-length 0 --min-flank-per-side 0\n"
+                 "--min-branch-support 0 --max-reported-contigs 0 (0 disables a limit).\n"
                  "--candidate-pool FILE.tsv.gz: optional prediction-only mixture/evidence cache.\n"
                  "--expand-candidates false: experimental broader evidence search.\n"
                  "No reference-guided path selection.\n"
@@ -77,7 +79,7 @@ void ProtospacerWorkflow::print_help() {
 }
 WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
     WorkflowOptions o;
-    bool seeded_options = false;
+    bool seeded_options = false, evidence_filters = false;
     for (int i = 1; i < argc; ++i) {
         std::string flag = argv[i];
         if (++i >= argc)
@@ -114,6 +116,23 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
                 o.filter_artifacts = value == "true";
             else
                 o.correct_boundaries = value == "true";
+        } else if (flag == "--max-contig-length" || flag == "--min-flank-per-side" ||
+                   flag == "--max-reported-contigs") {
+            evidence_filters = true;
+            if (value.empty() || value.find_first_not_of("0123456789") != std::string::npos)
+                throw std::invalid_argument(flag + " requires a nonnegative integer");
+            const auto n = std::stoull(value);
+            if (n > 10000000) throw std::invalid_argument(flag + " is out of range");
+            if (flag == "--max-contig-length") o.max_contig_length = n;
+            if (flag == "--min-flank-per-side") o.min_flank_per_side = n;
+            if (flag == "--max-reported-contigs") o.max_reported_contigs = n;
+        } else if (flag == "--min-branch-support") {
+            evidence_filters = true;
+            size_t used = 0;
+            o.min_branch_support = std::stod(value, &used);
+            if (used != value.size() || !std::isfinite(o.min_branch_support) ||
+                o.min_branch_support < 0. || o.min_branch_support > 1.)
+                throw std::invalid_argument(flag + " requires a number in [0, 1]");
         } else if (flag == "--threads" || flag == "--beam-width" || flag == "--max-flank-length" ||
                    flag == "--min-extension-flank" || flag == "--max-query-states" ||
                    flag == "--max-placement-states" || flag == "--max-placements" ||
@@ -186,6 +205,11 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
         throw std::invalid_argument("--arrays, --graph and --output are required");
     if (seeded_options && o.extension_seeds.empty())
         throw std::invalid_argument("coverage-model options require --extension-seeds DIR; see phage-curate --help");
+    if (evidence_filters && o.coverage_method != "evidence")
+        throw std::invalid_argument("contig output filters require evidence mode");
+    if ((o.max_contig_length && o.max_contig_length < o.min_contig_length) ||
+        o.min_flank_per_side > o.max_flank)
+        throw std::invalid_argument("inconsistent contig or flank length limits");
     if (!fs::is_directory(o.arrays))
         throw std::invalid_argument("array directory does not exist");
     if (fs::is_directory(o.graph))
@@ -3291,7 +3315,8 @@ std::vector<TargetCandidate> ProtospacerWorkflow::mixture_candidates(const Targe
     add(left, empty_right, "huber_left"); add(empty_left, right, "huber_right");
     used = 0;
     std::vector<ExtensionWalk> lp, rp;
-    size_t lookahead_width=std::min(size_t(256),2*options_.beam_width);
+    const size_t lookahead_width = options_.coverage_method == "evidence"
+        ? options_.beam_width : std::min(size_t(256), 2 * options_.beam_width);
     left = extend_seeded(seed.query, seed, true, used, options_.max_work / 2, &lp, 1, lookahead_width);
     right = extend_seeded(seed.query, seed, false, used, options_.max_work, &rp, 1, lookahead_width);
     work += used;
@@ -3625,6 +3650,14 @@ TargetCandidate ProtospacerWorkflow::select_evidence(const TargetCandidate &seed
 void ProtospacerWorkflow::select_evidence_regions(const std::vector<TargetCandidate> &seeds,
                                                   std::vector<std::vector<CandidateEvidence>> &evidence,
                                                   std::vector<TargetCandidate> &predictions) const {
+    // Apply absolute length/support filters before per-input and global ranking.
+    for (auto &pool : evidence)
+        pool.erase(std::remove_if(pool.begin(), pool.end(), [&](const auto &c) {
+            return (options_.max_contig_length && c.sequence.size() > options_.max_contig_length) ||
+                   c.begin < options_.min_flank_per_side ||
+                   c.sequence.size() - c.end < options_.min_flank_per_side ||
+                   std::exp2(-c.features[0]) < options_.min_branch_support;
+        }), pool.end());
     // Every position is indexed: sparse sampling would depend on where a
     // contig starts. Each canonical target and source array votes once per
     // word, regardless of how many competing paths contain it.
@@ -3656,7 +3689,7 @@ void ProtospacerWorkflow::select_evidence_regions(const std::vector<TargetCandid
     auto rank = [](std::vector<CandidateEvidence *> &pool) {
         for (auto c : pool)
             c->rank = 0.;
-        for (size_t feature : {size_t(2), size_t(3)}) {
+        for (size_t feature : {size_t(0), size_t(1), size_t(2)}) {
             auto sorted = pool;
             std::sort(sorted.begin(), sorted.end(),
                       [&](auto a, auto b) { return a->features[feature] < b->features[feature]; });
@@ -3664,7 +3697,7 @@ void ProtospacerWorkflow::select_evidence_regions(const std::vector<TargetCandid
                 size_t j = i + 1;
                 while (j < sorted.size() && sorted[j]->features[feature] == sorted[i]->features[feature])
                     ++j;
-                double value = .5 * (i + j - 1) / std::max(size_t(1), sorted.size() - 1) / 2.;
+                double value = .5 * (i + j - 1) / std::max(size_t(1), sorted.size() - 1) / 3.;
                 for (size_t n = i; n < j; ++n)
                     sorted[n]->rank += value;
                 i = j;
@@ -3721,11 +3754,14 @@ void ProtospacerWorkflow::select_evidence_regions(const std::vector<TargetCandid
     std::map<size_t, size_t> index;
     for (size_t i = 0; i < seeds.size(); ++i)
         index[seeds[i].query] = i;
-    std::set<size_t> used;
+    std::vector<std::string> start_keys;
+    for (const auto &seed : seeds) start_keys.push_back(canonical(spell(seed.anchor)));
+    std::map<std::string, size_t> used_starts;
     std::set<std::string> used_targets;
     std::vector<CandidateEvidence *> selected;
     for (auto c : eligible) {
-        if (used.count(c->query) || used_targets.count(seeds[index.at(c->query)].target_id))
+        size_t i = index.at(c->query);
+        if (used_starts.count(start_keys[i]) || used_targets.count(seeds[i].target_id))
             continue;
         bool duplicate = false;
         for (auto other : selected)
@@ -3735,7 +3771,6 @@ void ProtospacerWorkflow::select_evidence_regions(const std::vector<TargetCandid
             }
         if (duplicate)
             continue;
-        size_t i = index.at(c->query);
         predictions[i] = replay_candidate(seeds[i], {c->sequence, c->origin, c->begin, c->end}, true);
         predictions[i].extended = true;
         predictions[i].reason = "accepted";
@@ -3749,11 +3784,14 @@ void ProtospacerWorkflow::select_evidence_regions(const std::vector<TargetCandid
                 walk->competing_routes = alternatives.at(c->query) - 1;
                 walk->ambiguous = walk->competing_routes > 0;
             }
-        used.insert(c->query);
+        used_starts.emplace(start_keys[i], i);
         used_targets.insert(seeds[i].target_id);
         selected.push_back(c);
-        if (selected.size() == 50)
-            break;
+    }
+    for (size_t i = 0; i < predictions.size(); ++i) {
+        auto found = used_starts.find(start_keys[i]);
+        if (found != used_starts.end())
+            predictions[i].same_start_representative = seeds[found->second].query;
     }
 }
 
@@ -4120,7 +4158,7 @@ int ProtospacerWorkflow::run_seeded() {
                 "limited\tambiguous\twork\t"
                 "tips_removed\tbubbles_removed\tweak_links_"
                 "removed\tsequence\tleft_counts\tright_counts\t"
-                "left_scored_positions\tright_scored_positions\tleft_branch_bits\tright_branch_bits\tselection_cost\tleft_seed_flow\tright_seed_flow\tleft_remaining_flow\tright_remaining_flow\tsupport_cost\tleft_flow_decisions\tright_flow_decisions\treported\trepresentative_rank\tmixture_stability\tmixture_abundance\tmixture_error\tmixture_candidates\tmixture_backgrounds\tmixture_origin\tevidence_rank\tevidence_score\tarray_support\ttarget_support\n";
+                "left_scored_positions\tright_scored_positions\tleft_branch_bits\tright_branch_bits\tselection_cost\tleft_seed_flow\tright_seed_flow\tleft_remaining_flow\tright_remaining_flow\tsupport_cost\tleft_flow_decisions\tright_flow_decisions\treported\trepresentative_rank\tmixture_stability\tmixture_abundance\tmixture_error\tmixture_candidates\tmixture_backgrounds\tmixture_origin\tevidence_rank\tevidence_score\tarray_support\ttarget_support\tbranch_support\tsame_start_representative_query\n";
     std::vector<std::string> summaries;
     std::unique_ptr<gzFile_s, int (*)(gzFile)> candidate_audit(nullptr, &gzclose);
     if (options_.coverage_method == "lookahead") {
@@ -4159,14 +4197,18 @@ int ProtospacerWorkflow::run_seeded() {
             << ",\n\"lookahead_policy\":\"two read-spans, 256 unitig-entry edges, 512 operations per probe; at most one eighth of query work per flank for probing; first-two-fork family quotas; no hard weak-link pruning; independent prefix selection; top 50 regions\""
             << ",\n\"expand_candidates\":" << (options_.expand_candidates ? "true" : "false")
             << ",\n\"evidence_base_beam_width\":" << options_.beam_width
-            << ",\n\"evidence_lookahead_beam_width\":" << std::min(size_t(256), 2 * options_.beam_width)
-            << ",\n\"evidence_policy\":\"bounded base candidates plus minimum/midpoint windows; equal distinct-target/source-array support midranks; branch support breaks ties; five families per input; one saved contig per target; cap 50; no calibrated probability\""
+            << ",\n\"evidence_lookahead_beam_width\":" << options_.beam_width
+            << ",\n\"evidence_policy\":\"bounded base candidates plus minimum/midpoint windows; equal branch-support, coding-coherence and source-array support midranks; branch support breaks ties; five families per input; one contig per target and graph start; optional output limit; no calibrated probability\""
+            << ",\n\"max_contig_length\":" << options_.max_contig_length
+            << ",\n\"min_flank_per_side\":" << options_.min_flank_per_side
+            << ",\n\"min_branch_support\":" << options_.min_branch_support
+            << ",\n\"max_reported_contigs\":" << options_.max_reported_contigs
             << ",\n\"candidate_pool\":" << json(options_.candidate_pool.string())
             << ",\n\"original_search_limits_known\":" << (options_.candidate_pool.empty() ? "true" : "false")
             << ",\n\"mixture_policy\":\"Huber beam B plus lookahead beam min(256,2B), each with its own query-work budget; graph-verified candidates; all compatible maximal-flank combinations, <=1024 or unresolved; <=64 external-arm backgrounds with round-robin flank slots plus connected known array routes; read-span weighted sparse NNLS, <=12 active routes, <=80 coordinate sweeps; 16 block-noise perturbations; stability>=0.8, normalized error<=2; top50 regions; heuristic, not calibrated probabilities\""
             << ",\n\"flow_policy\":\"unique positive excess-flow continuation; cap by arm depth; no budget replenishment; stop before unresolved split\""
             << ",\n\"representative_policy\":" << json(options_.coverage_method == "evidence"
-                ? "equal target/array support midranks, raw branch support tie-break, one per target, cap 50; no reference"
+                ? "equal branch, coding and array support midranks, raw branch support tie-break, one per target and graph start; optional output limit; no reference"
                 : "lowest worst-flank support cost, then uncertainty, then length; no reference")
             << ",\n\"weak_link_policy\":\"only after external calibration, and only below the local baseline by max_coverage_fold as well as <=10% neighbor depth\""
             << ",\n\"reference_used_for_selection\":false,\"whole_graph_assembly\":"
@@ -4438,11 +4480,15 @@ int ProtospacerWorkflow::run_seeded() {
         }
         std::ofstream fasta(options_.output / ("viral_contigs_" + method + ".fasta"));
         fasta.exceptions(std::ios::badbit | std::ios::failbit);
+        const size_t output_limit = method == "evidence" ? options_.max_reported_contigs
+            : (method == "lookahead" || method == "mixture" ? 50 : 0);
+        const size_t reported_count = output_limit ? std::min(output_limit, representatives.size())
+                                                   : representatives.size();
         std::map<std::string, size_t> ranks;
         for (size_t rank = 0; rank < representatives.size(); ++rank) {
             size_t i = representatives[rank];
             ranks[predictions[i].extension_id] = rank + 1;
-            if ((method != "lookahead" && method != "mixture" && method != "evidence") || rank < 50)
+            if (rank < reported_count)
                 fasta << '>' << predictions[i].extension_id << '\n' << predictions[i].sequence << '\n';
         }
         size_t accepted = 0, paired = 0, limited = 0;
@@ -4504,10 +4550,17 @@ int ProtospacerWorkflow::run_seeded() {
                 }
             }
             size_t rank = c.extended && ranks.count(c.extension_id) ? ranks.at(c.extension_id) : 0;
-            evidence << '\t' << (rank > 0 && ((method != "lookahead" && method != "mixture" && method != "evidence") || rank <= 50)) << '\t' << rank
+            evidence << '\t' << (rank > 0 && rank <= reported_count) << '\t' << rank
                      << '\t' << c.mixture_stability << '\t' << c.mixture_abundance << '\t' << c.mixture_error
                      << '\t' << c.mixture_candidates << '\t' << c.mixture_backgrounds << '\t' << c.mixture_origin
-                     << '\t' << (c.evidence_rank == size_t(-1) ? -1 : int64_t(c.evidence_rank+1)) << '\t' << c.evidence_score << '\t' << c.array_support << '\t' << c.target_support << '\n';
+                     << '\t' << (c.evidence_rank == size_t(-1) ? -1 : int64_t(c.evidence_rank+1)) << '\t' << c.evidence_score << '\t' << c.array_support << '\t' << c.target_support
+                     << '\t' << (c.left.counts.empty() && c.right.counts.empty() ? -1.
+                         : std::exp2(-(c.left.branch_loss + c.right.branch_loss) /
+                                     (c.left.counts.size() + c.right.counts.size())))
+                     << '\t';
+            if (c.same_start_representative != size_t(-1))
+                evidence << numbered("Q", c.same_start_representative + 1);
+            evidence << '\n';
         }
         evidence.flush();
         double grouping = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
@@ -4516,14 +4569,14 @@ int ProtospacerWorkflow::run_seeded() {
                << ",\"accepted_starts\":" << accepted
                << ",\"accepted_target_sequences\":" << accepted_targets.size()
                << ",\"viral_contig_representatives\":" << representatives.size()
-               << ",\"reported_representatives\":" << ((method == "lookahead" || method == "mixture" || method == "evidence") ? std::min(size_t(50), representatives.size()) : representatives.size())
+               << ",\"reported_representatives\":" << reported_count
                << ",\"paired_flank_starts\":" << paired << ",\"limited_starts\":" << limited
                << ",\"extension_seconds\":" << seconds << ",\"grouping_output_seconds\":" << grouping << '}';
         summaries.push_back(result.str());
         write_metadata(interrupted_ ? "interrupted" : "running");
         if (method == "evidence")
             std::cout << method << ": " << accepted << " starts with eligible routes; "
-                      << representatives.size() << " saved contigs; " << targets.size()
+                      << reported_count << " saved contigs; " << targets.size()
                       << " protospacers preserved\n" << std::flush;
         else
             std::cout << method << ": " << accepted << " accepted starts; " << representatives.size()

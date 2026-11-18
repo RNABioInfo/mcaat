@@ -38,7 +38,8 @@ def figures(output, rows, selected, hits):
     matches = [hits[bench.canonical(r['sequence'])]['passes'] for r in selected]
     axes[0].plot(range(1, len(matches)+1), np.cumsum(matches), color='#27618c', lw=2)
     axes[0].plot([0, 50], [0, 25], '--', color='#999999', lw=1, label='25 / 50 target')
-    axes[0].set(xlabel='Saved contigs, in prediction rank order', ylabel='Reference matches', xlim=(0, 50))
+    axes[0].set(xlabel='Saved contigs, in prediction rank order', ylabel='Reference matches',
+                xlim=(0, max(50, len(matches))))
     axes[0].legend(frameon=False)
     supporters = np.arange(1, 17)
     axes[1].plot(supporters, np.log2(supporters), color='#236d5e', lw=2, marker='o', ms=3)
@@ -96,14 +97,17 @@ def main():
     selected = sorted((r for r in rows if r['reported']=='1' and r['relation_to_representative']=='representative'),
                       key=lambda r: int(r['representative_rank']))
     contigs = bench.fasta(out/'viral_contigs_evidence.fasta')
-    assert len(selected) == len(contigs) <= 50
+    assert len(selected) == len(contigs) <= len(targets)
+    output_limit = summary.get("max_reported_contigs", 50)
+    assert not output_limit or len(contigs) <= output_limit
     assert len({r['target_id'] for r in selected}) == len(selected)
     assert set(contigs.values()) == {r['sequence'] for r in selected}
     for r in rows:
         b, e = int(r['seed_begin']), int(r['seed_end'])
         assert bench.canonical(r['sequence'][b:e]) == targets[r['target_id']]
-        assert b <= 750 and len(r['sequence'])-e <= 750
-        if r['accepted']=='1': assert len(r['sequence']) >= 500
+        flank = summary["max_flank_per_side"]
+        assert b <= flank and len(r['sequence'])-e <= flank
+        if r['accepted']=='1': assert len(r['sequence']) >= summary['min_contig_length']
     frozen = {name:bench.digest(out/name) for name in ['extensions.tsv','candidate_paths.tsv.gz',
               'protospacers.fasta','viral_contigs_evidence.fasta']}
     cache, provenance = bench.evaluation_cache(args.reuse_evaluation, args.reference)
@@ -126,6 +130,8 @@ def main():
                   gained_queries=sorted(matched-previous), lost_queries=sorted(previous-matched), retained_queries=sorted(matched&previous),
                   length_min=min(map(len,contigs.values()), default=0), length_max=max(map(len,contigs.values()), default=0),
                   reference_loci=bench.reference_loci([cache[bench.canonical(r['sequence'])] for r in selected]))
+    top50_matched = sum(cache[bench.canonical(r['sequence'])]['passes'] for r in selected[:50])
+    result['top50'] = dict(saved=min(50, len(selected)), matching=top50_matched)
     for r in rows:
         h = cache.get(bench.canonical(r['sequence'])) if r['accepted']=='1' else None
         r.update(reference_evaluated=int(h is not None), reference_pass=int(bool(h and h['passes'])),
@@ -148,6 +154,7 @@ def main():
 
 Processed **{len(rows)} starts**; preserved **{len(targets)} protospacer sequences**.
 Saved **{len(selected)} contigs**, of which **{len(matched)} match** the local reference.
+The first {min(50, len(selected))} ranked contigs include **{top50_matched} matches**.
 The previous run saved {len(old)} contigs with {len(previous)} matches.
 
 A match requires one HSP with at least **90% identity and 50% full-query coverage**.
@@ -162,8 +169,8 @@ The unchanged targets include {result['matching_protospacers']} reference matche
 
 1. Extend from the actual saved graph nodes using bounded Huber and lookahead searches; preserve their candidate routes.
 2. Add seed-containing windows at the minimum contig length and halfway between that minimum and the maximum flank length (500 and 625 bp here). Keep the complete candidates too.
-3. Score external shared sequence using distinct canonical targets and distinct source arrays. Average their percentile ranks; use raw branch support to break ties. Coding potential remains diagnostic.
-4. Consider five distinct route families per input, then save at most 50 nonredundant regions, with at most one contig per target. Preserve every input protospacer independently of extension success.
+3. Average the percentile ranks of raw branch support, stop-free coding coherence, and external sequence shared across distinct source arrays. Use raw branch support to break ties.
+4. Consider five distinct route families per input, then save nonredundant regions, with at most one contig per target and graph start, subject to the optional output limit. Preserve every input protospacer independently of extension success.
 5. Freeze predictions, then align them for evaluation. No reference, read aligner or external assembler chooses paths.
 
 Shorter windows change the amount of retained sequence: this result does not imply recovery of both full 750-base flanks. Scores are ranking heuristics, not calibrated probabilities. The reference was used to compare methods during development after each prediction set was frozen; it is never an input to the predictor. This is development performance on one dataset, not independent validation.
