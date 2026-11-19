@@ -1,5 +1,11 @@
 # Changelog
 
+## Protospacer workflow v10 / seeded v7
+- Source-array crossing is off by default; it followed the array into a neighbouring spacer's phage.
+- New CRISPR repeat barrier (`--crispr-repeat-barrier true`): flanks stop at any reported repeat.
+- New `scripts/evaluate_target_region.py`: counts a match only when the reference region contains the target.
+- New `tests/check_array_chimera.py` and `scripts/run_evidence19_stages.sh`. See `docs/protospacer-target-region.md`.
+
 ## [Unreleased] - 0.5.1
 - Fixed crash in spacer ordering when no reads are found (guard added).
 - Improved parallel scaling:

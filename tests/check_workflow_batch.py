@@ -75,7 +75,7 @@ def main():
                     raise AssertionError("invalid existing graph was silently skipped")
         predictions = root / "predictions"
         predictions.mkdir()
-        summary = dict(status="complete", implementation="protospacer-workflow-v9",
+        summary = dict(status="complete", implementation="protospacer-workflow-v10",
                        protospacer_output_policy="accepted_extensions_only", protospacer_regions=2,
                        candidate_protospacer_regions=3, candidate_only_regions=1,
                        unique_extensions=1, extended_queries=2)

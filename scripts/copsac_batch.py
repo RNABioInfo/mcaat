@@ -302,9 +302,9 @@ def prepare_graph(sample, job, options, metrics):
 
 
 def validate_predictions(folder):
-    """Require complete v9 output and one accepted extension for every final target."""
+    """Require complete v10 output and one accepted extension for every final target."""
     summary = json.loads((folder / "run_summary.json").read_text())
-    if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v9" or \
+    if summary["status"] != "complete" or summary["implementation"] != "protospacer-workflow-v10" or \
        summary.get("protospacer_output_policy") != "accepted_extensions_only":
         raise ValueError("native workflow did not complete with the final-target policy")
     targets = read_fasta(folder / "Protospacers.fasta")
@@ -342,7 +342,7 @@ def process(sample, arrays, options, logdir, binary_hash):
     base.mkdir(exist_ok=True)
     job = base/dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     job.mkdir()
-    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v9",
+    manifest = {"status": "running", "sample": sample.name, "implementation": "protospacer-workflow-v10",
                 "binary_sha256": binary_hash, "helper_sha256": digest(__file__), "arrays": {p.name: digest(p) for p in arrays}}
     write_json(job/"job.json", manifest)
     try:
@@ -375,7 +375,7 @@ def process(sample, arrays, options, logdir, binary_hash):
             raise ValueError("mcaat binary changed during batch; completed work preserved")
         run_stage([options.mcaat, "phage-curate", "--arrays", snapshot, "--graph", graph["prefix"],
                    "--output", job/"predictions", "--threads", options.threads, "--beam-width", options.beam_width,
-                   "--source-array-crossing", "true", "--max-context-paths", options.max_context_paths,
+                   "--source-array-crossing", "false", "--crispr-repeat-barrier", "true", "--max-context-paths", options.max_context_paths,
                    "--read-length", options.read_length, "--min-external-bases", options.min_external_bases,
                    "--max-coverage-fold", options.max_coverage_fold,
                    "--max-flank-length", options.max_flank_length, "--min-extension-flank", options.min_extension_flank],

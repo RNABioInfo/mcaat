@@ -57,7 +57,7 @@ def write_json(path, data):
 def validate(folder):
     """Check all source/query outcomes, sequence identities, and association coordinates."""
     summary = json.loads((folder / "run_summary.json").read_text())
-    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2", "protospacer-workflow-v3", "protospacer-workflow-v4", "protospacer-workflow-v5", "protospacer-workflow-v6", "protospacer-workflow-v7", "protospacer-workflow-v8", "protospacer-workflow-v9") or summary["status"] != "complete":
+    if summary["implementation"] not in ("protospacer-workflow-v1", "protospacer-workflow-v2", "protospacer-workflow-v3", "protospacer-workflow-v4", "protospacer-workflow-v5", "protospacer-workflow-v6", "protospacer-workflow-v7", "protospacer-workflow-v8", "protospacer-workflow-v9", "protospacer-workflow-v10") or summary["status"] != "complete":
         raise ValueError("evaluation requires a complete workflow run")
     sources = {r["source_id"]: r for r in table(folder / "sources.tsv")}
     queries = {r["query_id"]: r for r in table(folder / "queries.tsv")}

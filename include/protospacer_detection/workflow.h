@@ -28,7 +28,11 @@ struct WorkflowOptions {
     double boundary_support = .85, branch_ratio = 1.5;
     double max_coverage_fold = 2.;
     bool correct_boundaries = true, save_search = false, filter_artifacts = true;
-    bool source_array_crossing = true, expand_candidates = false;
+    // Crossing the source repeat follows the array into a neighbouring spacer;
+    // it is opt-in only. The repeat barrier stops any flank entering a CRISPR
+    // repeat reported in the sample (except an explicitly allowed crossing).
+    bool source_array_crossing = false, expand_candidates = false;
+    bool repeat_barrier = true;
 };
 struct SpacerSource {
     std::string id, array, original_spacer, original_repeat, spacer, repeat;
@@ -139,6 +143,10 @@ class ProtospacerWorkflow {
     std::vector<std::pair<std::string, std::string>> supplied_;
     std::map<std::string, std::set<uint64_t>> array_nodes_, array_repeat_nodes_;
     std::vector<std::set<uint64_t>> query_source_nodes_, query_repeat_nodes_;
+    // 2-bit encoded repeat words in traversal orientation: forward walks read
+    // genome order, backward walks append bases in reversed order.
+    static constexpr size_t repeat_word_length = 18;
+    std::vector<uint64_t> repeat_words_forward_, repeat_words_backward_;
     std::vector<std::pair<std::string, std::vector<size_t>>> queries_;
     std::vector<std::vector<TargetCandidate>> results_;
     std::vector<std::string> query_status_;
@@ -176,6 +184,10 @@ class ProtospacerWorkflow {
     void verify_index() const;
     void load_sources();
     void prepare_source_nodes();
+    void prepare_repeat_words();
+    void add_repeat_words(const std::string &repeat);
+    bool repeat_word(const std::string &word, bool backwards) const;
+    bool crispr_repeat_barrier(ExtensionWalk &walk, const TargetCandidate &candidate, bool backwards) const;
     void load_supplied_targets();
     void correct_boundaries();
     void group_queries();

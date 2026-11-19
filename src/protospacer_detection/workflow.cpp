@@ -57,8 +57,13 @@ void ProtospacerWorkflow::print_help() {
                  "--protospacers FASTA: extend supplied targets; preserve every "
                  "supplied input separately.\n"
                  "Supplied targets require an exact full-sequence graph embedding.\n"
-                 "--source-array-crossing true: one passage for identified "
-                 "targets only, never discovery.\n"
+                 "--source-array-crossing false: true allows one passage through the "
+                 "source repeat for identified targets (never discovery). Off by default: the "
+                 "passage follows the array into a neighbouring spacer, not the target's flank.\n"
+                 "--crispr-repeat-barrier true: stop a flank where it enters an 18-base word of "
+                 "any CRISPR repeat reported in the sample (either strand). An enabled crossing pass "
+                 "keeps its own rules; old behaviour: --source-array-crossing true "
+                 "--crispr-repeat-barrier false.\n"
                  "--extension-seeds DIR: extend ALL saved candidate starts from this "
                  "workflow directory.\n"
                  "--coverage-method poisson|negbin|huber|flow|lookahead|mixture|evidence|all --nb-dispersion 10 "
@@ -103,10 +108,13 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
                 throw std::invalid_argument("coverage method must be poisson, negbin, huber, flow, lookahead, mixture, evidence or all");
             o.coverage_method = value;
         } else if (flag == "--correct-spacer-boundaries" || flag == "--save-search" ||
-                   flag == "--filter-extension-artifacts" || flag == "--source-array-crossing" || flag == "--expand-candidates") {
+                   flag == "--filter-extension-artifacts" || flag == "--source-array-crossing" || flag == "--expand-candidates" ||
+                   flag == "--crispr-repeat-barrier") {
             if (value != "true" && value != "false")
                 throw std::invalid_argument(flag + " requires true or false");
-            if (flag == "--expand-candidates")
+            if (flag == "--crispr-repeat-barrier")
+                o.repeat_barrier = value == "true";
+            else if (flag == "--expand-candidates")
                 o.expand_candidates = value == "true";
             else if (flag == "--save-search")
                 o.save_search = value == "true";
@@ -841,6 +849,81 @@ void ProtospacerWorkflow::prepare_source_nodes() {
     }
 }
 
+void ProtospacerWorkflow::add_repeat_words(const std::string &repeat) {
+    const size_t w = repeat_word_length;
+    auto encode = [](const std::string &word, uint64_t &code) {
+        code = 0;
+        for (char c : word) {
+            const auto base = std::string("ACGT").find(c);
+            if (base == std::string::npos) return false;
+            code = (code << 2) | uint64_t(base);
+        }
+        return true;
+    };
+    if (repeat.size() < w) return;
+    for (const auto &oriented : {repeat, reverse_complement(repeat)})
+        for (size_t i = 0; i + w <= oriented.size(); ++i) {
+            auto word = oriented.substr(i, w);
+            uint64_t code;
+            if (encode(word, code)) repeat_words_forward_.push_back(code);
+            std::reverse(word.begin(), word.end());
+            if (encode(word, code)) repeat_words_backward_.push_back(code);
+        }
+}
+
+void ProtospacerWorkflow::prepare_repeat_words() {
+    // Every reported repeat of every array in the sample, consensus and the
+    // per-spacer variant. A flank entering one is following a CRISPR array.
+    repeat_words_forward_.clear();
+    repeat_words_backward_.clear();
+    if (!options_.repeat_barrier) return;
+    for (const auto &source : sources_) {
+        add_repeat_words(source.repeat);
+        add_repeat_words(source.original_repeat);
+    }
+    for (auto *words : {&repeat_words_forward_, &repeat_words_backward_}) {
+        std::sort(words->begin(), words->end());
+        words->erase(std::unique(words->begin(), words->end()), words->end());
+    }
+}
+
+bool ProtospacerWorkflow::repeat_word(const std::string &word, bool backwards) const {
+    const auto &words = backwards ? repeat_words_backward_ : repeat_words_forward_;
+    if (words.empty() || word.size() < repeat_word_length) return false;
+    uint64_t code = 0;
+    for (size_t i = word.size() - repeat_word_length; i < word.size(); ++i) {
+        const auto base = std::string("ACGT").find(word[i]);
+        if (base == std::string::npos) return false;
+        code = (code << 2) | uint64_t(base);
+    }
+    return std::binary_search(words.begin(), words.end(), code);
+}
+
+bool ProtospacerWorkflow::crispr_repeat_barrier(ExtensionWalk &walk, const TargetCandidate &candidate,
+                                                bool backwards) const {
+    // Called after each added base: test the word ending at the newest base.
+    // While the flank is shorter than a word, the word includes anchor bases,
+    // so a repeat starting at the target boundary is caught as well.
+    if (!options_.repeat_barrier || walk.bases.empty()) return false;
+    // An explicitly enabled crossing pass (--source-array-crossing true) keeps its
+    // own source passage and re-entry rules; the barrier governs every other walk.
+    if (candidate.allow_crossing) return false;
+    const size_t w = repeat_word_length;
+    std::string word;
+    if (walk.bases.size() < w) {
+        auto anchor = candidate.anchor_prefix ? label(candidate.anchor.front()) : candidate.target;
+        if (backwards) std::reverse(anchor.begin(), anchor.end());
+        const size_t needed = w - walk.bases.size();
+        word = anchor.size() > needed ? anchor.substr(anchor.size() - needed) : anchor;
+        word += walk.bases;
+    } else {
+        word = walk.bases.substr(walk.bases.size() - w);
+    }
+    if (!repeat_word(word, backwards)) return false;
+    trim_walk(walk, walk.bases.size() > w ? walk.bases.size() - w : 0, "crispr_repeat");
+    return true;
+}
+
 void ProtospacerWorkflow::load_supplied_targets() {
     if (options_.protospacers.empty())
         return;
@@ -1472,6 +1555,8 @@ bool ProtospacerWorkflow::advance_walk(ExtensionWalk &walk, const GraphArc &arc,
             walk.clear_at = walk.bases.size();
         }
     }
+    if (crispr_repeat_barrier(walk, candidate, backwards))
+        return false;
     if (walk.external) {
         size_t first = walk.crosses_source ? std::max(walk.source_last,
             walk.source_until > size_t(graph_->k()) ? walk.source_until - graph_->k() : 0)
@@ -2235,7 +2320,7 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
     fs::path temporary = options_.output / "run_summary.json.tmp";
     std::ofstream out(temporary);
     out.exceptions(std::ios::badbit | std::ios::failbit);
-    out << "{\n  \"implementation\": \"protospacer-workflow-v9\",\n  \"status\": " << json(status)
+    out << "{\n  \"implementation\": \"protospacer-workflow-v10\",\n  \"status\": " << json(status)
         << ",\n  \"error\": " << json(error) << ",\n  \"arrays\": " << json(options_.arrays.string())
         << ",\n  \"graph\": " << json(options_.graph.string())
         << ",\n  \"graph_k\": " << (graph_ ? graph_->k() : 0) << ",\n  \"array_count\": " << arrays.size()
@@ -2277,6 +2362,9 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
            "\"reference_used_for_selection\": false,\n  "
            "\"source_array_crossing\": "
         << (options_.source_array_crossing ? "true" : "false")
+        << ",\n  \"crispr_repeat_barrier\": " << (options_.repeat_barrier ? "true" : "false")
+        << ",\n  \"crispr_repeat_word_length\": " << repeat_word_length
+        << ",\n  \"crispr_repeat_words\": " << repeat_words_forward_.size()
         << ",\n  \"supplied_targets\": " << supplied_.size()
         << ",\n  \"target_mode\": " << json(options_.protospacers.empty() ? "discovery" : "supplied")
         << ",\n  \"source_crossing_establishes_detection\": false,\n  "
@@ -2315,6 +2403,7 @@ int ProtospacerWorkflow::run() {
     load_sources();
     correct_boundaries();
     prepare_source_nodes();
+    prepare_repeat_words();
     load_supplied_targets();
     group_queries();
     if (!options_.extension_seeds.empty()) {
@@ -4179,7 +4268,7 @@ int ProtospacerWorkflow::run_seeded() {
     auto write_metadata = [&](const std::string &status) {
         std::ofstream out(options_.output / "summary.json");
         out.exceptions(std::ios::badbit | std::ios::failbit);
-        out << "{\n\"implementation\":\"protospacer-seeded-local-v6\",\"status\":" << json(status)
+        out << "{\n\"implementation\":\"protospacer-seeded-local-v7\",\"status\":" << json(status)
             << ",\n\"graph\":" << json(options_.graph.string()) << ",\"graph_k\":" << graph_->k()
             << ",\n\"seed_directory\":" << json(options_.extension_seeds.string())
             << ",\"input_starts\":" << seeds.size() << ",\"input_target_sequences\":" << targets.size()
@@ -4192,6 +4281,9 @@ int ProtospacerWorkflow::run_seeded() {
             << ",\"huber_delta\":1,\"huber_pseudocount\":0.5"
             << ",\"max_coverage_fold\":" << options_.max_coverage_fold
             << ",\"source_array_crossing\":" << (options_.source_array_crossing ? "true" : "false")
+            << ",\"crispr_repeat_barrier\":" << (options_.repeat_barrier ? "true" : "false")
+            << ",\"crispr_repeat_word_length\":" << repeat_word_length
+            << ",\"crispr_repeat_words\":" << repeat_words_forward_.size()
             << ",\"threads\":" << options_.threads
             << ",\n\"score_policy\":\"mean branch surprisal plus read-span-weighted coverage loss; initial window used for calibration only\""
             << ",\n\"lookahead_policy\":\"two read-spans, 256 unitig-entry edges, 512 operations per probe; at most one eighth of query work per flank for probing; first-two-fork family quotas; no hard weak-link pruning; independent prefix selection; top 50 regions\""
@@ -4796,6 +4888,61 @@ void ProtospacerWorkflow::self_test() {
     require(workflow.extension_barrier(technical, test_target, false) && technical.bases.size() == 200 &&
                 technical.stop == "low_complexity_extension",
             "low-complexity continuation stops before its uninformative window");
+    {
+        // CRISPR repeat barrier, driven one base at a time as advance_walk does.
+        const std::string repeat = "GTTTTAGAGGTTTACAGAATTACACTACTCTCAAAC";
+        const std::string spacer = "GATGTATCGATATCATTGGTTACATATTTAG";
+        const std::string phage = "TCGGAGTGCCTGTTTAGCGCTAAATTTCTTATTCTTGCCATTTGCCCTCCTAATCTCTAACAACACGTTTGACCGA";
+        require(!workflow.repeat_word(repeat, false), "no repeat words before preparation");
+        workflow.options_.repeat_barrier = true;
+        workflow.sources_.clear();
+        SpacerSource source;
+        source.repeat = source.original_repeat = repeat;
+        source.spacer = spacer;
+        workflow.sources_.push_back(source);
+        workflow.prepare_repeat_words();
+        require(workflow.repeat_words_forward_.size() == 2 * (repeat.size() - repeat_word_length + 1),
+                "repeat words cover both strands");
+        TargetCandidate seed;
+        seed.target = spacer;
+        auto drive = [&](const std::string &bases, bool backwards, ExtensionWalk &w) {
+            w = ExtensionWalk{};
+            for (char c : bases) {
+                w.bases += c;
+                w.nodes.resize(w.bases.size() + 1);
+                w.all_counts.push_back(1.);
+                if (workflow.crispr_repeat_barrier(w, seed, backwards)) return true;
+            }
+            return false;
+        };
+        ExtensionWalk w;
+        require(drive(phage + repeat + phage, false, w) && w.bases == phage && w.stop == "crispr_repeat",
+                "forward flank stops where a reported repeat begins");
+        require(drive(phage + reverse_complement(repeat), false, w) && w.bases == phage,
+                "repeat is recognised on the reverse strand");
+        // Genome ...repeat|target: a left flank appends the repeat in reversed order.
+        require(drive(std::string(repeat.rbegin(), repeat.rend()) + phage, true, w) && w.bases.empty(),
+                "backward flank entering the adjacent repeat is removed");
+        require(!drive(phage + phage, false, w) && w.bases.size() == 2 * phage.size(),
+                "repeat-free flank is unaffected");
+        // Target ends with ten repeat bases; the flank completes the repeat.
+        seed.target = spacer + repeat.substr(0, 10);
+        require(drive(repeat.substr(10) + phage, false, w) && w.bases.empty(),
+                "repeat straddling the target boundary is stopped");
+        // Repeat bases on the far side of the target do not stop a flank leaving it.
+        seed.target = repeat + spacer;
+        require(!drive(phage, false, w), "repeat behind the target does not stop the outward flank");
+        seed.target = spacer;
+        seed.allow_crossing = true;
+        require(!drive(repeat + phage + repeat, false, w),
+                "an explicit crossing pass keeps its own source rules");
+        seed.allow_crossing = false;
+        workflow.options_.repeat_barrier = false;
+        require(!drive(phage + repeat, false, w), "repeat barrier can be disabled");
+        workflow.options_.repeat_barrier = true;
+        workflow.sources_.clear();
+        workflow.prepare_repeat_words();
+    }
     auto walk = [](size_t length, double flow, uint64_t branch) {
         ExtensionWalk w;
         w.external = true;

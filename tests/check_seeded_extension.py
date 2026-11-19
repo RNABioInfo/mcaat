@@ -400,9 +400,11 @@ def main():
             run(command)
         graph = root / "graph_build/graph/graph"
         hashes = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in graph.parent.glob("graph.sdbg*")}
-        base = [str(binary), "phage-curate", "--arrays", str(arrays), "--graph", str(graph),
-                "--threads", "2", "--max-flank-length", "750", "--correct-spacer-boundaries", "false",
-                "--min-identity", "1", "--min-query-coverage", "1", "--filter-extension-artifacts", "false"]
+        defaults = [str(binary), "phage-curate", "--arrays", str(arrays), "--graph", str(graph),
+                    "--threads", "2", "--max-flank-length", "750", "--correct-spacer-boundaries", "false",
+                    "--min-identity", "1", "--min-query-coverage", "1", "--filter-extension-artifacts", "false"]
+        # The source-passage case tests the opt-in crossing path and its source mask.
+        base = defaults + ["--source-array-crossing", "true"]
         run(base + ["--output", str(root / "seeds")])
         seed_summary = json.loads((root / "seeds/run_summary.json").read_text())
         assert seed_summary["detected_queries"] == len(cases), seed_summary
@@ -443,8 +445,22 @@ def main():
             representatives = fasta(result / f"viral_contigs_{method}.fasta")
             assert len(representatives) == len(cases)
             assert {r["viral_contig_id"] for r in rows if r["method"] == method} == set(representatives)
+        # Defaults (crossing off, CRISPR repeat barrier on): no saved extension may
+        # run through the source repeat; every other case keeps both 750-base flanks.
+        run(defaults + ["--extension-seeds", str(root / "seeds"), "--coverage-method", "huber",
+                        "--output", str(root / "default")])
+        default_summary = json.loads((root / "default/summary.json").read_text())
+        assert default_summary["source_array_crossing"] is False and default_summary["crispr_repeat_barrier"] is True
+        for row in table(root / "default/extensions.tsv"):
+            seq = row["sequence"]
+            begin, end = int(row["seed_begin"]), int(row["seed_end"])
+            name = names[canonical(seq[begin:end])]
+            repeat = cases[name]["repeat"]
+            assert repeat not in seq and reverse_complement(repeat) not in seq, (name, "repeat in default extension")
+            if name != "source_passage":
+                assert row["accepted"] == "1" and begin == 750 and len(seq) - end == 750, (name, row["left_stop"], row["right_stop"])
         assert all(hashlib.sha256(p.read_bytes()).hexdigest() == sha for p, sha in hashes.items()), "graph modified"
-        print("PASS: all three models; unchanged targets/graph; 750 bases on each side; bubble, tip, weak-link, source-mask, probe-bound, flat-wrong-branch and rare-arm protection tests.")
+        print("PASS: all three models; unchanged targets/graph; 750 bases on each side; bubble, tip, weak-link, source-mask, probe-bound, flat-wrong-branch and rare-arm protection tests; default run keeps CRISPR repeats out of every extension.")
 
 
 if __name__ == "__main__":
