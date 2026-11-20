@@ -27,6 +27,10 @@ struct WorkflowOptions {
     double identity = .90, coverage = .85, repeat_identity = .85;
     double boundary_support = .85, branch_ratio = 1.5;
     double max_coverage_fold = 2.;
+    // A spacer occurs once per array copy, its repeat (spacers + 1) times, so
+    // depth above repeat_depth/(spacers + 1) comes from a second molecule
+    // carrying the same sequence. 0 disables the requirement.
+    double min_spacer_depth_ratio = 0.;
     bool correct_boundaries = true, save_search = false, filter_artifacts = true;
     // Crossing the source repeat follows the array into a neighbouring spacer;
     // it is opt-in only. The repeat barrier stops any flank entering a CRISPR
@@ -143,6 +147,7 @@ class ProtospacerWorkflow {
     std::vector<std::pair<std::string, std::string>> supplied_;
     std::map<std::string, std::set<uint64_t>> array_nodes_, array_repeat_nodes_;
     std::vector<std::set<uint64_t>> query_source_nodes_, query_repeat_nodes_;
+    std::vector<double> query_depth_ratio_;
     // 2-bit encoded repeat words in traversal orientation: forward walks read
     // genome order, backward walks append bases in reversed order.
     static constexpr size_t repeat_word_length = 18;
@@ -185,6 +190,11 @@ class ProtospacerWorkflow {
     void load_sources();
     void prepare_source_nodes();
     void prepare_repeat_words();
+    std::vector<double> sequence_counts(const std::string &sequence) const;
+    double sequence_depth(const std::string &sequence) const;
+    void compute_spacer_depth();
+    static double array_share(double repeat_depth, size_t spacers);
+    static bool depth_excess_rejects(double ratio, double threshold);
     void add_repeat_words(const std::string &repeat);
     bool repeat_word(const std::string &word, bool backwards) const;
     bool crispr_repeat_barrier(ExtensionWalk &walk, const TargetCandidate &candidate, bool backwards) const;

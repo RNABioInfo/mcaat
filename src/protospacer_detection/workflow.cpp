@@ -60,6 +60,9 @@ void ProtospacerWorkflow::print_help() {
                  "--source-array-crossing false: true allows one passage through the "
                  "source repeat for identified targets (never discovery). Off by default: the "
                  "passage follows the array into a neighbouring spacer, not the target's flank.\n"
+                 "--min-spacer-depth-ratio 0: require a spacer to be deeper than its own array "
+                 "can explain, that is spacer depth / (repeat depth / (spacers + 1)); 0 disables. "
+                 "A spacer or repeat that is not a connected graph path is never rejected by it.\n"
                  "--crispr-repeat-barrier true: stop a flank where it enters an 18-base word of "
                  "any CRISPR repeat reported in the sample (either strand). An enabled crossing pass "
                  "keeps its own rules; old behaviour: --source-array-crossing true "
@@ -134,6 +137,12 @@ WorkflowOptions ProtospacerWorkflow::parse_options(int argc, char **argv) {
             if (flag == "--max-contig-length") o.max_contig_length = n;
             if (flag == "--min-flank-per-side") o.min_flank_per_side = n;
             if (flag == "--max-reported-contigs") o.max_reported_contigs = n;
+        } else if (flag == "--min-spacer-depth-ratio") {
+            size_t used = 0;
+            o.min_spacer_depth_ratio = std::stod(value, &used);
+            if (used != value.size() || !std::isfinite(o.min_spacer_depth_ratio) ||
+                o.min_spacer_depth_ratio < 0. || o.min_spacer_depth_ratio > 1000000.)
+                throw std::invalid_argument(flag + " requires a nonnegative number");
         } else if (flag == "--min-branch-support") {
             evidence_filters = true;
             size_t used = 0;
@@ -869,6 +878,100 @@ void ProtospacerWorkflow::add_repeat_words(const std::string &repeat) {
             std::reverse(word.begin(), word.end());
             if (encode(word, code)) repeat_words_backward_.push_back(code);
         }
+}
+
+double ProtospacerWorkflow::array_share(double repeat_depth, size_t spacers) {
+    // One array copy spells its repeat (spacers + 1) times and each spacer once.
+    return repeat_depth > 0. ? repeat_depth / double(spacers + 1) : 0.;
+}
+
+bool ProtospacerWorkflow::depth_excess_rejects(double ratio, double threshold) {
+    // A negative ratio means the depth could not be measured, which is not
+    // evidence of absence, so it never rejects.
+    return threshold > 0. && ratio >= 0. && ratio < threshold;
+}
+
+std::vector<double> ProtospacerWorkflow::sequence_counts(const std::string &sequence) const {
+    std::vector<double> counts;
+    const size_t k = graph_->k();
+    if (sequence.size() <= k || !dna(sequence))
+        return counts;
+    auto node = find_node(sequence.substr(0, k));
+    if (node == missing)
+        return counts;
+    for (size_t at = k; at < sequence.size(); ++at) {
+        bool stepped = false;
+        for (const auto &arc : neighbors(node, false)) {
+            if (added_base(arc, false) != sequence[at])
+                continue;
+            counts.push_back(arc.count);
+            node = arc.node;
+            stepped = true;
+            break;
+        }
+        if (!stepped)
+            return {};
+    }
+    return counts;
+}
+
+double ProtospacerWorkflow::sequence_depth(const std::string &sequence) const {
+    auto forward = sequence_counts(sequence);
+    auto reverse = sequence_counts(reverse_complement(sequence));
+    auto counts = forward.size() >= reverse.size() ? std::move(forward) : std::move(reverse);
+    if (counts.empty())
+        return 0.;
+    const size_t half = counts.size() / 2;
+    std::nth_element(counts.begin(), counts.begin() + half, counts.end());
+    double median = counts[half];
+    if (counts.size() % 2 == 0)
+        median = (median + *std::max_element(counts.begin(), counts.begin() + half)) / 2.;
+    return median;
+}
+
+void ProtospacerWorkflow::compute_spacer_depth() {
+    // Topology and multiplicity only. A spacer deeper than its own array can
+    // explain has a second copy in the sample; one with no excess has none.
+    query_depth_ratio_.assign(queries_.size(), -1.);
+    if (options_.min_spacer_depth_ratio <= 0.)
+        return;
+    std::map<std::string, std::set<std::string>> spacers;
+    std::map<std::string, std::string> repeats;
+    for (const auto &source : sources_) {
+        spacers[source.array].insert(source.spacer);
+        if (!source.repeat.empty())
+            repeats[source.array] = source.repeat;
+    }
+    std::map<std::string, double> computed;
+    for (const auto &entry : repeats) {
+        const double depth = sequence_depth(entry.second);
+        if (depth > 0.)
+            computed[entry.first] = array_share(depth, spacers.at(entry.first).size());
+    }
+    const auto &share = computed;
+#pragma omp parallel for num_threads(options_.threads) schedule(dynamic)
+    for (size_t q = 0; q < queries_.size(); ++q) {
+        if (interrupted_)
+            continue;
+        const double depth = sequence_depth(queries_[q].first);
+        if (depth <= 0.)
+            continue;
+        double best = -1.;
+        for (auto index : queries_[q].second) {
+            const auto found = share.find(sources_[index].array);
+            if (found != share.end() && found->second > 0.)
+                best = std::max(best, depth / found->second);
+        }
+        query_depth_ratio_[q] = best;
+    }
+    size_t measured = 0, rejected = 0;
+    for (auto ratio : query_depth_ratio_) {
+        measured += ratio >= 0.;
+        rejected += depth_excess_rejects(ratio, options_.min_spacer_depth_ratio);
+    }
+    std::cout << measured << "/" << queries_.size() << " spacers have a measurable depth ratio; "
+              << rejected << " below " << options_.min_spacer_depth_ratio << "\n"
+              << std::flush;
 }
 
 void ProtospacerWorkflow::prepare_repeat_words() {
@@ -1908,6 +2011,12 @@ void ProtospacerWorkflow::process_query(size_t query) {
         query_status_[query] = "uninformative_query";
         return;
     }
+    // An unmeasurable ratio (-1) never rejects: the spacer or its repeat is not
+    // a connected graph path, so the array share is unknown rather than zero.
+    if (depth_excess_rejects(query_depth_ratio_[query], options_.min_spacer_depth_ratio)) {
+        query_status_[query] = "no_spacer_depth_excess";
+        return;
+    }
     if (!options_.protospacers.empty() &&
         std::all_of(queries_[query].second.begin(), queries_[query].second.end(),
                     [&](size_t i) { return sources_[i].repeat.empty(); })) {
@@ -2118,7 +2227,7 @@ void ProtospacerWorkflow::write_outputs() {
         for (const auto &s : sources_)
             input << s.id << '\t' << s.array << '\t' << s.original_spacer << '\t' << s.original_repeat << '\t'
                   << s.spacer << '\t' << s.repeat << '\t' << s.trim_left << '\t' << s.trim_right << '\n';
-        queries << "query_id\tspacer\tsource_count\tstatus\twork\tsearch_limited\n";
+        queries << "query_id\tspacer\tsource_count\tstatus\twork\tsearch_limited\tspacer_depth_ratio\n";
         auto metrics = open("query_metrics.tsv");
         metrics << "query_id\tmapping_work\textension_work\tmapping_"
                    "seconds\textension_seconds\tfilter_seconds\n";
@@ -2133,7 +2242,8 @@ void ProtospacerWorkflow::write_outputs() {
         for (size_t i = 0; i < queries_.size(); ++i) {
             auto id = numbered("Q", i + 1);
             queries << id << '\t' << queries_[i].first << '\t' << queries_[i].second.size() << '\t'
-                    << query_status_[i] << '\t' << query_work_[i] << '\t' << int(query_limited_[i]) << '\n';
+                    << query_status_[i] << '\t' << query_work_[i] << '\t' << int(query_limited_[i])
+                    << '\t' << (i < query_depth_ratio_.size() ? query_depth_ratio_[i] : -1.) << '\n';
             metrics << id << '\t' << mapping_work_[i] << '\t' << query_work_[i] - mapping_work_[i];
             for (double seconds : query_timings_[i])
                 metrics << '\t' << seconds;
@@ -2362,6 +2472,7 @@ void ProtospacerWorkflow::write_summary(const std::string &status, const std::st
            "\"reference_used_for_selection\": false,\n  "
            "\"source_array_crossing\": "
         << (options_.source_array_crossing ? "true" : "false")
+        << ",\n  \"min_spacer_depth_ratio\": " << options_.min_spacer_depth_ratio
         << ",\n  \"crispr_repeat_barrier\": " << (options_.repeat_barrier ? "true" : "false")
         << ",\n  \"crispr_repeat_word_length\": " << repeat_word_length
         << ",\n  \"crispr_repeat_words\": " << repeat_words_forward_.size()
@@ -2406,6 +2517,7 @@ int ProtospacerWorkflow::run() {
     prepare_repeat_words();
     load_supplied_targets();
     group_queries();
+    compute_spacer_depth();
     if (!options_.extension_seeds.empty()) {
         finish("prepare_spacers");
         return run_seeded();
@@ -4687,6 +4799,16 @@ void ProtospacerWorkflow::self_test() {
         if (!condition)
             throw std::runtime_error("self-test failed: " + reason);
     };
+    // Spacer depth against the share one array copy can explain.
+    require(array_share(100., 9) == 10., "repeat depth is divided by spacers plus one");
+    require(array_share(0., 9) == 0. && array_share(-1., 9) == 0.,
+            "an unmeasured repeat gives no array share");
+    require(!depth_excess_rejects(1.5, 0.) && !depth_excess_rejects(-1., 2.),
+            "the gate is off by default and never rejects an unmeasured spacer");
+    require(depth_excess_rejects(1.9, 2.) && !depth_excess_rejects(2., 2.) &&
+                !depth_excess_rejects(50., 2.) && !depth_excess_rejects(0., 0.),
+            "the threshold is inclusive and only rejects a measured deficit");
+    require(depth_excess_rejects(0., 2.), "a spacer at zero measured excess is rejected");
     require(flow_choice(10., {9., 1.}) == std::make_pair(-2, 0.), "two positive flow continuations stop");
     require(flow_choice(9., {9., 1.}) == std::make_pair(0, 8.), "unique positive excess-flow branch");
     require(flow_choice(1., {9., 1.}) == std::make_pair(-1, 0.), "zero excess flow cannot extend");
