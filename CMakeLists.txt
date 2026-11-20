@@ -122,6 +122,17 @@ set(MEGAHIT_SOURCES
     ${MEGAHIT_EXTRAS}
 )
 
+# ── Executable: spacer_depth (graph/multiplicity diagnostic) ──────────────────
+
+add_executable(spacer_depth tools/spacer_depth.cpp ${MEGAHIT_SOURCES})
+
+target_link_libraries(spacer_depth PRIVATE
+    ${ZLIB_LIBRARIES}
+    spoa::spoa
+    fmt::fmt
+    OpenMP::OpenMP_CXX
+)
+
 # ── Executable: mcaat ─────────────────────────────────────────────────────────
 
 add_executable(mcaat ${MAIN_SOURCE} ${MEGAHIT_SOURCES})
