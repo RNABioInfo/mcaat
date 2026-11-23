@@ -8,6 +8,7 @@
 - On SRR14017565 that gives 268 contigs with 93 strict matches at 56 loci, against 286 contigs with 54 matches at 5 loci from `mcaat phage-curate`. 52 of the matches have the alignment covering the spacer and at least 50 bases on each side; the production run has none. One sample only.
 - New `tools/neighbour_check.cpp`: checks a neighbour lookup against `SDBG::IncomingEdges`/`OutgoingEdges` on every k-mer of every spacer.
 - New `scripts/run_boundary_walk.sh`, `scripts/eval_criteria.py`, `scripts/rule_table.py`, `scripts/spacer_check.py`. See `docs/boundary-walk.md`.
+- `boundary_walk` walks the spacers in parallel, `--threads N` to limit it. Output is written in source order and is byte-identical to the serial version on SRR14017565; 16 cores took that sample from 29m36s to 8m20s, the remainder being the serial graph load.
 
 
 ## Protospacer workflow v10 / seeded v7

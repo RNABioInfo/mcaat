@@ -35,6 +35,10 @@
 // Writes OUT_DIR/<criterion>.fasta and OUT_DIR/summary.tsv.
 #include "sdbg/sdbg.h"
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -271,10 +275,11 @@ int main(int argc, char **argv) {
     if (argc < 4) {
         std::cerr << "usage: boundary_walk GRAPH_PREFIX SOURCES_TSV OUT_DIR [--flank N] "
                      "[--beam N] [--window-low F] [--window-high F] [--window-running true|false] "
-                     "[--min-harmonic-mean F] [--require-connected-spacer true|false]\n"
+                     "[--min-harmonic-mean F] [--require-connected-spacer true|false] "
+                     "[--threads N]\n"
                      "defaults: --flank 1250 --beam 50 --window-low 0.1 --window-high 5 "
                      "--window-running true --min-harmonic-mean 3 "
-                     "--require-connected-spacer false\n";
+                     "--require-connected-spacer false, every core for --threads\n";
         return 2;
     }
     size_t flank = 1250, beam = 50;
@@ -297,6 +302,8 @@ int main(int argc, char **argv) {
     // of the recovered candidates have every k-mer present with one edge
     // missing. Both boundary sets are still required to be non-empty.
     bool require_connected = false;
+    // 0 leaves OpenMP its own default, which is every core.
+    int threads = 0;
     for (int i = 4; i + 1 < argc; i += 2) {
         const std::string flag = argv[i];
         if (flag == "--flank") flank = std::stoul(argv[i + 1]);
@@ -307,6 +314,7 @@ int main(int argc, char **argv) {
         else if (flag == "--min-harmonic-mean") min_harmonic = std::stod(argv[i + 1]);
         else if (flag == "--require-connected-spacer")
             require_connected = std::string(argv[i + 1]) == "true";
+        else if (flag == "--threads") threads = std::stoi(argv[i + 1]);
         else { std::cerr << "unknown option " << flag << "\n"; return 2; }
     }
     const auto sources = read_sources(argv[2]);
@@ -316,7 +324,15 @@ int main(int argc, char **argv) {
               << " source observations, flank=" << flank << " beam=" << beam
               << " window=[" << window_low << "," << window_high << "] keyed to "
               << (window_running ? "the running median" : "the boundary node")
-              << ", kept at harmonic mean >= " << min_harmonic << "\n";
+              << ", kept at harmonic mean >= " << min_harmonic;
+#ifdef _OPENMP
+    if (threads > 0) omp_set_num_threads(threads);
+    std::cerr << ", " << omp_get_max_threads() << " threads";
+#else
+    (void)threads;
+    std::cerr << ", built without OpenMP";
+#endif
+    std::cerr << "\n";
 
     // Tangle of each array: the nodes of its repeat and its spacers, both strands.
     std::map<std::string, std::unordered_set<uint64_t>> tangle;
@@ -370,20 +386,36 @@ int main(int argc, char **argv) {
     };
     auto record = [&](const Source &s, size_t nodes_seen, size_t in, size_t out, int connected,
                       const char *outcome) {
-        stages << s.id << '\t' << s.array << '\t' << s.spacer.size() << '\t' << nodes_seen << '\t'
-               << in << '\t' << out << '\t' << ends_present(s.spacer) << '\t' << connected << '\t'
-               << outcome << '\n';
+        std::ostringstream line;
+        line << s.id << '\t' << s.array << '\t' << s.spacer.size() << '\t' << nodes_seen << '\t'
+             << in << '\t' << out << '\t' << ends_present(s.spacer) << '\t' << connected << '\t'
+             << outcome << '\n';
+        return line.str();
     };
 
-    size_t traced = 0, candidates = 0;
-    std::array<size_t, Count> saved{}, thin{};
-    // Why a step was refused, counted for one criterion so the numbers mean
-    // something: in the array, out of the window below, above, already on the
-    // walk, and no neighbour in the graph at all.
-    std::array<size_t, 5> blocked{};
-    for (const auto &s : sources) {
+    // Each spacer is walked on its own: the graph is only read, and nothing one
+    // spacer computes is used by another. The loop therefore runs in parallel,
+    // and every line it would have written goes into that spacer's own slot.
+    // The files are written afterwards in source order, so the output does not
+    // depend on the order the threads happen to finish in.
+    struct Result {
+        std::string stage, summary;
+        std::array<std::string, Count> fasta;
+        bool traced = false, candidate = false;
+        std::array<size_t, Count> saved{}, thin{};
+        std::array<size_t, 5> blocked{};
+    };
+    std::vector<Result> results(sources.size());
+    const long long count = static_cast<long long>(sources.size());
+#pragma omp parallel for schedule(dynamic)
+    for (long long index = 0; index < count; ++index) {
+        const Source &s = sources[static_cast<size_t>(index)];
+        Result &r = results[static_cast<size_t>(index)];
+        // Per spacer, where the serial version shared one buffer across the loop.
+        std::vector<uint64_t> nodes;
+        std::vector<double> mult;
         if (!dna(s.spacer) || s.spacer.size() < graph.k()) {
-            record(s, 0, 0, 0, 0, "not_usable");
+            r.stage = record(s, 0, 0, 0, 0, "not_usable");
             continue;
         }
         std::string spacer = s.spacer;
@@ -394,17 +426,17 @@ int main(int argc, char **argv) {
         }
         if (!connected) {
             if (require_connected) {
-                record(s, 0, 0, 0, 0, "no_connected_path");
+                r.stage = record(s, 0, 0, 0, 0, "no_connected_path");
                 continue;
             }
             spacer = graph.locate(s.spacer, nodes);
             if (nodes.empty()) {
-                record(s, 0, 0, 0, 0, "no_nodes_in_graph");
+                r.stage = record(s, 0, 0, 0, 0, "no_nodes_in_graph");
                 continue;
             }
         }
-        ++traced;
-        const auto &T = tangle[s.array];
+        r.traced = true;
+        const auto &T = tangle.at(s.array);
         // FindProtospacers: outside neighbours over every node of the spacer.
         std::vector<Arc> b_in, b_out;
         const std::unordered_set<uint64_t> own(nodes.begin(), nodes.end());
@@ -415,13 +447,14 @@ int main(int argc, char **argv) {
                     (incoming ? b_in : b_out).push_back(arc);
                 }
         if (b_in.empty() || b_out.empty()) {
-            record(s, nodes.size(), b_in.size(), b_out.size(), connected,
-                   b_in.empty() && b_out.empty() ? "no_boundary_either_side"
-                                                 : b_in.empty() ? "no_boundary_in" : "no_boundary_out");
+            r.stage = record(s, nodes.size(), b_in.size(), b_out.size(), connected,
+                             b_in.empty() && b_out.empty()
+                                 ? "no_boundary_either_side"
+                                 : b_in.empty() ? "no_boundary_in" : "no_boundary_out");
             continue;
         }
-        record(s, nodes.size(), b_in.size(), b_out.size(), connected, "candidate");
-        ++candidates;
+        r.stage = record(s, nodes.size(), b_in.size(), b_out.size(), connected, "candidate");
+        r.candidate = true;
         for (int criterion = 0; criterion < Count; ++criterion) {
             std::array<Walk, 2> best{};
             std::array<bool, 2> have{false, false};
@@ -461,22 +494,22 @@ int main(int argc, char **argv) {
                             }
                             const double low = window_low * centre, high = window_high * centre;
                             const auto around = graph.neighbours(w.nodes.back(), incoming);
-                            if (criterion == Harmonic && around.empty()) ++blocked[4];
+                            if (criterion == Harmonic && around.empty()) ++r.blocked[4];
                             for (const auto &arc : around) {
                                 if (T.count(arc.node) || own.count(arc.node)) {
-                                    if (criterion == Harmonic) ++blocked[0];
+                                    if (criterion == Harmonic) ++r.blocked[0];
                                     continue;
                                 }
                                 if (arc.mult < low) {
-                                    if (criterion == Harmonic) ++blocked[1];
+                                    if (criterion == Harmonic) ++r.blocked[1];
                                     continue;
                                 }
                                 if (arc.mult > high) {
-                                    if (criterion == Harmonic) ++blocked[2];
+                                    if (criterion == Harmonic) ++r.blocked[2];
                                     continue;
                                 }
                                 if (std::find(w.nodes.begin(), w.nodes.end(), arc.node) != w.nodes.end()) {
-                                    if (criterion == Harmonic) ++blocked[3];
+                                    if (criterion == Harmonic) ++r.blocked[3];
                                     continue;
                                 }
                                 Walk child = w;
@@ -512,18 +545,41 @@ int main(int argc, char **argv) {
                 }
             const double harmonic = counted ? double(counted) / reciprocal : 0.;
             if (harmonic < min_harmonic) {
-                ++thin[criterion];
+                ++r.thin[criterion];
                 continue;
             }
-            ++saved[criterion];
-            out[criterion] << '>' << NAMES[criterion] << '_' << s.id << " left=" << left.size()
-                           << " right=" << best[1].bases.size() << " spacer=" << spacer.size() << '\n'
-                           << sequence << '\n';
-            summary << NAMES[criterion] << '\t' << s.id << '\t' << s.array << '\t' << nodes.size() << '\t'
-                    << b_in.size() << '\t' << b_out.size() << '\t' << left.size() << '\t'
-                    << best[1].bases.size() << '\t' << (best[0].score + best[1].score) / 2. << '\t'
-                    << harmonic << '\n';
+            ++r.saved[criterion];
+            std::ostringstream fasta;
+            fasta << '>' << NAMES[criterion] << '_' << s.id << " left=" << left.size()
+                  << " right=" << best[1].bases.size() << " spacer=" << spacer.size() << '\n'
+                  << sequence << '\n';
+            r.fasta[criterion] = fasta.str();
+            std::ostringstream row;
+            row << NAMES[criterion] << '\t' << s.id << '\t' << s.array << '\t' << nodes.size() << '\t'
+                << b_in.size() << '\t' << b_out.size() << '\t' << left.size() << '\t'
+                << best[1].bases.size() << '\t' << (best[0].score + best[1].score) / 2. << '\t'
+                << harmonic << '\n';
+            r.summary += row.str();
         }
+    }
+
+    size_t traced = 0, candidates = 0;
+    std::array<size_t, Count> saved{}, thin{};
+    // Why a step was refused, counted for one criterion so the numbers mean
+    // something: in the array, out of the window below, above, already on the
+    // walk, and no neighbour in the graph at all.
+    std::array<size_t, 5> blocked{};
+    for (const auto &r : results) {
+        stages << r.stage;
+        summary << r.summary;
+        for (int c = 0; c < Count; ++c) out[c] << r.fasta[c];
+        traced += r.traced ? 1 : 0;
+        candidates += r.candidate ? 1 : 0;
+        for (int c = 0; c < Count; ++c) {
+            saved[c] += r.saved[c];
+            thin[c] += r.thin[c];
+        }
+        for (int i = 0; i < 5; ++i) blocked[i] += r.blocked[i];
     }
     std::cerr << traced << " spacers traced, " << candidates << " with both boundary sets non-empty\n";
     for (int c = 0; c < Count; ++c)

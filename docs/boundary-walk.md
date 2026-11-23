@@ -141,6 +141,17 @@ Every setting is left at the binary's defaults, which are the configuration
 above. `EXTRA="--min-harmonic-mean 5"` and the other flags override them for an
 ablation; `boundary_walk` with no arguments prints the defaults.
 
+The walk over the spacers runs in parallel and takes every core unless
+`--threads N` says otherwise. The spacers are independent — the graph is only
+read, and nothing one spacer computes is used by another — so each one writes
+into its own slot and the files are written afterwards in source order. On
+SRR14017565 the output is byte-identical to a serial run, all nine files, every
+diagnostic count included. 16 cores took it from 29m36s to 8m20s.
+
+Most of what is left is the graph load, which is serial and reads the whole
+SDBG. Those two timings put it at roughly 7 of the 8m20s, so past about eight
+cores there is little more to gain on a sample this size.
+
 Scoring needs the reference database, not the graph:
 
 ```bash
