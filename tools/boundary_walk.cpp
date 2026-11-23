@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -320,19 +321,17 @@ int main(int argc, char **argv) {
     const auto sources = read_sources(argv[2]);
     std::filesystem::create_directories(argv[3]);
     Graph graph(argv[1]);
-    std::cerr << "graph k=" << graph.k() << " edges=" << graph.size() << ", " << sources.size()
-              << " source observations, flank=" << flank << " beam=" << beam
-              << " window=[" << window_low << "," << window_high << "] keyed to "
-              << (window_running ? "the running median" : "the boundary node")
-              << ", kept at harmonic mean >= " << min_harmonic;
 #ifdef _OPENMP
     if (threads > 0) omp_set_num_threads(threads);
-    std::cerr << ", " << omp_get_max_threads() << " threads";
+    const int in_use = omp_get_max_threads();
 #else
     (void)threads;
-    std::cerr << ", built without OpenMP";
+    const int in_use = 1;
 #endif
-    std::cerr << "\n";
+    std::cerr << "graph     k=" << graph.k() << "  edges=" << graph.size() << "  threads=" << in_use
+              << "\nsettings  flank " << flank << ", beam " << beam << ", window [" << window_low
+              << ", " << window_high << "] on " << (window_running ? "the running median" : "the boundary node")
+              << ", rule " << min_harmonic << "\n";
 
     // Tangle of each array: the nodes of its repeat and its spacers, both strands.
     std::map<std::string, std::unordered_set<uint64_t>> tangle;
@@ -581,13 +580,21 @@ int main(int argc, char **argv) {
         }
         for (int i = 0; i < 5; ++i) blocked[i] += r.blocked[i];
     }
-    std::cerr << traced << " spacers traced, " << candidates << " with both boundary sets non-empty\n";
+    std::cerr << "spacers   " << sources.size() << " given, " << traced << " traced, " << candidates
+              << " two-sided\n\n"
+              << std::left << std::setw(22) << "criterion" << std::right << std::setw(8) << "kept"
+              << std::setw(12) << "below rule" << "\n";
     for (int c = 0; c < Count; ++c)
-        std::cerr << "  " << NAMES[c] << ": " << saved[c] << " kept, " << thin[c]
-                  << " below the harmonic mean rule\n";
-    const char *why[5] = {"in the array or the spacer", "below the window", "above the window",
-                          "already on the walk", "no neighbour in the graph"};
-    std::cerr << "steps refused, harmonic_mean only:\n";
-    for (int i = 0; i < 5; ++i) std::cerr << "  " << why[i] << ": " << blocked[i] << "\n";
+        std::cerr << std::left << std::setw(22) << NAMES[c] << std::right << std::setw(8) << saved[c]
+                  << std::setw(12) << thin[c] << "\n";
+    // Ordered by how often each one fires, so the step that is actually
+    // limiting the walks is the first line rather than the fourth.
+    const char *why[5] = {"in the array or spacer", "below the window", "above the window",
+                          "already on the walk", "no neighbour in graph"};
+    std::array<int, 5> order{1, 2, 3, 4, 0};
+    std::cerr << "\nsteps refused, harmonic_mean only\n";
+    for (const int i : order)
+        std::cerr << std::left << std::setw(22) << why[i] << std::right << std::setw(20) << blocked[i]
+                  << "\n";
     return 0;
 }

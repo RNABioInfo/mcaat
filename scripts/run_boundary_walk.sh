@@ -46,9 +46,5 @@ for dir in "${dirs[@]}"; do
       "$out/summary.tsv" 2>/dev/null
 done
 
-cat <<'NEXT'
-
-Scoring runs on the machine with the reference database, not here:
-  python3 eval_criteria.py --dir SRR*/LABEL --db all_curated_db --out EVAL
-  python3 rule_table.py --dir SRR*/LABEL --eval EVAL --criterion harmonic_mean
-NEXT
+# Scoring needs the reference database, so it does not run here. See
+# docs/boundary-walk.md for the eval_criteria.py and rule_table.py commands.
