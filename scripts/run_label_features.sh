@@ -63,14 +63,29 @@ for s in "${samples[@]}"; do
   if [[ -s $table && $FORCE != 1 ]]; then
     echo "$s: already done, skipped"; (( skipped++ )); continue
   fi
+  # The graph is not in one place across samples: most have it under
+  # protospacer_batch/graph, a few have it at graph/, and some have none at
+  # all. The candidates are tried in order and the one used is always named,
+  # because mapping a sample's labels into another sample's graph would not
+  # announce itself in the output.
   summary=$ROOT/$s/$SEEDS/run_summary.json
-  graph=$(field "$summary" graph)
-  # fall back to the usual layout when the seed run is absent
-  [[ -n $graph ]] || graph=$ROOT/$s/protospacer_batch/graph/graph
-  if [[ ! -f ${graph}.sdbg_info ]]; then
-    echo "$s: no graph at $graph, skipped"; (( skipped++ )); continue
+  graph=""; source=""
+  declared=$(field "$summary" graph)
+  if [[ -n $declared && -f ${declared}.sdbg_info ]]; then
+    graph=$declared; source=$SEEDS/run_summary.json
+  else
+    [[ -n $declared ]] && echo "$s: $SEEDS/run_summary.json names $declared, which is not there"
+    for candidate in "$ROOT/$s/protospacer_batch/graph/graph" "$ROOT/$s/graph/graph"; do
+      [[ -f ${candidate}.sdbg_info ]] || continue
+      graph=$candidate; source="found at ${candidate#"$ROOT/$s/"}"
+      break
+    done
   fi
-  echo "=== $s  graph=$graph"
+  if [[ -z $graph ]]; then
+    echo "$s: no graph found (tried $SEEDS/run_summary.json, protospacer_batch/graph, graph), skipped"
+    (( skipped++ )); continue
+  fi
+  echo "=== $s  graph=$graph  [$source]"
   # shellcheck disable=SC2086
   "$LF" --graph "$graph" --labels "$LABELS" --dataset "$s" --output "$table" $EXTRA \
       2>&1 | tee "$OUT/features/$s.log"
