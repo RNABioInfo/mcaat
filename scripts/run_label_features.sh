@@ -110,7 +110,7 @@ rows=$(( $(wc -l < "$all") - 1 ))
 echo "combined $rows rows into $all"
 
 # ── 4. analysis ──────────────────────────────────────────────────────────────
-# Column 9 is the target. Columns 10 to 18 are the nine features, every one of
+# Column 9 is the target. Columns 10 to 15 are the six features, every one of
 # them read from topology and multiplicity. For each, the class means and the
 # Mann-Whitney AUC: 0.5 is no separation, and a value far from it on a single
 # feature says a rule would do what a model is being considered for.
@@ -173,7 +173,7 @@ PY
   echo
   header=$(head -1 "$all")
   printf "  %-22s %14s %14s %7s %8s\n" feature mean_positive mean_negative AUC "|AUC-.5|"
-  for col in $(seq 10 18); do
+  for col in $(seq 10 15); do
     name=$(echo "$header" | cut -f"$col")
     means=$(awk -F'\t' -v c="$col" 'NR>1{ if($9==1){sp+=$c; np++} else {sq+=$c; nq++} }
             END{printf "%.4f %.4f", (np?sp/np:0), (nq?sq/nq:0)}' "$all")

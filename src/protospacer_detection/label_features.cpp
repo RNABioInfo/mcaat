@@ -424,8 +424,7 @@ TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Arc &arc, b
         ++result.run;
     }
 
-    // the reachable set, bounded; two candidates sharing one of these nodes
-    // have met again, which is what makes them a bubble
+    // visited set, bounded, so the probe does not walk a node twice
     std::unordered_set<uint64_t> seen;
     std::vector<std::pair<uint64_t, size_t>> stack{{arc.node, 0}};
     seen.insert(arc.node);
@@ -438,8 +437,6 @@ TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Arc &arc, b
             if (seen.insert(next.node).second)
                 stack.emplace_back(next.node, depth + 1);
     }
-    result.seen.assign(seen.begin(), seen.end());
-
     result.minimum = depths.empty() ? 0. : *std::min_element(depths.begin(), depths.end());
     result.cv = variation(depths);
     return result;
@@ -538,9 +535,7 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
                     f.multiplicity = arcs[i].count;
                     f.target = int(i) == chosen ? 1 : 0;
 
-                    f.siblings = arcs.size();
                     f.multiplicity_share = total > 0. ? arcs[i].count / total : 0.;
-                    f.ratio_running_median = level > 0. ? arcs[i].count / level : 0.;
 
                     const Probe &p = probes[i];
                     f.run_ahead = p.run;
@@ -548,18 +543,6 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
                     f.run_depth_min_ratio = level > 0. ? p.minimum / level : 0.;
                     f.run_depth_cv = p.cv;
                     f.in_degree = neighbors(arcs[i].node, !backwards).size();
-
-                    // a sibling met again inside the lookahead makes a bubble
-                    std::unordered_set<uint64_t> mine(p.seen.begin(), p.seen.end());
-                    for (size_t j = 0; j < arcs.size() && !f.rejoins_sibling; ++j) {
-                        if (j == i)
-                            continue;
-                        for (uint64_t v : probes[j].seen)
-                            if (mine.count(v)) {
-                                f.rejoins_sibling = 1;
-                                break;
-                            }
-                    }
 
                     if (f.target)
                         ++stats_.positives;
@@ -628,16 +611,15 @@ std::vector<BranchFeature> TopologyFeatures::collect(const std::string &dataset,
 
 // ── Class 3 ──────────────────────────────────────────────────────────────────
 
-// Eight identity and diagnostic columns, then the nine features. target is the
+// Eight identity and diagnostic columns, then the six features. target is the
 // last column before the features so that a reader of the table can see where
 // the fitting set begins.
 std::vector<std::string> FeatureWriter::columns() {
     return {"dataset", "label", "spacer_key", "side", "walked", "node", "edge",
             "multiplicity", "target",
             // the features
-            "siblings", "multiplicity_share", "ratio_running_median", "run_ahead",
-            "run_ends_tip", "run_depth_min_ratio", "run_depth_cv", "rejoins_sibling",
-            "in_degree"};
+            "multiplicity_share", "run_ahead", "run_ends_tip",
+            "run_depth_min_ratio", "run_depth_cv", "in_degree"};
 }
 
 FeatureWriter::FeatureWriter(const std::filesystem::path &file) : file_(file) {
@@ -660,10 +642,9 @@ void FeatureWriter::write(const BranchFeature &r) {
     out_ << r.dataset << '\t' << r.label << '\t' << r.spacer_key << '\t'
          << (r.backwards ? "left" : "right") << '\t' << r.walked << '\t' << r.node << '\t'
          << r.edge << '\t' << tsv(r.multiplicity) << '\t' << r.target << '\t'
-         << r.siblings << '\t' << tsv(r.multiplicity_share) << '\t'
-         << tsv(r.ratio_running_median) << '\t' << r.run_ahead << '\t' << r.run_ends_tip << '\t'
-         << tsv(r.run_depth_min_ratio) << '\t' << tsv(r.run_depth_cv) << '\t'
-         << r.rejoins_sibling << '\t' << r.in_degree << '\n';
+         << tsv(r.multiplicity_share) << '\t' << r.run_ahead << '\t'
+         << r.run_ends_tip << '\t' << tsv(r.run_depth_min_ratio) << '\t'
+         << tsv(r.run_depth_cv) << '\t' << r.in_degree << '\n';
     ++rows_;
 }
 

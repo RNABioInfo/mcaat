@@ -86,16 +86,9 @@ struct BranchFeature {
     double multiplicity = 0; // the raw count behind the ratios below
     int target = 0;          // 1 the reference continues here, 0 it does not
 
-    // How many ways the decision splits. Needed to read the share below: a
-    // half share of two candidates is not a half share of four.
-    size_t siblings = 0;
     // This candidate's multiplicity over the sum at the decision. The direct
     // statement that this branch carries the coverage and its rivals do not.
     double multiplicity_share = 0;
-    // Its multiplicity over the running median of the walk so far. Whether the
-    // branch sits at the coverage of the contig already followed, which is the
-    // beam search's admission window written as a number instead of a test.
-    double ratio_running_median = 0;
     // Bases that can be walked from this candidate before the next decision.
     // A long unbranching stretch is a real contig; a branch that forks again
     // at once is inside a tangle.
@@ -111,10 +104,6 @@ struct BranchFeature {
     // level is what locally_smooth asks of a whole reconstruction, measured
     // here for one branch.
     double run_depth_cv = 0;
-    // The candidate meets a sibling again inside the lookahead, so the two
-    // form a bubble. Both arms are then real sequence and the decision is of a
-    // different kind from a choice between real and spurious.
-    int rejoins_sibling = 0;
     // Predecessors of the candidate against the direction of travel. A node
     // several paths enter is a repeat entrance, which is where a walk crosses
     // from one genome into another.
@@ -150,7 +139,6 @@ class TopologyFeatures {
         size_t run = 0;
         bool tip = false;
         double minimum = 0, cv = 0;
-        std::vector<uint64_t> seen; // for bubble detection only
     };
 
     const SDBG &graph_;
