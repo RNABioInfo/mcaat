@@ -1,0 +1,774 @@
+#include "protospacer_detection/label_features.h"
+
+#include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <limits>
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+#include <unordered_set>
+
+namespace mcaat::proto {
+namespace {
+
+constexpr uint64_t missing = std::numeric_limits<uint64_t>::max();
+
+bool dna(const std::string &sequence) {
+    return !sequence.empty() && std::all_of(sequence.begin(), sequence.end(), [](char c) {
+               return c == 'A' || c == 'C' || c == 'G' || c == 'T';
+           });
+}
+
+// ── A reader for the label file ───────────────────────────────────────────────
+//
+// The file is written by the labelling pipeline, so the shapes it can hold are
+// known. This covers the whole of JSON except exponents, which the file never
+// carries, and keeps the module free of a dependency.
+class Json {
+  public:
+    enum class Kind { Null, Bool, Number, String, Array, Object };
+
+    Kind kind = Kind::Null;
+    bool boolean = false;
+    double number = 0;
+    std::string text;
+    std::vector<Json> items;
+    std::vector<std::pair<std::string, Json>> fields;
+
+    const Json *find(const std::string &name) const {
+        for (const auto &f : fields)
+            if (f.first == name)
+                return &f.second;
+        return nullptr;
+    }
+    std::string string_or(const std::string &name, const std::string &fallback = {}) const {
+        const Json *j = find(name);
+        return j && j->kind == Kind::String ? j->text : fallback;
+    }
+    size_t number_or(const std::string &name, size_t fallback = 0) const {
+        const Json *j = find(name);
+        return j && j->kind == Kind::Number ? size_t(j->number) : fallback;
+    }
+
+    static Json parse(const std::string &source) {
+        size_t at = 0;
+        Json value = parse_value(source, at);
+        skip(source, at);
+        return value;
+    }
+
+  private:
+    static void skip(const std::string &s, size_t &at) {
+        while (at < s.size() && (s[at] == ' ' || s[at] == '\t' || s[at] == '\n' || s[at] == '\r'))
+            ++at;
+    }
+    [[noreturn]] static void fail(size_t at, const std::string &what) {
+        throw std::runtime_error("label file: " + what + " at byte " + std::to_string(at));
+    }
+    static void expect(const std::string &s, size_t &at, char c) {
+        skip(s, at);
+        if (at >= s.size() || s[at] != c)
+            fail(at, std::string("expected ") + c);
+        ++at;
+    }
+    static std::string parse_string(const std::string &s, size_t &at) {
+        expect(s, at, '"');
+        std::string out;
+        while (at < s.size() && s[at] != '"') {
+            if (s[at] == '\\') {
+                if (++at >= s.size())
+                    fail(at, "truncated escape");
+                switch (s[at]) {
+                case 'n': out += '\n'; break;
+                case 't': out += '\t'; break;
+                case 'r': out += '\r'; break;
+                case 'b': out += '\b'; break;
+                case 'f': out += '\f'; break;
+                case 'u': {
+                    if (at + 4 >= s.size())
+                        fail(at, "truncated \\u escape");
+                    unsigned code = std::stoul(s.substr(at + 1, 4), nullptr, 16);
+                    at += 4;
+                    if (code < 0x80) {
+                        out += char(code);
+                    } else if (code < 0x800) {
+                        out += char(0xC0 | (code >> 6));
+                        out += char(0x80 | (code & 0x3F));
+                    } else {
+                        out += char(0xE0 | (code >> 12));
+                        out += char(0x80 | ((code >> 6) & 0x3F));
+                        out += char(0x80 | (code & 0x3F));
+                    }
+                    break;
+                }
+                default: out += s[at];
+                }
+            } else {
+                out += s[at];
+            }
+            ++at;
+        }
+        if (at >= s.size())
+            fail(at, "unterminated string");
+        ++at;
+        return out;
+    }
+    static Json parse_value(const std::string &s, size_t &at) {
+        skip(s, at);
+        if (at >= s.size())
+            fail(at, "no value");
+        Json value;
+        if (s[at] == '{') {
+            ++at;
+            value.kind = Kind::Object;
+            skip(s, at);
+            if (at < s.size() && s[at] == '}') {
+                ++at;
+                return value;
+            }
+            while (true) {
+                skip(s, at);
+                std::string name = parse_string(s, at);
+                expect(s, at, ':');
+                value.fields.emplace_back(std::move(name), parse_value(s, at));
+                skip(s, at);
+                if (at < s.size() && s[at] == ',') {
+                    ++at;
+                    continue;
+                }
+                expect(s, at, '}');
+                return value;
+            }
+        }
+        if (s[at] == '[') {
+            ++at;
+            value.kind = Kind::Array;
+            skip(s, at);
+            if (at < s.size() && s[at] == ']') {
+                ++at;
+                return value;
+            }
+            while (true) {
+                value.items.push_back(parse_value(s, at));
+                skip(s, at);
+                if (at < s.size() && s[at] == ',') {
+                    ++at;
+                    continue;
+                }
+                expect(s, at, ']');
+                return value;
+            }
+        }
+        if (s[at] == '"') {
+            value.kind = Kind::String;
+            value.text = parse_string(s, at);
+            return value;
+        }
+        if (s.compare(at, 4, "true") == 0) {
+            at += 4;
+            value.kind = Kind::Bool;
+            value.boolean = true;
+            return value;
+        }
+        if (s.compare(at, 5, "false") == 0) {
+            at += 5;
+            value.kind = Kind::Bool;
+            value.boolean = false;
+            return value;
+        }
+        if (s.compare(at, 4, "null") == 0) {
+            at += 4;
+            value.kind = Kind::Null;
+            return value;
+        }
+        size_t begin = at;
+        if (at < s.size() && (s[at] == '-' || s[at] == '+'))
+            ++at;
+        while (at < s.size() && (std::isdigit(static_cast<unsigned char>(s[at])) || s[at] == '.' ||
+                                 s[at] == 'e' || s[at] == 'E' || s[at] == '-' || s[at] == '+'))
+            ++at;
+        if (begin == at)
+            fail(at, "unrecognised value");
+        value.kind = Kind::Number;
+        value.number = std::stod(s.substr(begin, at - begin));
+        return value;
+    }
+};
+
+std::string tsv(double value) {
+    std::ostringstream out;
+    if (value == std::floor(value) && std::fabs(value) < 1e15)
+        out << std::setprecision(0) << std::fixed << value;
+    else
+        out << std::setprecision(6) << value;
+    return out.str();
+}
+
+} // namespace
+
+// ── Class 1 ──────────────────────────────────────────────────────────────────
+
+const std::vector<LabelEntry> LabelReader::empty_{};
+
+LabelReader::LabelReader(const std::filesystem::path &file) {
+    std::ifstream in(file, std::ios::binary);
+    if (!in)
+        throw std::runtime_error("cannot open label file " + file.string());
+    std::string source((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    Json root = Json::parse(source);
+    if (root.kind != Json::Kind::Object)
+        throw std::runtime_error("label file is not a JSON object: " + file.string());
+
+    for (const auto &[name, body] : root.fields) {
+        if (name == "_meta") {
+            for (const auto &[field, value] : body.fields)
+                if (value.kind == Json::Kind::String)
+                    meta_[field] = value.text;
+                else if (value.kind == Json::Kind::Number)
+                    meta_[field] = tsv(value.number);
+            continue;
+        }
+        if (!name.empty() && name.front() == '_')
+            continue; // _index and anything else reserved
+        if (body.kind != Json::Kind::Object)
+            continue;
+        auto &bucket = by_dataset_[name];
+        for (const auto &[spacer_key, flanks] : body.fields) {
+            if (flanks.kind != Json::Kind::Array)
+                continue;
+            for (const auto &item : flanks.items) {
+                if (item.kind != Json::Kind::Object)
+                    continue;
+                LabelEntry entry;
+                entry.spacer_key = spacer_key;
+                entry.id = item.string_or("label");
+                entry.left = item.string_or("left");
+                entry.spacer = item.string_or("spacer");
+                entry.right = item.string_or("right");
+                entry.record = item.string_or("record");
+                entry.strand = item.string_or("strand");
+                if (const Json *region = item.find("region");
+                    region && region->kind == Json::Kind::Array && region->items.size() == 2) {
+                    entry.region_begin = size_t(region->items[0].number);
+                    entry.region_end = size_t(region->items[1].number);
+                }
+                if (const Json *arrays = item.find("arrays");
+                    arrays && arrays->kind == Json::Kind::Array)
+                    for (const auto &a : arrays->items)
+                        if (a.kind == Json::Kind::String)
+                            entry.arrays.push_back(a.text);
+                if (entry.spacer.empty())
+                    continue;
+                bucket.push_back(std::move(entry));
+            }
+        }
+    }
+}
+
+bool LabelReader::has(const std::string &dataset) const {
+    return by_dataset_.count(dataset) != 0;
+}
+
+const std::vector<LabelEntry> &LabelReader::entries(const std::string &dataset) const {
+    auto it = by_dataset_.find(dataset);
+    return it == by_dataset_.end() ? empty_ : it->second;
+}
+
+std::vector<std::string> LabelReader::datasets() const {
+    std::vector<std::string> names;
+    names.reserve(by_dataset_.size());
+    for (const auto &[name, entries] : by_dataset_)
+        names.push_back(name);
+    return names;
+}
+
+size_t LabelReader::size() const {
+    size_t n = 0;
+    for (const auto &[name, entries] : by_dataset_)
+        n += entries.size();
+    return n;
+}
+
+// ── Class 2 ──────────────────────────────────────────────────────────────────
+
+TopologyFeatures::TopologyFeatures(const SDBG &graph) : graph_(graph), k_(size_t(graph.k())) {}
+
+TopologyFeatures::TopologyFeatures(const SDBG &graph, Options options)
+    : graph_(graph), options_(options), k_(size_t(graph.k())) {}
+
+std::string TopologyFeatures::label(uint64_t node) const {
+    if (node >= graph_.size())
+        return {};
+    std::vector<uint8_t> encoded(k_);
+    graph_.GetLabel(node, encoded.data());
+    std::string s;
+    for (auto c : encoded) {
+        if (c < 1 || c > 4)
+            return {};
+        s += "ACGT"[c - 1];
+    }
+    return s;
+}
+
+uint64_t TopologyFeatures::find_node(const std::string &word) const {
+    if (word.size() != k_ || !dna(word))
+        return missing;
+    std::vector<uint8_t> encoded;
+    encoded.reserve(word.size());
+    for (char c : word)
+        encoded.push_back(uint8_t(std::string("ACGT").find(c) + 1));
+    uint64_t n = graph_.IndexBinarySearch(encoded.data());
+    return n != missing && label(n) == word ? n : missing;
+}
+
+std::vector<TopologyFeatures::Arc> TopologyFeatures::neighbors(uint64_t node, bool backwards) const {
+    std::vector<Arc> arcs;
+    if (node >= graph_.size())
+        return arcs;
+    auto add = [&](uint64_t edge, uint64_t to) {
+        auto c = graph_.GetW(edge);
+        if (c > 4)
+            c -= 4;
+        if (c >= 1 && c <= 4 && graph_.IsValidEdge(edge))
+            arcs.push_back({to, edge, double(graph_.EdgeMultiplicity(edge))});
+    };
+    if (!backwards) {
+        uint64_t e = node;
+        do {
+            auto c = graph_.GetW(e);
+            if (c > 4)
+                c -= 4;
+            if (c >= 1 && c <= 4 && graph_.IsValidEdge(e))
+                add(e, graph_.Forward(e));
+            --e;
+        } while (e != missing && !graph_.IsLastOrTip(e));
+    } else {
+        uint64_t first = graph_.Backward(node);
+        if (first >= graph_.size())
+            return arcs;
+        auto c = graph_.GetW(first);
+        unsigned ends = graph_.IsLastOrTip(first);
+        add(first, uint64_t(graph_.GetLastIndex(first)));
+        for (uint64_t e = first + 1; ends < 5 && e < graph_.size(); ++e) {
+            ends += graph_.IsLastOrTip(e);
+            auto w = graph_.GetW(e);
+            if (w == c)
+                break;
+            if (w == c + 4)
+                add(e, uint64_t(graph_.GetLastIndex(e)));
+        }
+    }
+    std::sort(arcs.begin(), arcs.end(), [](const Arc &a, const Arc &b) { return a.node < b.node; });
+    return arcs;
+}
+
+char TopologyFeatures::added_base(const Arc &arc, bool backwards) const {
+    if (backwards) {
+        auto s = label(arc.node);
+        return s.empty() ? 'N' : s.front();
+    }
+    auto c = graph_.GetW(arc.edge);
+    if (c > 4)
+        c -= 4;
+    return c >= 1 && c <= 4 ? "ACGT"[c - 1] : 'N';
+}
+
+double TopologyFeatures::median(std::vector<double> values) {
+    if (values.empty())
+        return 0.;
+    const size_t half = values.size() / 2;
+    std::nth_element(values.begin(), values.begin() + half, values.end());
+    double m = values[half];
+    if (values.size() % 2 == 0)
+        m = (m + *std::max_element(values.begin(), values.begin() + half)) / 2.;
+    return m;
+}
+
+double TopologyFeatures::variation(const std::vector<double> &values) {
+    if (values.size() < 2)
+        return 0.;
+    double sum = std::accumulate(values.begin(), values.end(), 0.);
+    double mean = sum / double(values.size());
+    if (mean <= 0.)
+        return 0.;
+    double spread = 0.;
+    for (double v : values)
+        spread += (v - mean) * (v - mean);
+    return std::sqrt(spread / double(values.size() - 1)) / mean;
+}
+
+// What lies ahead of one neighbour: the unbranching run, whether it dies, the
+// multiplicity along it, and the node set reachable inside the lookahead.
+TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Arc &arc, bool backwards) const {
+    Probe result;
+    std::vector<double> depths{arc.count};
+
+    // the unbranching run, and the first decision on it
+    uint64_t node = arc.node;
+    uint64_t previous = from;
+    while (result.run < options_.lookahead) {
+        auto onward = neighbors(node, backwards);
+        if (onward.empty()) {
+            result.tip = true;
+            break;
+        }
+        if (onward.size() > 1) {
+            result.forks = 1;
+            break;
+        }
+        if (onward.front().node == previous)
+            break;
+        previous = node;
+        node = onward.front().node;
+        depths.push_back(onward.front().count);
+        ++result.run;
+    }
+
+    // the reachable set, bounded, counting every decision met inside it
+    std::unordered_set<uint64_t> seen;
+    std::vector<std::pair<uint64_t, size_t>> stack{{arc.node, 0}};
+    seen.insert(arc.node);
+    size_t forks = 0;
+    while (!stack.empty() && seen.size() < options_.probe_nodes) {
+        auto [at, depth] = stack.back();
+        stack.pop_back();
+        if (depth >= options_.lookahead)
+            continue;
+        auto onward = neighbors(at, backwards);
+        if (onward.size() > 1)
+            ++forks;
+        for (const auto &next : onward)
+            if (seen.insert(next.node).second)
+                stack.emplace_back(next.node, depth + 1);
+    }
+    result.nodes = seen.size();
+    result.forks = std::max(result.forks, forks);
+    result.seen.assign(seen.begin(), seen.end());
+
+    result.mean = depths.empty() ? 0. : std::accumulate(depths.begin(), depths.end(), 0.) / double(depths.size());
+    result.minimum = depths.empty() ? 0. : *std::min_element(depths.begin(), depths.end());
+    result.cv = variation(depths);
+    return result;
+}
+
+void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
+                            const std::string &region, size_t start, bool backwards,
+                            std::vector<BranchFeature> &out) {
+    if (region.size() < k_)
+        return;
+
+    // Anchor on the first k-mer of the region that the graph holds, starting
+    // at the spacer boundary and moving outward.
+    size_t position = start;
+    uint64_t node = missing;
+    auto anchor = [&]() {
+        while (true) {
+            if (backwards) {
+                if (position + k_ > region.size())
+                    return false;
+            } else if (position + k_ > region.size()) {
+                return false;
+            }
+            node = find_node(region.substr(position, k_));
+            if (node != missing)
+                return true;
+            if (backwards) {
+                if (position == 0)
+                    return false;
+                --position;
+            } else {
+                ++position;
+                if (position + k_ > region.size())
+                    return false;
+            }
+        }
+    };
+    if (!anchor()) {
+        ++stats_.sides_empty;
+        return;
+    }
+    ++stats_.anchors;
+    ++stats_.sides_mapped;
+
+    const double origin = [&] {
+        auto arcs = neighbors(node, backwards);
+        double best = 0.;
+        for (const auto &a : arcs)
+            best = std::max(best, a.count);
+        return best;
+    }();
+
+    std::vector<double> running;
+    size_t walked = 0, forks_passed = 0;
+
+    while (true) {
+        // the base the reference continues into
+        bool have_next = backwards ? position > 0 : position + k_ < region.size();
+        if (!have_next)
+            break;
+        const char wanted = backwards ? region[position - 1] : region[position + k_];
+
+        auto arcs = neighbors(node, backwards);
+        int chosen = -1;
+        for (size_t i = 0; i < arcs.size(); ++i)
+            if (added_base(arcs[i], backwards) == wanted) {
+                chosen = int(i);
+                break;
+            }
+
+        if (arcs.size() > 1) {
+            ++stats_.decisions;
+            if (chosen < 0)
+                ++stats_.decisions_skipped;
+            else {
+                double total = 0., best_other = 0.;
+                for (const auto &a : arcs)
+                    total += a.count;
+                const double running_median = median(running);
+                const double running_variation = variation(running);
+                double entropy = 0.;
+                if (total > 0.)
+                    for (const auto &a : arcs) {
+                        double p = a.count / total;
+                        if (p > 0.)
+                            entropy -= p * std::log2(p);
+                    }
+                const double parent = running.empty() ? origin : running.back();
+
+                std::vector<Probe> probes(arcs.size());
+                for (size_t i = 0; i < arcs.size(); ++i)
+                    probes[i] = probe(node, arcs[i], backwards);
+
+                for (size_t i = 0; i < arcs.size(); ++i) {
+                    best_other = 0.;
+                    for (size_t j = 0; j < arcs.size(); ++j)
+                        if (j != i)
+                            best_other = std::max(best_other, arcs[j].count);
+
+                    BranchFeature f;
+                    f.dataset = dataset;
+                    f.label = entry.id;
+                    f.spacer_key = entry.spacer_key;
+                    f.position = walked;
+                    f.backwards = backwards;
+                    f.node = arcs[i].node;
+                    f.edge = arcs[i].edge;
+                    f.target = int(i) == chosen ? 1 : 0;
+
+                    f.siblings = arcs.size();
+                    f.branch_entropy = entropy;
+                    f.parent_multiplicity = parent;
+                    f.flow_residual = parent - total;
+                    f.flow_residual_share = parent > 0. ? (parent - total) / parent : 0.;
+
+                    f.multiplicity = arcs[i].count;
+                    f.multiplicity_share = total > 0. ? arcs[i].count / total : 0.;
+                    f.ratio_best_sibling = best_other > 0. ? arcs[i].count / best_other : 0.;
+                    f.ratio_running_median =
+                        running_median > 0. ? arcs[i].count / running_median : 0.;
+                    f.ratio_origin = origin > 0. ? arcs[i].count / origin : 0.;
+                    f.in_window = running_median > 0. &&
+                                          arcs[i].count >= options_.window_low * running_median &&
+                                          arcs[i].count <= options_.window_high * running_median
+                                      ? 1
+                                      : 0;
+                    f.out_degree = neighbors(arcs[i].node, backwards).size();
+                    f.in_degree = neighbors(arcs[i].node, !backwards).size();
+
+                    const Probe &p = probes[i];
+                    f.run_ahead = p.run;
+                    f.run_ends_tip = p.tip ? 1 : 0;
+                    f.forks_ahead = p.forks;
+                    f.reachable_nodes = p.nodes;
+                    f.run_depth_mean = p.mean;
+                    f.run_depth_min = p.minimum;
+                    f.run_depth_cv = p.cv;
+
+                    // a sibling met again inside the lookahead makes a bubble
+                    std::unordered_set<uint64_t> mine(p.seen.begin(), p.seen.end());
+                    for (size_t j = 0; j < arcs.size() && !f.rejoins_sibling; ++j) {
+                        if (j == i)
+                            continue;
+                        for (uint64_t v : probes[j].seen)
+                            if (mine.count(v)) {
+                                f.rejoins_sibling = 1;
+                                f.bubble_length = std::max(p.run, probes[j].run);
+                                break;
+                            }
+                    }
+
+                    f.walked = walked;
+                    f.forks_passed = forks_passed;
+                    f.running_median = running_median;
+                    f.running_cv = running_variation;
+
+                    if (f.target)
+                        ++stats_.positives;
+                    else
+                        ++stats_.negatives;
+                    out.push_back(std::move(f));
+                }
+            }
+            ++forks_passed;
+        }
+
+        if (chosen < 0) {
+            // The reference leaves the graph here, which a mismatch against
+            // the sample does. Re-anchor further out and carry on.
+            size_t resume = position;
+            bool found = false;
+            for (size_t step = 1; step <= k_; ++step) {
+                if (backwards) {
+                    if (resume == 0)
+                        break;
+                    --resume;
+                } else {
+                    ++resume;
+                    if (resume + k_ > region.size())
+                        break;
+                }
+                uint64_t again = find_node(region.substr(resume, k_));
+                if (again != missing) {
+                    position = resume;
+                    node = again;
+                    running.clear();
+                    found = true;
+                    ++stats_.reanchors;
+                    break;
+                }
+            }
+            if (!found)
+                break;
+            continue;
+        }
+
+        running.push_back(arcs[size_t(chosen)].count);
+        if (running.size() > 2 * k_)
+            running.erase(running.begin());
+        node = arcs[size_t(chosen)].node;
+        if (backwards)
+            --position;
+        else
+            ++position;
+        ++walked;
+        ++stats_.steps;
+    }
+}
+
+std::vector<BranchFeature> TopologyFeatures::collect(const std::string &dataset,
+                                                     const LabelEntry &entry) {
+    std::vector<BranchFeature> out;
+    ++stats_.entries;
+    const std::string region = entry.region();
+    if (region.size() <= k_ || !dna(region)) {
+        ++stats_.unmapped;
+        return out;
+    }
+
+    const size_t before = stats_.sides_mapped;
+
+    // Right of the spacer: forward from the node ending at the spacer's end.
+    if (entry.spacer_end() >= k_)
+        walk(dataset, entry, region, entry.spacer_end() - k_, false, out);
+    // Left of the spacer: backward from the node beginning at the spacer's start.
+    if (entry.spacer_begin() + k_ <= region.size())
+        walk(dataset, entry, region, entry.spacer_begin(), true, out);
+
+    const size_t sides = stats_.sides_mapped - before;
+    if (sides == 0 || (options_.require_both_sides && sides < 2)) {
+        ++stats_.unmapped;
+        if (options_.require_both_sides && sides < 2)
+            out.clear();
+        return out;
+    }
+    ++stats_.mapped;
+    return out;
+}
+
+// ── Class 3 ──────────────────────────────────────────────────────────────────
+
+std::vector<std::string> FeatureWriter::columns() {
+    return {"dataset",          "label",            "spacer_key",
+            "side",             "position",         "node",
+            "edge",             "target",           "siblings",
+            "branch_entropy",   "parent_multiplicity", "flow_residual",
+            "flow_residual_share", "multiplicity",  "multiplicity_share",
+            "ratio_best_sibling", "ratio_running_median", "ratio_origin",
+            "in_window",        "out_degree",       "in_degree",
+            "run_ahead",        "run_ends_tip",     "forks_ahead",
+            "reachable_nodes",  "run_depth_mean",   "run_depth_min",
+            "run_depth_cv",     "rejoins_sibling",  "bubble_length",
+            "walked",           "forks_passed",     "running_median",
+            "running_cv"};
+}
+
+FeatureWriter::FeatureWriter(const std::filesystem::path &file) : file_(file) {
+    if (file_.has_parent_path() && !file_.parent_path().empty())
+        std::filesystem::create_directories(file_.parent_path());
+    out_.open(file_, std::ios::binary);
+    if (!out_)
+        throw std::runtime_error("cannot write " + file_.string());
+    auto names = columns();
+    for (size_t i = 0; i < names.size(); ++i)
+        out_ << names[i] << (i + 1 == names.size() ? '\n' : '\t');
+}
+
+FeatureWriter::~FeatureWriter() {
+    if (out_.is_open())
+        out_.close();
+}
+
+void FeatureWriter::write(const BranchFeature &r) {
+    out_ << r.dataset << '\t' << r.label << '\t' << r.spacer_key << '\t'
+         << (r.backwards ? "left" : "right") << '\t' << r.position << '\t' << r.node << '\t'
+         << r.edge << '\t' << r.target << '\t' << r.siblings << '\t' << tsv(r.branch_entropy)
+         << '\t' << tsv(r.parent_multiplicity) << '\t' << tsv(r.flow_residual) << '\t'
+         << tsv(r.flow_residual_share) << '\t' << tsv(r.multiplicity) << '\t'
+         << tsv(r.multiplicity_share) << '\t' << tsv(r.ratio_best_sibling) << '\t'
+         << tsv(r.ratio_running_median) << '\t' << tsv(r.ratio_origin) << '\t' << r.in_window
+         << '\t' << r.out_degree << '\t' << r.in_degree << '\t' << r.run_ahead << '\t'
+         << r.run_ends_tip << '\t' << r.forks_ahead << '\t' << r.reachable_nodes << '\t'
+         << tsv(r.run_depth_mean) << '\t' << tsv(r.run_depth_min) << '\t' << tsv(r.run_depth_cv)
+         << '\t' << r.rejoins_sibling << '\t' << r.bubble_length << '\t' << r.walked << '\t'
+         << r.forks_passed << '\t' << tsv(r.running_median) << '\t' << tsv(r.running_cv) << '\n';
+    ++rows_;
+}
+
+void FeatureWriter::write(const std::vector<BranchFeature> &rows) {
+    for (const auto &r : rows)
+        write(r);
+}
+
+void FeatureWriter::finish(const TopologyFeatures::Stats &stats, const std::string &graph,
+                           const std::string &labels, const std::vector<std::string> &datasets) {
+    out_.flush();
+    out_.close();
+    std::filesystem::path side = file_;
+    side += ".summary.json";
+    std::ofstream out(side, std::ios::binary);
+    if (!out)
+        return;
+    out << "{\n \"table\": \"" << file_.filename().string() << "\",\n";
+    out << " \"rows\": " << rows_ << ",\n";
+    out << " \"graph\": \"" << graph << "\",\n";
+    out << " \"labels\": \"" << labels << "\",\n";
+    out << " \"datasets\": [";
+    for (size_t i = 0; i < datasets.size(); ++i)
+        out << (i ? ", " : "") << '"' << datasets[i] << '"';
+    out << "],\n";
+    out << " \"entries\": " << stats.entries << ",\n";
+    out << " \"entries_mapped\": " << stats.mapped << ",\n";
+    out << " \"entries_unmapped\": " << stats.unmapped << ",\n";
+    out << " \"sides_mapped\": " << stats.sides_mapped << ",\n";
+    out << " \"sides_empty\": " << stats.sides_empty << ",\n";
+    out << " \"anchors\": " << stats.anchors << ",\n";
+    out << " \"reanchors\": " << stats.reanchors << ",\n";
+    out << " \"steps\": " << stats.steps << ",\n";
+    out << " \"decisions\": " << stats.decisions << ",\n";
+    out << " \"decisions_skipped\": " << stats.decisions_skipped << ",\n";
+    out << " \"positives\": " << stats.positives << ",\n";
+    out << " \"negatives\": " << stats.negatives << "\n}\n";
+}
+
+} // namespace mcaat::proto

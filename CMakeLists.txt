@@ -127,6 +127,7 @@ set(MEGAHIT_SOURCES
 add_executable(spacer_depth tools/spacer_depth.cpp ${MEGAHIT_SOURCES})
 add_executable(boundary_walk tools/boundary_walk.cpp ${MEGAHIT_SOURCES})
 add_executable(neighbour_check tools/neighbour_check.cpp ${MEGAHIT_SOURCES})
+add_executable(label_features tools/label_features.cpp src/protospacer_detection/label_features.cpp ${MEGAHIT_SOURCES})
 
 target_link_libraries(boundary_walk PRIVATE
     ${ZLIB_LIBRARIES}
@@ -143,6 +144,13 @@ target_link_libraries(neighbour_check PRIVATE
 )
 
 target_link_libraries(spacer_depth PRIVATE
+    ${ZLIB_LIBRARIES}
+    spoa::spoa
+    fmt::fmt
+    OpenMP::OpenMP_CXX
+)
+
+target_link_libraries(label_features PRIVATE
     ${ZLIB_LIBRARIES}
     spoa::spoa
     fmt::fmt
