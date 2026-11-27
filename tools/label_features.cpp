@@ -1,4 +1,4 @@
-// Collects the training table for a learned branch decision.
+// Collects the training table for a learned branch branch.
 //
 // For one sample, every reference-confirmed protospacer region in the label
 // file is mapped into that sample's graph and walked outward from the spacer.
@@ -128,8 +128,8 @@ int main(int argc, char **argv) {
         std::cerr << "regions mapped " << s.mapped << " of " << s.entries << ", sides mapped "
                   << s.sides_mapped << ", empty " << s.sides_empty << "\n"
                   << "steps " << s.steps << ", re-anchors " << s.reanchors << "\n"
-                  << "decisions " << s.decisions << ", of them without the reference base "
-                  << s.decisions_skipped << "\n"
+                  << "branches " << s.branches << ", of them without the reference base "
+                  << s.branches_skipped << "\n"
                   << "rows " << writer.rows() << " (positives " << s.positives << ", negatives "
                   << s.negatives << ")\n"
                   << "wrote " << output << " in " << seconds << " s\n";

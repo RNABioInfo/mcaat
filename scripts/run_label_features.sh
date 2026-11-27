@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the branch-decision training table from the reference-confirmed
+# Build the branch-branch training table from the reference-confirmed
 # protospacer regions, then say whether anything in it separates the classes.
 #
 # For every sample the label file names, label_features maps that sample's
@@ -126,7 +126,7 @@ report=$OUT/analysis.txt
   python3 - "$OUT/features" <<'PY'
 import json, os, sys
 keys = ["entries", "entries_mapped", "sides_mapped", "sides_empty", "anchors",
-        "reanchors", "steps", "decisions", "decisions_skipped", "positives",
+        "reanchors", "steps", "branches", "branches_skipped", "positives",
         "negatives", "rows"]
 total = dict.fromkeys(keys, 0)
 folder = sys.argv[1]
@@ -140,9 +140,9 @@ for name in sorted(os.listdir(folder)):
 width = max(len(k) for k in keys)
 for k in keys:
     print("  %-*s %12d" % (width, k, total[k]))
-if total["decisions"]:
-    print("  %-*s %12.1f%%" % (width, "decisions skipped",
-                               100.0 * total["decisions_skipped"] / total["decisions"]))
+if total["branches"]:
+    print("  %-*s %12.1f%%" % (width, "branches skipped",
+                               100.0 * total["branches_skipped"] / total["branches"]))
 if total["entries"]:
     print("  %-*s %12.1f%%" % (width, "regions mapped",
                                100.0 * total["entries_mapped"] / total["entries"]))
@@ -155,7 +155,7 @@ PY
                   n, p, 100*p/n, q, (p?q/p:0)}' "$all"
   echo
 
-  echo "── decisions and rows per sample ──"
+  echo "── branches and rows per sample ──"
   printf "  %-14s %9s %10s %10s %9s %9s\n" sample rows positives negatives labels spacers
   awk -F'\t' 'NR>1{r[$1]++; if($9==1) p[$1]++; else q[$1]++;
                    lab[$1"\t"$2]=1; sp[$1"\t"$3]=1}
@@ -169,7 +169,7 @@ PY
 
   echo "── per feature: class means and single-feature AUC ──"
   echo "   AUC is the chance a positive neighbour outranks a negative one at the"
-  echo "   same decision set. 0.50 is nothing; far from it means a rule suffices."
+  echo "   same branch set. 0.50 is nothing; far from it means a rule suffices."
   echo
   header=$(head -1 "$all")
   printf "  %-22s %14s %14s %7s %8s\n" feature mean_positive mean_negative AUC "|AUC-.5|"
@@ -191,8 +191,8 @@ PY
   done | sort -k5,5gr
   echo
   echo "Splitting train from test: split on spacer_key, or on dataset, never on"
-  echo "rows. One spacer contributes every neighbour at every decision on its"
-  echo "region, so a row-wise split puts the same decision on both sides."
+  echo "rows. One spacer contributes every neighbour at every branch on its"
+  echo "region, so a row-wise split puts the same branch on both sides."
 } > "$report" 2>&1
 
 echo "wrote $report"

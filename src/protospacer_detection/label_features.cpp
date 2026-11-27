@@ -322,16 +322,16 @@ uint64_t TopologyFeatures::find_node(const std::string &word) const {
     return n != missing && label(n) == word ? n : missing;
 }
 
-std::vector<TopologyFeatures::Arc> TopologyFeatures::neighbors(uint64_t node, bool backwards) const {
-    std::vector<Arc> arcs;
+std::vector<TopologyFeatures::Neighbor> TopologyFeatures::neighbors(uint64_t node, bool backwards) const {
+    std::vector<Neighbor> node_neighbors;
     if (node >= graph_.size())
-        return arcs;
+        return node_neighbors;
     auto add = [&](uint64_t edge, uint64_t to) {
         auto c = graph_.GetW(edge);
         if (c > 4)
             c -= 4;
         if (c >= 1 && c <= 4 && graph_.IsValidEdge(edge))
-            arcs.push_back({to, edge, double(graph_.EdgeMultiplicity(edge))});
+            node_neighbors.push_back({to, edge, double(graph_.EdgeMultiplicity(edge))});
     };
     if (!backwards) {
         uint64_t e = node;
@@ -346,7 +346,7 @@ std::vector<TopologyFeatures::Arc> TopologyFeatures::neighbors(uint64_t node, bo
     } else {
         uint64_t first = graph_.Backward(node);
         if (first >= graph_.size())
-            return arcs;
+            return node_neighbors;
         auto c = graph_.GetW(first);
         unsigned ends = graph_.IsLastOrTip(first);
         add(first, uint64_t(graph_.GetLastIndex(first)));
@@ -359,11 +359,11 @@ std::vector<TopologyFeatures::Arc> TopologyFeatures::neighbors(uint64_t node, bo
                 add(e, uint64_t(graph_.GetLastIndex(e)));
         }
     }
-    std::sort(arcs.begin(), arcs.end(), [](const Arc &a, const Arc &b) { return a.node < b.node; });
-    return arcs;
+    std::sort(node_neighbors.begin(), node_neighbors.end(), [](const Neighbor &a, const Neighbor &b) { return a.node < b.node; });
+    return node_neighbors;
 }
 
-char TopologyFeatures::added_base(const Arc &arc, bool backwards) const {
+char TopologyFeatures::added_base(const Neighbor &arc, bool backwards) const {
     if (backwards) {
         auto s = label(arc.node);
         return s.empty() ? 'N' : s.front();
@@ -401,11 +401,11 @@ double TopologyFeatures::variation(const std::vector<double> &values) {
 // What lies ahead of one neighbour: how far the unbranching run goes, whether
 // it dies, the multiplicity along it, and the nodes reachable inside the
 // lookahead, which exist only so that a bubble can be recognised.
-TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Arc &arc, bool backwards) const {
+TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Neighbor &arc, bool backwards) const {
     Probe result;
     std::vector<double> depths{arc.count};
 
-    // the unbranching run, stopping at the next decision
+    // the unbranching run, stopping at the next branch
     uint64_t node = arc.node;
     uint64_t previous = from;
     while (result.run < options_.lookahead) {
@@ -485,8 +485,8 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
             if (acquired++ == 0) {
                 ++stats_.anchors;
                 ++stats_.sides_mapped;
-                auto arcs = neighbors(node, backwards);
-                for (const auto &a : arcs)
+                auto node_neighbors = neighbors(node, backwards);
+                for (const auto &a : node_neighbors)
                     origin = std::max(origin, a.count);
             } else {
                 ++stats_.reanchors;
@@ -499,50 +499,50 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
             break;
         const char wanted = backwards ? region[position - 1] : region[position + k_];
 
-        auto arcs = neighbors(node, backwards);
+        auto node_neighbors = neighbors(node, backwards);
         int chosen = -1;
-        for (size_t i = 0; i < arcs.size(); ++i)
-            if (added_base(arcs[i], backwards) == wanted) {
+        for (size_t i = 0; i < node_neighbors.size(); ++i)
+            if (added_base(node_neighbors[i], backwards) == wanted) {
                 chosen = int(i);
                 break;
             }
 
-        if (arcs.size() > 1) {
-            ++stats_.decisions;
+        if (node_neighbors.size() > 1) {
+            ++stats_.branches;
             if (chosen < 0)
-                ++stats_.decisions_skipped;
+                ++stats_.branches_skipped;
             else {
                 double total = 0.;
-                for (const auto &a : arcs)
+                for (const auto &a : node_neighbors)
                     total += a.count;
-                // The walk has no history at its first decision, so the
+                // The walk has no history at its first branch, so the
                 // multiplicity at the spacer boundary stands in for the median.
                 const double level = running.empty() ? origin : median(running);
 
-                std::vector<Probe> probes(arcs.size());
-                for (size_t i = 0; i < arcs.size(); ++i)
-                    probes[i] = probe(node, arcs[i], backwards);
+                std::vector<Probe> probes(node_neighbors.size());
+                for (size_t i = 0; i < node_neighbors.size(); ++i)
+                    probes[i] = probe(node, node_neighbors[i], backwards);
 
-                for (size_t i = 0; i < arcs.size(); ++i) {
+                for (size_t i = 0; i < node_neighbors.size(); ++i) {
                     BranchFeature f;
                     f.dataset = dataset;
                     f.label = entry.id;
                     f.spacer_key = entry.spacer_key;
                     f.backwards = backwards;
                     f.walked = walked;
-                    f.node = arcs[i].node;
-                    f.edge = arcs[i].edge;
-                    f.multiplicity = arcs[i].count;
+                    f.node = node_neighbors[i].node;
+                    f.edge = node_neighbors[i].edge;
+                    f.multiplicity = node_neighbors[i].count;
                     f.target = int(i) == chosen ? 1 : 0;
 
-                    f.multiplicity_share = total > 0. ? arcs[i].count / total : 0.;
+                    f.multiplicity_proportion = total > 0. ? node_neighbors[i].count / total : 0.;
 
                     const Probe &p = probes[i];
                     f.run_ahead = p.run;
                     f.run_ends_tip = p.tip ? 1 : 0;
                     f.run_depth_min_ratio = level > 0. ? p.minimum / level : 0.;
                     f.run_depth_cv = p.cv;
-                    f.in_degree = neighbors(arcs[i].node, !backwards).size();
+                    f.in_degree = neighbors(node_neighbors[i].node, !backwards).size();
 
                     if (f.target)
                         ++stats_.positives;
@@ -565,10 +565,10 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
             continue;
         }
 
-        running.push_back(arcs[size_t(chosen)].count);
+        running.push_back(node_neighbors[size_t(chosen)].count);
         if (running.size() > 2 * k_)
             running.erase(running.begin());
-        node = arcs[size_t(chosen)].node;
+        node = node_neighbors[size_t(chosen)].node;
         if (!advance(position))
             break;
         ++walked;
@@ -618,7 +618,7 @@ std::vector<std::string> FeatureWriter::columns() {
     return {"dataset", "label", "spacer_key", "side", "walked", "node", "edge",
             "multiplicity", "target",
             // the features
-            "multiplicity_share", "run_ahead", "run_ends_tip",
+            "multiplicity_proportion", "run_ahead", "run_ends_tip",
             "run_depth_min_ratio", "run_depth_cv", "in_degree"};
 }
 
@@ -642,7 +642,7 @@ void FeatureWriter::write(const BranchFeature &r) {
     out_ << r.dataset << '\t' << r.label << '\t' << r.spacer_key << '\t'
          << (r.backwards ? "left" : "right") << '\t' << r.walked << '\t' << r.node << '\t'
          << r.edge << '\t' << tsv(r.multiplicity) << '\t' << r.target << '\t'
-         << tsv(r.multiplicity_share) << '\t' << r.run_ahead << '\t'
+         << tsv(r.multiplicity_proportion) << '\t' << r.run_ahead << '\t'
          << r.run_ends_tip << '\t' << tsv(r.run_depth_min_ratio) << '\t'
          << tsv(r.run_depth_cv) << '\t' << r.in_degree << '\n';
     ++rows_;
@@ -678,8 +678,8 @@ void FeatureWriter::finish(const TopologyFeatures::Stats &stats, const std::stri
     out << " \"anchors\": " << stats.anchors << ",\n";
     out << " \"reanchors\": " << stats.reanchors << ",\n";
     out << " \"steps\": " << stats.steps << ",\n";
-    out << " \"decisions\": " << stats.decisions << ",\n";
-    out << " \"decisions_skipped\": " << stats.decisions_skipped << ",\n";
+    out << " \"branches\": " << stats.branches << ",\n";
+    out << " \"branches_skipped\": " << stats.branches_skipped << ",\n";
     out << " \"positives\": " << stats.positives << ",\n";
     out << " \"negatives\": " << stats.negatives << "\n}\n";
 }

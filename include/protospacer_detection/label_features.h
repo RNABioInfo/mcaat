@@ -1,4 +1,4 @@
-// Training data for a learned branch decision, built from reference-confirmed
+// Training data for a learned branch branch, built from reference-confirmed
 // protospacer regions.
 //
 // A label is one place in a reference catalogue where a spacer detected in a
@@ -7,7 +7,7 @@
 // path the extension should have taken through that sample's graph.
 //
 // Walking that path outward from the spacer, every node with more than one
-// neighbour is a decision the beam search has to make. The neighbour the
+// neighbour is a branch the beam search has to make. The neighbour the
 // reference continues into is a positive; its siblings are negatives. The
 // reference decides which is which and is then discarded: every feature
 // recorded for a neighbour comes from graph topology and edge multiplicity
@@ -16,7 +16,7 @@
 //   LabelReader       reads labels_by_dataset.json and hands out one dataset's
 //                     entries.
 //   TopologyFeatures  maps an entry's region into the graph and collects the
-//                     features of every neighbour at every decision on it.
+//                     features of every neighbour at every branch on it.
 //   FeatureWriter     writes those rows as a table, with a summary beside it.
 #ifndef MCAAT_PROTOSPACER_LABEL_FEATURES_H
 #define MCAAT_PROTOSPACER_LABEL_FEATURES_H
@@ -65,11 +65,11 @@ class LabelReader {
     static const std::vector<LabelEntry> empty_;
 };
 
-// One neighbour at one decision, with its label and its features.
+// One neighbour at one branch, with its label and its features.
 //
 // Nine features, and the reason each one is here. Two conditions decide the
-// set. A feature has to differ between the candidates at a single decision,
-// because a value they all share cannot say which of them to take. And it has
+// set. A feature has to differ between the candidates at a single branch,
+// because a value they all proportion cannot say which of them to take. And it has
 // to be a quantity whose relevance is plain, not a number that happens to
 // correlate.
 //
@@ -81,16 +81,16 @@ struct BranchFeature {
     // identity and diagnostics, not for fitting
     std::string dataset, label, spacer_key;
     bool backwards = false;  // true walking left of the spacer, false walking right
-    size_t walked = 0;       // bases walked from the spacer when the decision is met
+    size_t walked = 0;       // bases walked from the spacer when the branch is met
     uint64_t node = 0, edge = 0;
     double multiplicity = 0; // the raw count behind the ratios below
     int target = 0;          // 1 the reference continues here, 0 it does not
 
-    // This candidate's multiplicity over the sum at the decision. The direct
+    // This candidate's multiplicity over the sum at the branch. The direct
     // statement that this branch carries the coverage and its rivals do not.
-    double multiplicity_share = 0;
-    // Bases that can be walked from this candidate before the next decision.
-    // A long unbranching stretch is a real contig; a branch that forks again
+    double multiplicity_proportion = 0;
+    // Bases that can be walked from this candidate before the next branch.
+    // A long unbranching stretch is a real contig; a branch that branches again
     // at once is inside a tangle.
     size_t run_ahead = 0;
     // That stretch ends with nothing to continue into. A dead end is not a
@@ -121,15 +121,15 @@ class TopologyFeatures {
     struct Stats {
         size_t entries = 0, mapped = 0, unmapped = 0;
         size_t anchors = 0, reanchors = 0, steps = 0;
-        size_t decisions = 0, positives = 0, negatives = 0;
-        size_t decisions_skipped = 0; // the reference base had no neighbour
+        size_t branches = 0, positives = 0, negatives = 0;
+        size_t branches_skipped = 0; // the reference base had no neighbour
         size_t sides_mapped = 0, sides_empty = 0;
     };
 
     explicit TopologyFeatures(const SDBG &graph);
     TopologyFeatures(const SDBG &graph, Options options);
 
-    // Every neighbour at every decision on this entry's reference path.
+    // Every neighbour at every branch on this entry's reference path.
     std::vector<BranchFeature> collect(const std::string &dataset, const LabelEntry &entry);
     const Stats &stats() const { return stats_; }
     size_t k() const { return k_; }
@@ -150,14 +150,14 @@ class TopologyFeatures {
     // measured here is the feature the extension sees.
     std::string label(uint64_t node) const;
     uint64_t find_node(const std::string &word) const;
-    struct Arc {
+    struct Neighbor {
         uint64_t node = 0, edge = 0;
         double count = 0;
     };
-    std::vector<Arc> neighbors(uint64_t node, bool backwards) const;
-    char added_base(const Arc &arc, bool backwards) const;
+    std::vector<Neighbor> neighbors(uint64_t node, bool backwards) const;
+    char added_base(const Neighbor &arc, bool backwards) const;
 
-    Probe probe(uint64_t from, const Arc &arc, bool backwards) const;
+    Probe probe(uint64_t from, const Neighbor &arc, bool backwards) const;
     void walk(const std::string &dataset, const LabelEntry &entry, const std::string &region,
               size_t start, bool backwards, std::vector<BranchFeature> &out);
     static double median(std::vector<double> values);
