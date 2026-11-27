@@ -398,13 +398,14 @@ double TopologyFeatures::variation(const std::vector<double> &values) {
     return std::sqrt(spread / double(values.size() - 1)) / mean;
 }
 
-// What lies ahead of one neighbour: the unbranching run, whether it dies, the
-// multiplicity along it, and the node set reachable inside the lookahead.
+// What lies ahead of one neighbour: how far the unbranching run goes, whether
+// it dies, the multiplicity along it, and the nodes reachable inside the
+// lookahead, which exist only so that a bubble can be recognised.
 TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Arc &arc, bool backwards) const {
     Probe result;
     std::vector<double> depths{arc.count};
 
-    // the unbranching run, and the first decision on it
+    // the unbranching run, stopping at the next decision
     uint64_t node = arc.node;
     uint64_t previous = from;
     while (result.run < options_.lookahead) {
@@ -413,10 +414,8 @@ TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Arc &arc, b
             result.tip = true;
             break;
         }
-        if (onward.size() > 1) {
-            result.forks = 1;
+        if (onward.size() > 1)
             break;
-        }
         if (onward.front().node == previous)
             break;
         previous = node;
@@ -425,28 +424,22 @@ TopologyFeatures::Probe TopologyFeatures::probe(uint64_t from, const Arc &arc, b
         ++result.run;
     }
 
-    // the reachable set, bounded, counting every decision met inside it
+    // the reachable set, bounded; two candidates sharing one of these nodes
+    // have met again, which is what makes them a bubble
     std::unordered_set<uint64_t> seen;
     std::vector<std::pair<uint64_t, size_t>> stack{{arc.node, 0}};
     seen.insert(arc.node);
-    size_t forks = 0;
     while (!stack.empty() && seen.size() < options_.probe_nodes) {
         auto [at, depth] = stack.back();
         stack.pop_back();
         if (depth >= options_.lookahead)
             continue;
-        auto onward = neighbors(at, backwards);
-        if (onward.size() > 1)
-            ++forks;
-        for (const auto &next : onward)
+        for (const auto &next : neighbors(at, backwards))
             if (seen.insert(next.node).second)
                 stack.emplace_back(next.node, depth + 1);
     }
-    result.nodes = seen.size();
-    result.forks = std::max(result.forks, forks);
     result.seen.assign(seen.begin(), seen.end());
 
-    result.mean = depths.empty() ? 0. : std::accumulate(depths.begin(), depths.end(), 0.) / double(depths.size());
     result.minimum = depths.empty() ? 0. : *std::min_element(depths.begin(), depths.end());
     result.cv = variation(depths);
     return result;
@@ -500,7 +493,7 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
     }();
 
     std::vector<double> running;
-    size_t walked = 0, forks_passed = 0;
+    size_t walked = 0;
 
     while (true) {
         // the base the reference continues into
@@ -522,68 +515,39 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
             if (chosen < 0)
                 ++stats_.decisions_skipped;
             else {
-                double total = 0., best_other = 0.;
+                double total = 0.;
                 for (const auto &a : arcs)
                     total += a.count;
-                const double running_median = median(running);
-                const double running_variation = variation(running);
-                double entropy = 0.;
-                if (total > 0.)
-                    for (const auto &a : arcs) {
-                        double p = a.count / total;
-                        if (p > 0.)
-                            entropy -= p * std::log2(p);
-                    }
-                const double parent = running.empty() ? origin : running.back();
+                // The walk has no history at its first decision, so the
+                // multiplicity at the spacer boundary stands in for the median.
+                const double level = running.empty() ? origin : median(running);
 
                 std::vector<Probe> probes(arcs.size());
                 for (size_t i = 0; i < arcs.size(); ++i)
                     probes[i] = probe(node, arcs[i], backwards);
 
                 for (size_t i = 0; i < arcs.size(); ++i) {
-                    best_other = 0.;
-                    for (size_t j = 0; j < arcs.size(); ++j)
-                        if (j != i)
-                            best_other = std::max(best_other, arcs[j].count);
-
                     BranchFeature f;
                     f.dataset = dataset;
                     f.label = entry.id;
                     f.spacer_key = entry.spacer_key;
-                    f.position = walked;
                     f.backwards = backwards;
+                    f.walked = walked;
                     f.node = arcs[i].node;
                     f.edge = arcs[i].edge;
+                    f.multiplicity = arcs[i].count;
                     f.target = int(i) == chosen ? 1 : 0;
 
                     f.siblings = arcs.size();
-                    f.branch_entropy = entropy;
-                    f.parent_multiplicity = parent;
-                    f.flow_residual = parent - total;
-                    f.flow_residual_share = parent > 0. ? (parent - total) / parent : 0.;
-
-                    f.multiplicity = arcs[i].count;
                     f.multiplicity_share = total > 0. ? arcs[i].count / total : 0.;
-                    f.ratio_best_sibling = best_other > 0. ? arcs[i].count / best_other : 0.;
-                    f.ratio_running_median =
-                        running_median > 0. ? arcs[i].count / running_median : 0.;
-                    f.ratio_origin = origin > 0. ? arcs[i].count / origin : 0.;
-                    f.in_window = running_median > 0. &&
-                                          arcs[i].count >= options_.window_low * running_median &&
-                                          arcs[i].count <= options_.window_high * running_median
-                                      ? 1
-                                      : 0;
-                    f.out_degree = neighbors(arcs[i].node, backwards).size();
-                    f.in_degree = neighbors(arcs[i].node, !backwards).size();
+                    f.ratio_running_median = level > 0. ? arcs[i].count / level : 0.;
 
                     const Probe &p = probes[i];
                     f.run_ahead = p.run;
                     f.run_ends_tip = p.tip ? 1 : 0;
-                    f.forks_ahead = p.forks;
-                    f.reachable_nodes = p.nodes;
-                    f.run_depth_mean = p.mean;
-                    f.run_depth_min = p.minimum;
+                    f.run_depth_min_ratio = level > 0. ? p.minimum / level : 0.;
                     f.run_depth_cv = p.cv;
+                    f.in_degree = neighbors(arcs[i].node, !backwards).size();
 
                     // a sibling met again inside the lookahead makes a bubble
                     std::unordered_set<uint64_t> mine(p.seen.begin(), p.seen.end());
@@ -593,15 +557,9 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
                         for (uint64_t v : probes[j].seen)
                             if (mine.count(v)) {
                                 f.rejoins_sibling = 1;
-                                f.bubble_length = std::max(p.run, probes[j].run);
                                 break;
                             }
                     }
-
-                    f.walked = walked;
-                    f.forks_passed = forks_passed;
-                    f.running_median = running_median;
-                    f.running_cv = running_variation;
 
                     if (f.target)
                         ++stats_.positives;
@@ -610,7 +568,6 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
                     out.push_back(std::move(f));
                 }
             }
-            ++forks_passed;
         }
 
         if (chosen < 0) {
@@ -688,19 +645,16 @@ std::vector<BranchFeature> TopologyFeatures::collect(const std::string &dataset,
 
 // ── Class 3 ──────────────────────────────────────────────────────────────────
 
+// Eight identity and diagnostic columns, then the nine features. target is the
+// last column before the features so that a reader of the table can see where
+// the fitting set begins.
 std::vector<std::string> FeatureWriter::columns() {
-    return {"dataset",          "label",            "spacer_key",
-            "side",             "position",         "node",
-            "edge",             "target",           "siblings",
-            "branch_entropy",   "parent_multiplicity", "flow_residual",
-            "flow_residual_share", "multiplicity",  "multiplicity_share",
-            "ratio_best_sibling", "ratio_running_median", "ratio_origin",
-            "in_window",        "out_degree",       "in_degree",
-            "run_ahead",        "run_ends_tip",     "forks_ahead",
-            "reachable_nodes",  "run_depth_mean",   "run_depth_min",
-            "run_depth_cv",     "rejoins_sibling",  "bubble_length",
-            "walked",           "forks_passed",     "running_median",
-            "running_cv"};
+    return {"dataset", "label", "spacer_key", "side", "walked", "node", "edge",
+            "multiplicity", "target",
+            // the features
+            "siblings", "multiplicity_share", "ratio_running_median", "run_ahead",
+            "run_ends_tip", "run_depth_min_ratio", "run_depth_cv", "rejoins_sibling",
+            "in_degree"};
 }
 
 FeatureWriter::FeatureWriter(const std::filesystem::path &file) : file_(file) {
@@ -721,17 +675,12 @@ FeatureWriter::~FeatureWriter() {
 
 void FeatureWriter::write(const BranchFeature &r) {
     out_ << r.dataset << '\t' << r.label << '\t' << r.spacer_key << '\t'
-         << (r.backwards ? "left" : "right") << '\t' << r.position << '\t' << r.node << '\t'
-         << r.edge << '\t' << r.target << '\t' << r.siblings << '\t' << tsv(r.branch_entropy)
-         << '\t' << tsv(r.parent_multiplicity) << '\t' << tsv(r.flow_residual) << '\t'
-         << tsv(r.flow_residual_share) << '\t' << tsv(r.multiplicity) << '\t'
-         << tsv(r.multiplicity_share) << '\t' << tsv(r.ratio_best_sibling) << '\t'
-         << tsv(r.ratio_running_median) << '\t' << tsv(r.ratio_origin) << '\t' << r.in_window
-         << '\t' << r.out_degree << '\t' << r.in_degree << '\t' << r.run_ahead << '\t'
-         << r.run_ends_tip << '\t' << r.forks_ahead << '\t' << r.reachable_nodes << '\t'
-         << tsv(r.run_depth_mean) << '\t' << tsv(r.run_depth_min) << '\t' << tsv(r.run_depth_cv)
-         << '\t' << r.rejoins_sibling << '\t' << r.bubble_length << '\t' << r.walked << '\t'
-         << r.forks_passed << '\t' << tsv(r.running_median) << '\t' << tsv(r.running_cv) << '\n';
+         << (r.backwards ? "left" : "right") << '\t' << r.walked << '\t' << r.node << '\t'
+         << r.edge << '\t' << tsv(r.multiplicity) << '\t' << r.target << '\t'
+         << r.siblings << '\t' << tsv(r.multiplicity_share) << '\t'
+         << tsv(r.ratio_running_median) << '\t' << r.run_ahead << '\t' << r.run_ends_tip << '\t'
+         << tsv(r.run_depth_min_ratio) << '\t' << tsv(r.run_depth_cv) << '\t'
+         << r.rejoins_sibling << '\t' << r.in_degree << '\n';
     ++rows_;
 }
 

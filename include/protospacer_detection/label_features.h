@@ -65,44 +65,60 @@ class LabelReader {
     static const std::vector<LabelEntry> empty_;
 };
 
-// One neighbour at one decision, with its label and its features. Every field
-// below the identity block is read from the graph; none of them sees a base.
+// One neighbour at one decision, with its label and its features.
+//
+// Nine features, and the reason each one is here. Two conditions decide the
+// set. A feature has to differ between the candidates at a single decision,
+// because a value they all share cannot say which of them to take. And it has
+// to be a quantity whose relevance is plain, not a number that happens to
+// correlate.
+//
+// Multiplicity enters only as a ratio. An absolute multiplicity means
+// different things in a metagenome sequenced to one depth than in another, so
+// a model fitted on raw counts does not carry across samples. The raw count is
+// kept beside the identity fields for inspection, not for fitting.
 struct BranchFeature {
-    // identity, not for fitting
+    // identity and diagnostics, not for fitting
     std::string dataset, label, spacer_key;
-    size_t position = 0;     // bases walked from the spacer when the decision is met
     bool backwards = false;  // true walking left of the spacer, false walking right
+    size_t walked = 0;       // bases walked from the spacer when the decision is met
     uint64_t node = 0, edge = 0;
+    double multiplicity = 0; // the raw count behind the ratios below
     int target = 0;          // 1 the reference continues here, 0 it does not
 
-    // the decision
+    // How many ways the decision splits. Needed to read the share below: a
+    // half share of two candidates is not a half share of four.
     size_t siblings = 0;
-    double branch_entropy = 0;      // over the siblings' multiplicity shares
-    double parent_multiplicity = 0; // multiplicity the walk arrived on
-    double flow_residual = 0;       // parent minus the sum of the siblings
-    double flow_residual_share = 0;
-
-    // this neighbour
-    double multiplicity = 0;
-    double multiplicity_share = 0;         // against the sum of the siblings
-    double ratio_best_sibling = 0;         // against the largest sibling
-    double ratio_running_median = 0;       // against the walk's running median
-    double ratio_origin = 0;               // against the multiplicity at the spacer boundary
-    int in_window = 0;                     // inside [0.1 m, 5 m] of the running median
-    size_t out_degree = 0, in_degree = 0;
-
-    // what lies ahead of this neighbour, bounded by the lookahead
-    size_t run_ahead = 0;        // bases before the next decision
-    int run_ends_tip = 0;        // that run stops with nothing to continue into
-    size_t forks_ahead = 0;
-    size_t reachable_nodes = 0;
-    double run_depth_mean = 0, run_depth_min = 0, run_depth_cv = 0;
-    int rejoins_sibling = 0;     // meets a sibling again, so the pair is a bubble
-    size_t bubble_length = 0;
-
-    // the walk so far
-    size_t walked = 0, forks_passed = 0;
-    double running_median = 0, running_cv = 0;
+    // This candidate's multiplicity over the sum at the decision. The direct
+    // statement that this branch carries the coverage and its rivals do not.
+    double multiplicity_share = 0;
+    // Its multiplicity over the running median of the walk so far. Whether the
+    // branch sits at the coverage of the contig already followed, which is the
+    // beam search's admission window written as a number instead of a test.
+    double ratio_running_median = 0;
+    // Bases that can be walked from this candidate before the next decision.
+    // A long unbranching stretch is a real contig; a branch that forks again
+    // at once is inside a tangle.
+    size_t run_ahead = 0;
+    // That stretch ends with nothing to continue into. A dead end is not a
+    // genome.
+    int run_ends_tip = 0;
+    // The lowest multiplicity on that stretch, over the running median. The
+    // bottleneck, which is where a chimeric join shows itself and which is
+    // already one of the seven scoring criteria.
+    double run_depth_min_ratio = 0;
+    // How much the multiplicity varies along that stretch. Coverage holding
+    // level is what locally_smooth asks of a whole reconstruction, measured
+    // here for one branch.
+    double run_depth_cv = 0;
+    // The candidate meets a sibling again inside the lookahead, so the two
+    // form a bubble. Both arms are then real sequence and the decision is of a
+    // different kind from a choice between real and spurious.
+    int rejoins_sibling = 0;
+    // Predecessors of the candidate against the direction of travel. A node
+    // several paths enter is a repeat entrance, which is where a walk crosses
+    // from one genome into another.
+    size_t in_degree = 0;
 };
 
 // Class 2. Finds the nodes of a region and collects the features.
@@ -111,7 +127,6 @@ class TopologyFeatures {
     struct Options {
         size_t lookahead = 300;    // bases probed ahead of a neighbour
         size_t probe_nodes = 2000; // nodes a probe may visit
-        double window_low = .1, window_high = 5.; // the beam search admission window
         bool require_both_sides = false; // drop a region that maps on one side only
     };
     struct Stats {
@@ -132,10 +147,10 @@ class TopologyFeatures {
 
   private:
     struct Probe {
-        size_t run = 0, forks = 0, nodes = 0;
+        size_t run = 0;
         bool tip = false;
-        double mean = 0, minimum = 0, cv = 0;
-        std::vector<uint64_t> seen;
+        double minimum = 0, cv = 0;
+        std::vector<uint64_t> seen; // for bubble detection only
     };
 
     const SDBG &graph_;

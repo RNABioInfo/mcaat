@@ -95,8 +95,8 @@ rows=$(( $(wc -l < "$all") - 1 ))
 echo "combined $rows rows into $all"
 
 # ── 4. analysis ──────────────────────────────────────────────────────────────
-# Column 8 is the target. Columns 9 to 34 are the features, every one of them
-# read from topology and multiplicity. For each, the class means and the
+# Column 9 is the target. Columns 10 to 18 are the nine features, every one of
+# them read from topology and multiplicity. For each, the class means and the
 # Mann-Whitney AUC: 0.5 is no separation, and a value far from it on a single
 # feature says a rule would do what a model is being considered for.
 report=$OUT/analysis.txt
@@ -135,14 +135,14 @@ PY
   echo
 
   echo "── class balance ──"
-  awk -F'\t' 'NR>1{n++; if($8==1) p++; else q++}
+  awk -F'\t' 'NR>1{n++; if($9==1) p++; else q++}
        END{printf "  rows %d, positives %d (%.2f%%), negatives %d, negatives per positive %.2f\n",
                   n, p, 100*p/n, q, (p?q/p:0)}' "$all"
   echo
 
   echo "── decisions and rows per sample ──"
   printf "  %-14s %9s %10s %10s %9s %9s\n" sample rows positives negatives labels spacers
-  awk -F'\t' 'NR>1{r[$1]++; if($8==1) p[$1]++; else q[$1]++;
+  awk -F'\t' 'NR>1{r[$1]++; if($9==1) p[$1]++; else q[$1]++;
                    lab[$1"\t"$2]=1; sp[$1"\t"$3]=1}
        END{for (s in r) {
              nl=0; ns=0;
@@ -158,11 +158,11 @@ PY
   echo
   header=$(head -1 "$all")
   printf "  %-22s %14s %14s %7s %8s\n" feature mean_positive mean_negative AUC "|AUC-.5|"
-  for col in $(seq 9 34); do
+  for col in $(seq 10 18); do
     name=$(echo "$header" | cut -f"$col")
-    means=$(awk -F'\t' -v c="$col" 'NR>1{ if($8==1){sp+=$c; np++} else {sq+=$c; nq++} }
+    means=$(awk -F'\t' -v c="$col" 'NR>1{ if($9==1){sp+=$c; np++} else {sq+=$c; nq++} }
             END{printf "%.4f %.4f", (np?sp/np:0), (nq?sq/nq:0)}' "$all")
-    auc=$(tail -n +2 "$all" | cut -f8,"$col" | sort -k2,2g | awk '
+    auc=$(tail -n +2 "$all" | cut -f9,"$col" | sort -k2,2g | awk '
             {t[NR]=$1; v[NR]=$2}
             END{n=NR; i=1;
                 while (i<=n) { j=i; while (j<n && v[j+1]==v[i]) j++;
