@@ -453,49 +453,49 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
 
     // Anchor on the first k-mer of the region that the graph holds, starting
     // at the spacer boundary and moving outward.
+    //
+    // The whole flank is scanned. The reference region is a different strain's
+    // sequence, so stretches of it are absent from this sample's graph; where
+    // the walk loses the path it keeps moving outward one base at a time and
+    // picks the path up again at the next k-mer the graph holds. Divergence
+    // therefore costs the labels inside the diverged stretch and nothing more.
     size_t position = start;
     uint64_t node = missing;
-    auto anchor = [&]() {
-        while (true) {
-            if (backwards) {
-                if (position + k_ > region.size())
-                    return false;
-            } else if (position + k_ > region.size()) {
+    std::vector<double> running;
+    size_t walked = 0, acquired = 0;
+    double origin = 0.;
+
+    const auto in_range = [&](size_t at) { return at + k_ <= region.size(); };
+    const auto advance = [&](size_t &at) {
+        if (backwards) {
+            if (at == 0)
                 return false;
-            }
+            --at;
+            return true;
+        }
+        ++at;
+        return in_range(at);
+    };
+
+    while (in_range(position)) {
+        if (node == missing) {
             node = find_node(region.substr(position, k_));
-            if (node != missing)
-                return true;
-            if (backwards) {
-                if (position == 0)
-                    return false;
-                --position;
+            if (node == missing) {
+                if (!advance(position))
+                    break;
+                continue;
+            }
+            if (acquired++ == 0) {
+                ++stats_.anchors;
+                ++stats_.sides_mapped;
+                auto arcs = neighbors(node, backwards);
+                for (const auto &a : arcs)
+                    origin = std::max(origin, a.count);
             } else {
-                ++position;
-                if (position + k_ > region.size())
-                    return false;
+                ++stats_.reanchors;
             }
         }
-    };
-    if (!anchor()) {
-        ++stats_.sides_empty;
-        return;
-    }
-    ++stats_.anchors;
-    ++stats_.sides_mapped;
 
-    const double origin = [&] {
-        auto arcs = neighbors(node, backwards);
-        double best = 0.;
-        for (const auto &a : arcs)
-            best = std::max(best, a.count);
-        return best;
-    }();
-
-    std::vector<double> running;
-    size_t walked = 0;
-
-    while (true) {
         // the base the reference continues into
         bool have_next = backwards ? position > 0 : position + k_ < region.size();
         if (!have_next)
@@ -572,30 +572,12 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
 
         if (chosen < 0) {
             // The reference leaves the graph here, which a mismatch against
-            // the sample does. Re-anchor further out and carry on.
-            size_t resume = position;
-            bool found = false;
-            for (size_t step = 1; step <= k_; ++step) {
-                if (backwards) {
-                    if (resume == 0)
-                        break;
-                    --resume;
-                } else {
-                    ++resume;
-                    if (resume + k_ > region.size())
-                        break;
-                }
-                uint64_t again = find_node(region.substr(resume, k_));
-                if (again != missing) {
-                    position = resume;
-                    node = again;
-                    running.clear();
-                    found = true;
-                    ++stats_.reanchors;
-                    break;
-                }
-            }
-            if (!found)
+            // this sample does. Drop the path and keep scanning outward; the
+            // loop above acquires a node again at the next k-mer the graph
+            // holds.
+            node = missing;
+            running.clear();
+            if (!advance(position))
                 break;
             continue;
         }
@@ -604,13 +586,14 @@ void TopologyFeatures::walk(const std::string &dataset, const LabelEntry &entry,
         if (running.size() > 2 * k_)
             running.erase(running.begin());
         node = arcs[size_t(chosen)].node;
-        if (backwards)
-            --position;
-        else
-            ++position;
+        if (!advance(position))
+            break;
         ++walked;
         ++stats_.steps;
     }
+
+    if (acquired == 0)
+        ++stats_.sides_empty;
 }
 
 std::vector<BranchFeature> TopologyFeatures::collect(const std::string &dataset,
